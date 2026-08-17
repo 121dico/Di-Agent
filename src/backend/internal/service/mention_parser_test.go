@@ -1,0 +1,480 @@
+package service
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/agent-hub/backend/internal/model"
+)
+
+// ---------------------------------------------------------------------------
+// ParseMentions
+// ---------------------------------------------------------------------------
+
+func TestParseMentionsBasic(t *testing.T) {
+	text := "@Alice 请分析数据 @Bob 写测试报告"
+	results := ParseMentions(text)
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 mentions, got %d", len(results))
+	}
+	if results[0].AgentName != "Alice" {
+		t.Errorf("first agent = %q, want Alice", results[0].AgentName)
+	}
+	if results[0].Task != "请分析数据" {
+		t.Errorf("first task = %q", results[0].Task)
+	}
+	if results[1].AgentName != "Bob" {
+		t.Errorf("second agent = %q, want Bob", results[1].AgentName)
+	}
+	if results[1].Task != "写测试报告" {
+		t.Errorf("second task = %q", results[1].Task)
+	}
+}
+
+func TestParseMentionsSingleMention(t *testing.T) {
+	text := "@Agent 请完成任务"
+	results := ParseMentions(text)
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 mention, got %d", len(results))
+	}
+	if results[0].AgentName != "Agent" {
+		t.Errorf("agent = %q, want Agent", results[0].AgentName)
+	}
+	if results[0].Task != "请完成任务" {
+		t.Errorf("task = %q", results[0].Task)
+	}
+}
+
+func TestParseMentionsNoMentions(t *testing.T) {
+	results := ParseMentions("这是一条普通消息，没有任何提及")
+	if results != nil {
+		t.Fatalf("expected nil, got %v", results)
+	}
+}
+
+func TestParseMentionsEmptyString(t *testing.T) {
+	results := ParseMentions("")
+	if results != nil {
+		t.Fatalf("expected nil, got %v", results)
+	}
+}
+
+func TestParseMentionsConsecutive(t *testing.T) {
+	text := "@Alice@Bob 协作完成"
+	results := ParseMentions(text)
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 mentions, got %d", len(results))
+	}
+	// Between @Alice and @Bob there's no text
+	if results[0].Task != "" {
+		t.Errorf("first task = %q, want empty", results[0].Task)
+	}
+	if results[1].Task != "协作完成" {
+		t.Errorf("second task = %q", results[1].Task)
+	}
+}
+
+func TestParseMentionAtEndOfText(t *testing.T) {
+	text := "请处理这个任务 @Agent"
+	results := ParseMentions(text)
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 mention, got %d", len(results))
+	}
+	if results[0].AgentName != "Agent" {
+		t.Errorf("agent = %q, want Agent", results[0].AgentName)
+	}
+	if results[0].Task != "" {
+		t.Errorf("task = %q, want empty (mention at end)", results[0].Task)
+	}
+}
+
+func TestParseMentionsCJKNames(t *testing.T) {
+	text := "@分析器 请分析 @编码器.1 编写代码"
+	results := ParseMentions(text)
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 mentions, got %d", len(results))
+	}
+	if results[0].AgentName != "分析器" {
+		t.Errorf("first agent = %q, want 分析器", results[0].AgentName)
+	}
+	if results[1].AgentName != "编码器.1" {
+		t.Errorf("second agent = %q, want 编码器.1", results[1].AgentName)
+	}
+}
+
+func TestParseMentionsHyphenUnderscoreDot(t *testing.T) {
+	text := "@my-agent_v2.0 开始工作"
+	results := ParseMentions(text)
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 mention, got %d", len(results))
+	}
+	if results[0].AgentName != "my-agent_v2.0" {
+		t.Errorf("agent = %q, want my-agent_v2.0", results[0].AgentName)
+	}
+}
+
+func TestParseMentionsWhitespaceTrimmed(t *testing.T) {
+	text := "@Alice   完成任务   \n\n@Bob  写文档  "
+	results := ParseMentions(text)
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 mentions, got %d", len(results))
+	}
+	if results[0].Task != "完成任务" {
+		t.Errorf("first task = %q, want 完成任务", results[0].Task)
+	}
+	if results[1].Task != "写文档" {
+		t.Errorf("second task = %q, want 写文档", results[1].Task)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ParseOrchestratorOutput
+// ---------------------------------------------------------------------------
+
+func TestParseOrchOutputBasic(t *testing.T) {
+	text := "好的，我来分配任务：\n@Alice 分析数据\n@Bob 写报告"
+	dispatch := ParseOrchestratorOutput(text)
+
+	if dispatch == nil {
+		t.Fatal("expected non-nil dispatch")
+	}
+	if dispatch.Preamble != "好的，我来分配任务：" {
+		t.Errorf("preamble = %q", dispatch.Preamble)
+	}
+	if len(dispatch.Tasks) != 2 {
+		t.Fatalf("expected 2 tasks, got %d", len(dispatch.Tasks))
+	}
+	if dispatch.Tasks[0].AgentName != "Alice" {
+		t.Errorf("task[0] agent = %q", dispatch.Tasks[0].AgentName)
+	}
+	if dispatch.Tasks[1].AgentName != "Bob" {
+		t.Errorf("task[1] agent = %q", dispatch.Tasks[1].AgentName)
+	}
+}
+
+func TestParseOrchOutputNilOnNoMentions(t *testing.T) {
+	dispatch := ParseOrchestratorOutput("这是一条普通消息")
+	if dispatch != nil {
+		t.Fatal("expected nil for text without @mentions")
+	}
+}
+
+func TestParseOrchOutputSequential(t *testing.T) {
+	text := "分配任务：\n@Alice 先分析数据\n→ @Bob 等Alice完成后写报告"
+	dispatch := ParseOrchestratorOutput(text)
+
+	if dispatch == nil {
+		t.Fatal("expected non-nil dispatch")
+	}
+	if len(dispatch.Tasks) != 2 {
+		t.Fatalf("expected 2 tasks, got %d", len(dispatch.Tasks))
+	}
+	if dispatch.Tasks[0].Sequential {
+		t.Error("first task should not be sequential")
+	}
+	if !dispatch.Tasks[1].Sequential {
+		t.Error("second task should be sequential")
+	}
+}
+
+func TestParseOrchOutputDependsOn(t *testing.T) {
+	text := "@Alice 分析数据\n@Bob 根据 @Alice 的结果写报告"
+	dispatch := ParseOrchestratorOutput(text)
+
+	if dispatch == nil {
+		t.Fatal("expected non-nil dispatch")
+	}
+	if len(dispatch.Tasks) != 2 {
+		t.Fatalf("expected 2 tasks, got %d", len(dispatch.Tasks))
+	}
+	if dispatch.Tasks[1].DependsOn != "Alice" {
+		t.Errorf("DependsOn = %q, want Alice", dispatch.Tasks[1].DependsOn)
+	}
+	// Embedded @reference is stripped from task text
+	if dispatch.Tasks[1].Task != "根据 的结果写报告" {
+		t.Errorf("Task = %q, want 根据 的结果写报告", dispatch.Tasks[1].Task)
+	}
+}
+
+func TestParseOrchOutputDependsOnWithoutKeyword(t *testing.T) {
+	text := "@Alice 分析数据\n@Bob 参考 @Alice 的分析来写报告"
+	dispatch := ParseOrchestratorOutput(text)
+
+	if dispatch == nil {
+		t.Fatal("expected non-nil dispatch")
+	}
+	// Even without "根据", a bare @Agent reference in task text counts as DependsOn
+	if dispatch.Tasks[1].DependsOn != "Alice" {
+		t.Errorf("DependsOn = %q, want Alice", dispatch.Tasks[1].DependsOn)
+	}
+	if dispatch.Tasks[1].Task != "参考 的分析来写报告" {
+		t.Errorf("Task = %q", dispatch.Tasks[1].Task)
+	}
+}
+
+func TestParseOrchOutputSingleMention(t *testing.T) {
+	text := "@Agent 完成所有工作"
+	dispatch := ParseOrchestratorOutput(text)
+
+	if dispatch == nil {
+		t.Fatal("expected non-nil dispatch")
+	}
+	if dispatch.Preamble != "" {
+		t.Errorf("preamble = %q, want empty", dispatch.Preamble)
+	}
+	if len(dispatch.Tasks) != 1 {
+		t.Fatalf("expected 1 task, got %d", len(dispatch.Tasks))
+	}
+	if dispatch.Tasks[0].AgentName != "Agent" {
+		t.Errorf("agent = %q", dispatch.Tasks[0].AgentName)
+	}
+}
+
+func TestParseOrchOutputMentionOnlyLineUsesFollowingParagraph(t *testing.T) {
+	text := "需要多 Agent 协作。第一轮分派如下：\n\n@123\n任务：计算 27 + 38。请只给出答案，并简要说明计算过程。\n\n@1234\n任务：计算 9 × 7。请只给出答案，并简要说明计算过程。\n\n我会在 123 和 1234 都回答后，汇总两边结果并判断是否正确，然后继续出第二轮。"
+	dispatch := ParseOrchestratorOutput(text)
+
+	if dispatch == nil {
+		t.Fatal("expected non-nil dispatch")
+	}
+	if len(dispatch.Tasks) != 2 {
+		t.Fatalf("expected 2 tasks, got %d", len(dispatch.Tasks))
+	}
+	if dispatch.Tasks[0].AgentName != "123" {
+		t.Fatalf("task[0] agent = %q, want 123", dispatch.Tasks[0].AgentName)
+	}
+	if !strings.Contains(dispatch.Tasks[0].Task, "27 + 38") {
+		t.Fatalf("task[0] = %q, want math assignment", dispatch.Tasks[0].Task)
+	}
+	if dispatch.Tasks[1].AgentName != "1234" {
+		t.Fatalf("task[1] agent = %q, want 1234", dispatch.Tasks[1].AgentName)
+	}
+	if !strings.Contains(dispatch.Tasks[1].Task, "9 × 7") {
+		t.Fatalf("task[1] = %q, want math assignment", dispatch.Tasks[1].Task)
+	}
+	if strings.Contains(dispatch.Tasks[1].Task, "汇总两边结果") {
+		t.Fatalf("task[1] should not include trailing orchestration note: %q", dispatch.Tasks[1].Task)
+	}
+}
+
+func TestParseOrchOutputForAgentsPrefersLongerPrefixName(t *testing.T) {
+	text := "第一轮任务已分配：\n\n@123\n请计算：17 + 28 = ?\n\n@1234\n请计算：9 × 6 = ?\n\n两位完成后我会汇总。"
+	dispatch := ParseOrchestratorOutputForAgents(text, []string{"123", "1234", "Codex"})
+
+	if dispatch == nil {
+		t.Fatal("expected non-nil dispatch")
+	}
+	if len(dispatch.Tasks) != 2 {
+		t.Fatalf("expected 2 tasks, got %d: %#v", len(dispatch.Tasks), dispatch.Tasks)
+	}
+	if dispatch.Tasks[0].AgentName != "123" {
+		t.Fatalf("task[0] agent = %q, want 123", dispatch.Tasks[0].AgentName)
+	}
+	if dispatch.Tasks[1].AgentName != "1234" {
+		t.Fatalf("task[1] agent = %q, want 1234", dispatch.Tasks[1].AgentName)
+	}
+	if !strings.Contains(dispatch.Tasks[1].Task, "9 × 6") {
+		t.Fatalf("task[1] = %q, want second math assignment", dispatch.Tasks[1].Task)
+	}
+}
+
+func TestParseOrchOutputSequentialWithSpaces(t *testing.T) {
+	text := "@Alice 分析\n  →  @Bob 写报告"
+	dispatch := ParseOrchestratorOutput(text)
+
+	if dispatch == nil {
+		t.Fatal("expected non-nil dispatch")
+	}
+	if !dispatch.Tasks[1].Sequential {
+		t.Error("second task should be sequential with leading spaces before →")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// FindMentionedAgentID
+// ---------------------------------------------------------------------------
+
+func TestFindMentionedAgentIDBasic(t *testing.T) {
+	mentions := []MentionResult{
+		{AgentName: "Alice", Task: "分析数据"},
+		{AgentName: "Bob", Task: "写报告"},
+	}
+	agents := []model.ConversationAgent{
+		{AgentID: "agent-1", Name: "Alice"},
+		{AgentID: "agent-2", Name: "Bob"},
+		{AgentID: "agent-3", Name: "Charlie"},
+	}
+
+	result := FindMentionedAgentID(mentions, agents)
+	if len(result) != 2 {
+		t.Fatalf("expected 2 matches, got %d", len(result))
+	}
+	if result["Alice"] != "agent-1" {
+		t.Errorf("Alice = %q, want agent-1", result["Alice"])
+	}
+	if result["Bob"] != "agent-2" {
+		t.Errorf("Bob = %q, want agent-2", result["Bob"])
+	}
+}
+
+func TestFindMentionedAgentIDMatchesNoSpaceAlias(t *testing.T) {
+	mentions := []MentionResult{
+		{AgentName: "ClaudeCode", Task: "review"},
+	}
+	agents := []model.ConversationAgent{
+		{AgentID: "agent-1", Name: "Claude Code"},
+	}
+
+	result := FindMentionedAgentID(mentions, agents)
+	if result["ClaudeCode"] != "agent-1" {
+		t.Fatalf("expected ClaudeCode alias to match Claude Code, got %#v", result)
+	}
+}
+
+func TestFindMentionedAgentIDSkipUnknown(t *testing.T) {
+	mentions := []MentionResult{
+		{AgentName: "Alice", Task: "分析"},
+		{AgentName: "UnknownUser", Task: "查看"},
+	}
+	agents := []model.ConversationAgent{
+		{AgentID: "agent-1", Name: "Alice"},
+	}
+
+	result := FindMentionedAgentID(mentions, agents)
+	if len(result) != 1 {
+		t.Fatalf("expected 1 match (UnknownUser skipped), got %d", len(result))
+	}
+	if _, ok := result["UnknownUser"]; ok {
+		t.Error("UnknownUser should not be in result")
+	}
+}
+
+func TestFindMentionedAgentIDEmpty(t *testing.T) {
+	result := FindMentionedAgentID(nil, nil)
+	if len(result) != 0 {
+		t.Fatalf("expected 0 matches, got %d", len(result))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ParseOrchestratorOutput: 代码块内 @mention 忽略
+// ---------------------------------------------------------------------------
+
+func TestParseOrchOutput_IgnoresCodeBlockMentions(t *testing.T) {
+	text := "好的，分配如下：\n@Alice 分析数据\n```\n@Bob 这段不应该被解析\n@Charlie 也不应该\n```\n@Bob 写报告"
+	dispatch := ParseOrchestratorOutput(text)
+
+	if dispatch == nil {
+		t.Fatal("expected non-nil dispatch")
+	}
+	if len(dispatch.Tasks) != 2 {
+		t.Fatalf("expected 2 tasks (code block @mentions ignored), got %d", len(dispatch.Tasks))
+	}
+	if dispatch.Tasks[0].AgentName != "Alice" {
+		t.Errorf("task[0] agent = %q, want Alice", dispatch.Tasks[0].AgentName)
+	}
+	if dispatch.Tasks[1].AgentName != "Bob" {
+		t.Errorf("task[1] agent = %q, want Bob", dispatch.Tasks[1].AgentName)
+	}
+}
+
+func TestParseOrchOutput_CodeBlockAtEnd(t *testing.T) {
+	text := "@Alice 做任务\n```\n@FakeAgent 在代码块里\n"
+	dispatch := ParseOrchestratorOutput(text)
+
+	if dispatch == nil {
+		t.Fatal("expected non-nil dispatch")
+	}
+	if len(dispatch.Tasks) != 1 {
+		t.Fatalf("expected 1 task, got %d", len(dispatch.Tasks))
+	}
+	if dispatch.Tasks[0].AgentName != "Alice" {
+		t.Errorf("task[0] agent = %q, want Alice", dispatch.Tasks[0].AgentName)
+	}
+}
+
+func TestParseOrchOutput_AllInCodeBlock(t *testing.T) {
+	text := "```\n@Alice 不应该被解析\n@Bob 也不应该\n```"
+	dispatch := ParseOrchestratorOutput(text)
+
+	if dispatch != nil {
+		t.Fatal("expected nil when all @mentions are inside code blocks")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ParseOrchestratorOutput: 续行处理改进
+// ---------------------------------------------------------------------------
+
+func TestParseOrchOutput_IndentedContinuation(t *testing.T) {
+	text := "@Alice 分析数据\n  包括详细报告\n  和图表生成"
+	dispatch := ParseOrchestratorOutput(text)
+
+	if dispatch == nil {
+		t.Fatal("expected non-nil dispatch")
+	}
+	if len(dispatch.Tasks) != 1 {
+		t.Fatalf("expected 1 task, got %d", len(dispatch.Tasks))
+	}
+	want := "分析数据 包括详细报告 和图表生成"
+	if dispatch.Tasks[0].Task != want {
+		t.Errorf("task = %q, want %q", dispatch.Tasks[0].Task, want)
+	}
+}
+
+func TestParseOrchOutput_NonIndentedStopsContinuation(t *testing.T) {
+	text := "@Alice 分析数据\n这是独立的说明文本\n  不应属于 Alice 的任务"
+	dispatch := ParseOrchestratorOutput(text)
+
+	if dispatch == nil {
+		t.Fatal("expected non-nil dispatch")
+	}
+	if len(dispatch.Tasks) != 1 {
+		t.Fatalf("expected 1 task, got %d", len(dispatch.Tasks))
+	}
+	// 只包含 dispatch 行本身的内容，续行被非缩进行阻断
+	if dispatch.Tasks[0].Task != "分析数据" {
+		t.Errorf("task = %q, want %q", dispatch.Tasks[0].Task, "分析数据")
+	}
+}
+
+func TestParseOrchOutput_MixedIndentedAndNonIndented(t *testing.T) {
+	text := "@Alice 主任务\n  缩行的续行\n非缩行的独立文本\n@Bob 另一个任务\n  Bob的续行"
+	dispatch := ParseOrchestratorOutput(text)
+
+	if dispatch == nil {
+		t.Fatal("expected non-nil dispatch")
+	}
+	if len(dispatch.Tasks) != 2 {
+		t.Fatalf("expected 2 tasks, got %d", len(dispatch.Tasks))
+	}
+	wantAlice := "主任务 缩行的续行"
+	if dispatch.Tasks[0].Task != wantAlice {
+		t.Errorf("task[0] = %q, want %q", dispatch.Tasks[0].Task, wantAlice)
+	}
+	wantBob := "另一个任务 Bob的续行"
+	if dispatch.Tasks[1].Task != wantBob {
+		t.Errorf("task[1] = %q, want %q", dispatch.Tasks[1].Task, wantBob)
+	}
+}
+
+func TestFindMentionedAgentIDNoMatch(t *testing.T) {
+	mentions := []MentionResult{
+		{AgentName: "Ghost", Task: "什么都不做"},
+	}
+	agents := []model.ConversationAgent{
+		{AgentID: "agent-1", Name: "Alice"},
+	}
+
+	result := FindMentionedAgentID(mentions, agents)
+	if len(result) != 0 {
+		t.Fatalf("expected 0 matches, got %d", len(result))
+	}
+}

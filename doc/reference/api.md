@@ -1,0 +1,777 @@
+# API 参考
+
+Base URL: `http://localhost:8080`
+
+认证方式：所有 `/api/*` 端点需在请求头携带 JWT Bearer Token：
+```
+Authorization: Bearer <token>
+```
+
+---
+
+## 鉴权
+
+### POST /api/auth/register
+
+注册新用户。
+
+**请求体**
+```json
+{
+  "username": "string (3-32字符)",
+  "password": "string (8-64字符)"
+}
+```
+
+**成功响应** `200 OK`
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "user": {
+    "id": "uuid",
+    "username": "alice",
+    "created_at": "2024-01-01T00:00:00Z"
+  }
+}
+```
+
+**错误响应**
+- `400 Bad Request` — 参数校验失败
+- `409 Conflict` — 用户名已存在
+
+---
+
+### POST /api/auth/login
+
+用户登录。
+
+**请求体**
+```json
+{
+  "username": "string",
+  "password": "string"
+}
+```
+
+**成功响应** `200 OK`
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "user": {
+    "id": "uuid",
+    "username": "alice",
+    "created_at": "2024-01-01T00:00:00Z"
+  }
+}
+```
+
+**错误响应**
+- `401 Unauthorized` — 用户名或密码错误
+
+---
+
+## 对话
+
+### GET /api/conversations
+
+获取当前用户的对话列表（按最后消息时间倒序）。
+
+**成功响应** `200 OK`
+```json
+[
+  {
+    "id": "uuid",
+    "type": "direct | group",
+    "title": "项目讨论",
+    "pinned": false,
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T12:00:00Z",
+    "last_message": {
+      "id": "uuid",
+      "content": "最新消息内容",
+      "role": "user | assistant | system",
+      "created_at": "2024-01-01T12:00:00Z"
+    }
+  }
+]
+```
+
+---
+
+### POST /api/conversations
+
+创建新对话。
+
+**请求体**
+```json
+{
+  "type": "direct | group",
+  "title": "对话标题"
+}
+```
+
+**成功响应** `201 Created`
+```json
+{
+  "id": "uuid",
+  "type": "direct",
+  "title": "对话标题",
+  "pinned": false,
+  "created_at": "2024-01-01T00:00:00Z",
+  "updated_at": "2024-01-01T00:00:00Z"
+}
+```
+
+**错误响应**
+- `400 Bad Request` — 参数校验失败
+
+---
+
+### DELETE /api/conversations/:id
+
+删除对话（软删除）。
+
+**成功响应** `204 No Content`
+
+**错误响应**
+- `404 Not Found` — 对话不存在或无权限
+
+---
+
+### PUT /api/conversations/:id/pin
+
+设置对话置顶状态。
+
+**请求体**
+```json
+{
+  "pinned": true
+}
+```
+
+**成功响应** `200 OK`
+```json
+{
+  "id": "uuid",
+  "pinned": true
+}
+```
+
+**错误响应**
+- `404 Not Found` — 对话不存在或无权限
+
+---
+
+## 消息
+
+### POST /api/conversations/:id/messages
+
+发送消息。
+
+**请求体**
+```json
+{
+  "content": "消息内容",
+  "role": "user",
+  "attachments": [
+    {
+      "file_name": "demo.png",
+      "mime_type": "image/png",
+      "file_size": 12345,
+      "file_path": "uploads/originals/<sha>.png",
+      "thumbnail_path": "uploads/thumbnails/<sha>.jpg",
+      "url": "/api/uploads/originals/<sha>.png",
+      "thumbnail_url": "/api/uploads/thumbnails/<sha>.jpg",
+      "width": 800,
+      "height": 600
+    }
+  ]
+}
+```
+
+**成功响应** `201 Created`
+```json
+{
+  "id": "uuid",
+  "conversation_id": "uuid",
+  "content": "消息内容",
+  "role": "user",
+  "pinned": false,
+  "attachments": [
+    {
+      "id": "uuid",
+      "message_id": "uuid",
+      "file_name": "demo.png",
+      "mime_type": "image/png",
+      "file_size": 12345,
+      "file_path": "uploads/originals/<sha>.png",
+      "thumbnail_path": "uploads/thumbnails/<sha>.jpg",
+      "url": "/api/uploads/originals/<sha>.png",
+      "thumbnail_url": "/api/uploads/thumbnails/<sha>.jpg",
+      "width": 800,
+      "height": 600,
+      "created_at": "2024-01-01T00:00:00Z"
+    }
+  ],
+  "created_at": "2024-01-01T00:00:00Z"
+}
+```
+
+**错误响应**
+- `400 Bad Request` — 参数校验失败
+- `404 Not Found` — 对话不存在或无权限
+
+---
+
+### GET /api/conversations/:id/messages
+
+获取消息历史（游标分页）。
+
+**查询参数**
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `before` | string | 游标：返回 ID 小于此值的消息 |
+| `limit` | int | 每页条数，默认 50，最大 100 |
+
+**成功响应** `200 OK`
+```json
+[
+  {
+    "id": "uuid",
+    "conversation_id": "uuid",
+    "content": "消息内容",
+    "role": "user | assistant | system",
+    "pinned": false,
+    "attachments": [
+      {
+        "id": "uuid",
+        "message_id": "uuid",
+        "file_name": "demo.png",
+        "mime_type": "image/png",
+        "file_size": 12345,
+        "file_path": "uploads/originals/<sha>.png",
+        "thumbnail_path": "uploads/thumbnails/<sha>.jpg",
+        "url": "/api/uploads/originals/<sha>.png",
+        "thumbnail_url": "/api/uploads/thumbnails/<sha>.jpg"
+      }
+    ],
+    "created_at": "2024-01-01T00:00:00Z"
+  }
+]
+```
+
+**错误响应**
+- `404 Not Found` — 对话不存在或无权限
+
+---
+
+## Conversation Checkpoint 与 Context Meter
+
+### GET /api/conversations/:id/context-usage
+
+返回当前会话内各 Agent 的活动 CLI Session 上下文用量。`source=estimated` 表示当前值由文本估算，并非供应商计费数据。
+
+```json
+[
+  {
+    "conversation_id": "uuid",
+    "agent_id": "uuid",
+    "agent_name": "Codex",
+    "session_id": "cli-session-id",
+    "generation": 2,
+    "active_context_tokens": 18420,
+    "context_window_tokens": 128000,
+    "usage_ratio": 0.1439,
+    "status": "normal",
+    "source": "estimated",
+    "compaction_count": 1
+  }
+]
+```
+
+### GET /api/conversations/:id/checkpoints
+
+列出当前用户可读的检查点。私有检查点仅创建者可见；共享检查点对会话成员可见。
+
+### POST /api/conversations/:id/checkpoints
+
+创建检查点。接口先返回 `generating` 记录，随后由所选 Agent 异步生成结构化摘要；Agent 不可用时状态变为 `failed_fallback`，规则摘要仍可用于续接。
+
+```json
+{
+  "agent_id": "uuid",
+  "scope": "conversation_shared"
+}
+```
+
+检查点保存 `source_from_message_id`、`source_to_message_id`、`summary_json`、`markdown_content`、来源 Session 和 Token 估算，原始消息不会被复制或删除。
+
+### GET /api/conversations/:id/checkpoints/:checkpointId
+
+获取单个检查点及 Markdown 预览内容。
+
+### DELETE /api/conversations/:id/checkpoints/:checkpointId
+
+软删除检查点，不删除其引用的原始消息。
+
+### POST /api/conversations/:id/checkpoints/:checkpointId/continue
+
+校验会话成员、Agent 绑定与检查点 scope 后创建新的 CLI Session，并通过一次不落聊天记录的 bootstrap 派发注入检查点。
+
+```json
+{
+  "agent_id": "uuid"
+}
+```
+
+```json
+{
+  "session_id": "new-cli-session-id",
+  "generation": 3,
+  "checkpoint_id": "uuid"
+}
+```
+
+### POST /api/conversations/:id/checkpoint-imports
+
+把另一个有权访问的对话检查点挂载到 `:id` 指定目标对话中目标 Agent 的当前活动 Session。后端会分别校验来源对话读取权限、检查点 scope、目标对话成员权限和目标 Agent 绑定关系。该接口只更新 Session 台账，不派发 Agent，因此无需等待 CLI 返回。
+
+```json
+{
+  "source_conversation_id": "uuid",
+  "checkpoint_id": "uuid",
+  "agent_id": "target-agent-uuid"
+}
+```
+
+```json
+{
+  "session_id": "current-cli-session-id",
+  "generation": 1,
+  "checkpoint_id": "uuid",
+  "attached": true
+}
+```
+
+检查点从目标 Agent 的下一条消息开始自动注入当前 Session。`private_agent` 和 `orchestrator_only` 检查点只能引入到原来源 Agent；共享检查点可引入到目标对话中已绑定的其他 Agent。
+
+---
+
+### POST /api/upload
+
+上传聊天附件。文件二进制保存到后端配置的 `upload.dir`，数据库只保存相对路径和元信息。若配置了 `upload.public_base_url`，`url` 和 `thumbnail_url` 会返回绝对公网地址；否则返回相对 `/api/...` 地址。
+
+**请求体** `multipart/form-data`
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `file` | file | 图片、PDF、Office 或文本附件 |
+
+**成功响应** `201 Created`
+```json
+{
+  "file_name": "demo.png",
+  "mime_type": "image/png",
+  "file_size": 12345,
+  "file_path": "uploads/originals/<sha>.png",
+  "thumbnail_path": "uploads/thumbnails/<sha>.jpg",
+  "url": "/api/uploads/originals/<sha>.png",
+  "thumbnail_url": "/api/uploads/thumbnails/<sha>.jpg",
+  "width": 800,
+  "height": 600
+}
+```
+
+**错误响应**
+- `400 Bad Request` — 缺少文件或类型不支持
+- `413 Request Entity Too Large` — 文件超过大小限制
+
+---
+
+### POST /api/conversations/:id/messages/:messageId/pin
+
+将消息 Pin 到当前会话的共享上下文黑板，后续 Agent 调用会收到该内容。
+
+**成功响应** `200 OK`
+```json
+{
+  "id": "uuid",
+  "conversation_id": "uuid",
+  "message_id": "uuid",
+  "created_by": "uuid",
+  "created_at": "2024-01-01T00:00:00Z"
+}
+```
+
+**错误响应**
+- `403 Forbidden` — 无权操作此对话
+- `404 Not Found` — 对话或消息不存在
+
+---
+
+### DELETE /api/conversations/:id/messages/:messageId/pin
+
+取消消息 Pin。
+
+**成功响应** `200 OK`
+```json
+null
+```
+
+**错误响应**
+- `403 Forbidden` — 无权操作此对话
+- `404 Not Found` — 对话或消息不存在
+
+---
+
+### GET /api/conversations/:id/pinned-context
+
+获取当前会话共享上下文黑板中的用户 Pin 上下文。
+
+**成功响应** `200 OK`
+```json
+[
+  {
+    "id": "uuid",
+    "conversation_id": "uuid",
+    "message_id": "uuid",
+    "role": "user",
+    "content": "关键上下文",
+    "sender_id": "uuid",
+    "username": "alice",
+    "message_created_at": "2024-01-01T00:00:00Z",
+    "pinned_by": "uuid",
+    "pinned_by_name": "alice",
+    "pinned_at": "2024-01-01T00:00:00Z"
+  }
+]
+```
+
+**错误响应**
+- `403 Forbidden` — 无权操作此对话
+- `404 Not Found` — 对话不存在
+
+---
+
+### GET /api/conversations/:id/blackboard
+
+获取当前会话上下文黑板中的用户手写上下文。适用于群聊、普通单聊和 Agent 单聊。
+
+**成功响应** `200 OK`
+```json
+{
+  "conversation_id": "uuid",
+  "manual_context": "用户手写的长期上下文",
+  "updated_by": "uuid",
+  "updated_at": "2024-01-01T00:00:00Z"
+}
+```
+
+**错误响应**
+- `403 Forbidden` — 无权操作此对话
+- `404 Not Found` — 对话不存在
+
+---
+
+### PUT /api/conversations/:id/blackboard
+
+保存当前会话上下文黑板中的用户手写上下文。该内容会在后续 Agent 调用中随 `{会话上下文黑板}` 注入。
+
+**请求体**
+```json
+{
+  "manual_context": "用户手写的长期上下文"
+}
+```
+
+**成功响应** `200 OK`
+```json
+{
+  "conversation_id": "uuid",
+  "manual_context": "用户手写的长期上下文",
+  "updated_by": "uuid",
+  "updated_at": "2024-01-01T00:00:00Z"
+}
+```
+
+**错误响应**
+- `403 Forbidden` — 无权操作此对话
+- `404 Not Found` — 对话不存在
+- `413 Request Entity Too Large` — 手写上下文超过长度限制
+
+---
+
+## WebSocket
+
+### WS /ws?token=jwt
+
+建立 WebSocket 连接，实时接收消息推送。
+
+**连接方式**：在 URL 中传递 JWT Token 进行认证。
+
+**服务端推送消息类型**
+
+`message.new` — 新消息
+```json
+{
+  "type": "message.new",
+  "data": {
+    "id": "uuid",
+    "conversation_id": "uuid",
+    "content": "消息内容",
+    "role": "assistant",
+    "created_at": "2024-01-01T00:00:00Z"
+  }
+}
+```
+
+`message.stream` — 流式消息片段（Agent 逐 token 输出）
+```json
+{
+  "type": "message.stream",
+  "data": {
+    "message_id": "uuid",
+    "conversation_id": "uuid",
+    "chunk": "部分内容",
+    "done": false
+  }
+}
+```
+
+`conversation.updated` — 对话信息变更
+```json
+{
+  "type": "conversation.updated",
+  "data": {
+    "id": "uuid",
+    "title": "新标题",
+    "pinned": true
+  }
+}
+```
+
+**客户端发送消息类型**
+
+`ping` — 心跳保活
+```json
+{ "type": "ping" }
+```
+
+---
+
+### WS /daemon/ws?token=machine_key
+
+本机 daemon 连接后端的长连接通道。daemon 首次连接后发送 `daemon.register` 上报本机 Agent；后端创建 daemon task 后通过该连接主动下发 `task.execute`，daemon 执行 CLI 后回传 `task.done` 或 `task.error`。`daemon_tasks` 仅作为进程内任务队列和完成等待状态，不作为轮询消息队列。
+
+**daemon -> server**
+```json
+{
+  "type": "daemon.register",
+  "data": {
+    "machine_id": "HOSTNAME",
+    "agents": []
+  }
+}
+```
+
+```json
+{
+  "type": "task.done",
+  "data": {
+    "task_id": "uuid",
+    "result": "Agent final response"
+  }
+}
+```
+
+**server -> daemon**
+```json
+{
+  "type": "task.execute",
+  "data": {
+    "id": "uuid",
+    "conversation_id": "uuid",
+    "agent_id": "uuid",
+    "machine_id": "uuid",
+    "cli_tool": "claude",
+    "prompt": "user message",
+    "context_messages": "serialized context"
+  }
+}
+```
+
+---
+
+## Agent 管理
+
+### GET /api/platform-skills
+
+获取当前用户的平台 Skill 库。平台 Skill 库是用户自己维护的可编辑 Skills；底座上报的 machine Skills 仍在 Agent `capabilities_json` 中只读展示。
+
+### POST /api/platform-skills
+
+创建平台 Skill。
+
+**请求体**
+```json
+{
+  "name": "代码审查",
+  "category": "开发人员",
+  "description": "检查 bug 和测试缺口",
+  "trigger": "review, bug",
+  "detail": "按清单检查权限、边界和测试。"
+}
+```
+
+### POST /api/platform-skills/import-defaults
+
+将内置默认平台 Skills 导入当前用户的平台 Skill 库。默认模板覆盖产品经理和开发人员常用工作流，带有 `category` 分类，并使用统一 detail 结构：`适用场景`、`输入要求`、`工作流程`、`输出格式`、`质量检查`。已存在的同名 Skill 会跳过且不会覆盖用户内容；响应会返回当前库中可用于分配的默认 Skills。
+
+### PUT /api/platform-skills/:id
+
+更新平台 Skill。更新库内容不会自动改写已分配给 Agent 的快照；需要在 Agent 技能页重新分配或保存对应 Agent 配置。
+
+### DELETE /api/platform-skills/:id
+
+删除平台 Skill 库条目。删除库条目不会自动移除已经分配给 Agent 的 Skill 快照。
+
+### GET /api/agents
+
+获取当前用户可用的 Agent 列表。
+
+**成功响应** `200 OK`
+```json
+[
+  {
+    "id": "uuid",
+    "name": "代码助手",
+    "type": "custom",
+    "cli_tool": "codex",
+    "system_prompt": "你是一个资深工程师",
+    "tools_config": "{\"toolset\":\"tasks\",\"allowed_tools\":[\"list_tasks\"]}",
+    "custom_skills": "[{\"name\":\"代码审查\",\"description\":\"检查 bug 和测试缺口\",\"trigger\":\"review, bug\",\"detail\":\"按清单检查权限、边界和测试。\"}]",
+    "tags": "[\"coding\"]",
+    "status": "online"
+  }
+]
+```
+
+### POST /api/daemon/agent-candidates/:id/add
+
+把当前电脑扫描到的候选底座添加为用户自建 Agent。`cli_tool` 必须与候选底座匹配，避免候选列表刷新后误建到错误 CLI。
+
+**请求体**
+```json
+{
+  "name": "代码助手",
+  "cli_tool": "codex",
+  "system_prompt": "你是一个资深工程师",
+  "tools_config": "{\"toolset\":\"tasks\",\"allowed_tools\":[\"list_group_agents\",\"get_messages\",\"list_tasks\"]}",
+  "custom_skills": "[{\"name\":\"代码审查\",\"description\":\"检查 bug 和测试缺口\",\"trigger\":\"review, bug\",\"detail\":\"按清单检查权限、边界和测试。\"}]"
+}
+```
+
+**工具集配置**
+
+`tools_config` 是字符串形式的 JSON，当前支持：
+
+```json
+{
+  "toolset": "none | basic | tasks | orchestrator | agent_builder | 空字符串",
+  "allowed_tools": ["list_tasks"]
+}
+```
+
+- `allowed_tools` 保存前会过滤未知工具名。
+- `{"toolset":"none","allowed_tools":[]}` 表示该 Agent 不授予平台 MCP 工具。
+- 省略或传空 `tools_config` 会保存为无工具配置，不会回退默认工具。
+- 无法解析的旧文本配置仅保留展示，不授予 MCP 工具。
+
+**成功响应** `201 Created`
+```json
+{
+  "id": "uuid",
+  "name": "代码助手",
+  "type": "custom",
+  "cli_tool": "codex",
+  "system_prompt": "你是一个资深工程师",
+  "tools_config": "{\"toolset\":\"tasks\",\"allowed_tools\":[\"list_group_agents\",\"get_messages\",\"list_tasks\"]}",
+  "custom_skills": "[{\"name\":\"代码审查\",\"description\":\"检查 bug 和测试缺口\",\"trigger\":\"review, bug\",\"detail\":\"按清单检查权限、边界和测试。\"}]"
+}
+```
+
+**错误响应**
+- `400 Bad Request` — 参数校验失败
+- `404 Not Found` — 候选底座不存在、无权限，或 `cli_tool` 与候选底座不匹配
+
+### PUT /api/agents/:id/tools-config
+
+更新 Agent 的平台 MCP 工具授权配置。该接口只持久化 `tools_config` 和 `enable_management_tools`，用于前端工具分配页保存当前选择；不同于 `PUT /api/agents/:id`，它不要求 Agent 是自建 Agent，当前用户可见的 daemon/system/custom Agent 均可更新。
+
+**请求体**
+```json
+{
+  "tools_config": "{\"toolset\":\"custom\",\"allowed_tools\":[\"list_tasks\",\"get_agent_skill\"]}",
+  "enable_management_tools": false
+}
+```
+
+**成功响应** `200 OK`
+```json
+{
+  "id": "uuid",
+  "name": "代码助手",
+  "type": "custom",
+  "cli_tool": "codex",
+  "tools_config": "{\"allowed_tools\":[\"list_tasks\",\"get_agent_skill\"]}",
+  "enable_management_tools": false
+}
+```
+
+**错误响应**
+- `400 Bad Request` — 参数校验失败或工具配置格式非法
+- `404 Not Found` — Agent 不存在或当前用户不可见
+
+### PUT /api/agents/:id/custom-skills
+
+更新 Agent 的平台 Skills。该字段用于用户配置的 Agent 能力索引和渐进式加载内容，不会被 daemon 底座扫描覆盖。
+仅允许更新当前用户拥有的自建 Agent；保存前会校验为 JSON 数组并只保留 `name`、`description`、`trigger`、`detail` 字段，过滤 `source_path` 等本机扫描字段。
+运行时 prompt 只注入 Skill 索引和触发说明；完整 `detail` 保留在服务端，由当前 Agent 在需要时通过已授权的 MCP 工具 `get_agent_skill` 按名称读取。
+
+**请求体**
+```json
+{
+  "custom_skills": "[{\"name\":\"代码审查\",\"description\":\"检查 bug 和测试缺口\",\"trigger\":\"review, bug\",\"detail\":\"按清单检查权限、边界和测试。\"}]"
+}
+```
+
+**成功响应** `200 OK`
+```json
+{
+  "id": "uuid",
+  "custom_skills": "[{\"name\":\"代码审查\",\"description\":\"检查 bug 和测试缺口\",\"trigger\":\"review, bug\",\"detail\":\"按清单检查权限、边界和测试。\"}]"
+}
+```
+
+---
+
+## 错误码
+
+所有错误响应遵循统一格式：
+```json
+{
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "人类可读的错误描述"
+  }
+}
+```
+
+| HTTP 状态码 | 错误码 | 说明 |
+|-------------|--------|------|
+| 400 | VALIDATION_ERROR | 请求参数校验失败 |
+| 401 | UNAUTHORIZED | 未认证或 Token 无效 |
+| 403 | FORBIDDEN | 无权限访问该资源 |
+| 404 | NOT_FOUND | 资源不存在 |
+| 409 | CONFLICT | 资源冲突（如用户名重复） |
+| 500 | INTERNAL_ERROR | 服务端内部错误 |

@@ -1,0 +1,484 @@
+package repository
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"math"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/agent-hub/backend/internal/model"
+	"github.com/jmoiron/sqlx"
+)
+
+// KnowledgeRepo 知识库数据访问
+type KnowledgeRepo struct {
+	db *sqlx.DB
+}
+
+// NewKnowledgeRepo 创建知识库仓库
+func NewKnowledgeRepo(db *sqlx.DB) *KnowledgeRepo {
+	return &KnowledgeRepo{db: db}
+}
+
+// Create 创建知识库
+func (r *KnowledgeRepo) Create(ctx context.Context, userID, name, description string) (*model.KnowledgeBase, error) {
+	var kb model.KnowledgeBase
+	err := r.db.QueryRowxContext(ctx,
+		`INSERT INTO knowledge_bases (user_id, name, description) VALUES ($1, $2, $3)
+		 RETURNING id, user_id, name, description, visibility, created_at, updated_at`,
+		userID, name, description,
+	).StructScan(&kb)
+	if err != nil {
+		return nil, fmt.Errorf("insert knowledge base: %w", err)
+	}
+	kb.Files = []model.KnowledgeFile{}
+	kb.FileCount = 0
+	return &kb, nil
+}
+
+// ListByUser 获取用户的所有知识库（包含文件数量）
+func (r *KnowledgeRepo) ListByUser(ctx context.Context, userID string) ([]model.KnowledgeBase, error) {
+	var kbs []model.KnowledgeBase
+	err := r.db.SelectContext(ctx, &kbs,
+		`SELECT kb.id, kb.user_id, kb.name, kb.description, kb.visibility, kb.created_at, kb.updated_at,
+		        (SELECT COUNT(*) FROM knowledge_files kf WHERE kf.knowledge_base_id = kb.id) AS file_count
+		 FROM knowledge_bases kb
+		 WHERE kb.user_id = $1
+		 ORDER BY kb.updated_at DESC`,
+		userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list knowledge bases: %w", err)
+	}
+	if kbs == nil {
+		kbs = []model.KnowledgeBase{}
+	}
+	return kbs, nil
+}
+
+// GetByID 按ID获取知识库
+func (r *KnowledgeRepo) GetByID(ctx context.Context, id string) (*model.KnowledgeBase, error) {
+	var kb model.KnowledgeBase
+	err := r.db.QueryRowxContext(ctx,
+		`SELECT kb.id, kb.user_id, kb.name, kb.description, kb.visibility, kb.created_at, kb.updated_at,
+		        (SELECT COUNT(*) FROM knowledge_files kf WHERE kf.knowledge_base_id = kb.id) AS file_count
+		 FROM knowledge_bases kb
+		 WHERE kb.id = $1`,
+		id,
+	).StructScan(&kb)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get knowledge base: %w", err)
+	}
+	return &kb, nil
+}
+
+// UpdateVisibility 更新知识库可见性
+func (r *KnowledgeRepo) UpdateVisibility(ctx context.Context, id, visibility string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE knowledge_bases SET visibility = $1, updated_at = now() WHERE id = $2`,
+		visibility, id,
+	)
+	if err != nil {
+		return fmt.Errorf("update knowledge base visibility: %w", err)
+	}
+	return nil
+}
+
+// Delete 删除知识库
+func (r *KnowledgeRepo) Delete(ctx context.Context, id string) error {
+	_, err := r.db.ExecContext(ctx,
+		`DELETE FROM knowledge_bases WHERE id = $1`,
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("delete knowledge base: %w", err)
+	}
+	return nil
+}
+
+// ListFiles 获取知识库中的文件列表
+func (r *KnowledgeRepo) ListFiles(ctx context.Context, kbID string) ([]model.KnowledgeFile, error) {
+	var files []model.KnowledgeFile
+	err := r.db.SelectContext(ctx, &files,
+		`SELECT id, knowledge_base_id, filename, file_path, file_size, mime_type, preview_text, preview_type,
+		        rag_status, rag_error, chunk_count, indexed_at, created_at
+		 FROM knowledge_files
+		 WHERE knowledge_base_id = $1
+		 ORDER BY created_at DESC`,
+		kbID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list knowledge files: %w", err)
+	}
+	if files == nil {
+		files = []model.KnowledgeFile{}
+	}
+	return files, nil
+}
+
+// AddFile 添加文件到知识库
+func (r *KnowledgeRepo) AddFile(ctx context.Context, kbID, filename, filePath string, fileSize int64, mimeType, sha256, previewText, previewType string) (*model.KnowledgeFile, error) {
+	var f model.KnowledgeFile
+	err := r.db.QueryRowxContext(ctx,
+		`INSERT INTO knowledge_files (knowledge_base_id, filename, file_path, file_size, mime_type, sha256, preview_text, preview_type)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		 RETURNING id, knowledge_base_id, filename, file_path, file_size, mime_type, preview_text, preview_type,
+		           rag_status, rag_error, chunk_count, indexed_at, created_at`,
+		kbID, filename, filePath, fileSize, mimeType, sha256, previewText, previewType,
+	).StructScan(&f)
+	if err != nil {
+		return nil, fmt.Errorf("insert knowledge file: %w", err)
+	}
+	// 更新知识库的 updated_at
+	_, _ = r.db.ExecContext(ctx,
+		`UPDATE knowledge_bases SET updated_at = now() WHERE id = $1`,
+		kbID,
+	)
+	return &f, nil
+}
+
+// DeleteFile 删除知识库文件，返回文件路径用于删除物理文件
+func (r *KnowledgeRepo) DeleteFile(ctx context.Context, kbID, fileID string) (string, error) {
+	// 先获取文件路径以便删除物理文件
+	var filePath string
+	err := r.db.QueryRowxContext(ctx,
+		`SELECT file_path FROM knowledge_files WHERE id = $1 AND knowledge_base_id = $2`,
+		fileID, kbID,
+	).Scan(&filePath)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil // 文件不存在，返回空路径
+	}
+	if err != nil {
+		return "", fmt.Errorf("get knowledge file path: %w", err)
+	}
+
+	_, err = r.db.ExecContext(ctx,
+		`DELETE FROM knowledge_files WHERE id = $1 AND knowledge_base_id = $2`,
+		fileID, kbID,
+	)
+	if err != nil {
+		return "", fmt.Errorf("delete knowledge file: %w", err)
+	}
+	return filePath, nil
+}
+
+// FindPublicByName 按名称查找公开知识库（用于群聊引用）
+func (r *KnowledgeRepo) FindPublicByName(ctx context.Context, username, kbName string) (*model.KnowledgeBase, error) {
+	var kb model.KnowledgeBase
+	err := r.db.QueryRowxContext(ctx,
+		`SELECT kb.id, kb.user_id, kb.name, kb.description, kb.visibility, kb.created_at, kb.updated_at,
+		        u.username,
+		        (SELECT COUNT(*) FROM knowledge_files kf WHERE kf.knowledge_base_id = kb.id) AS file_count
+		 FROM knowledge_bases kb
+		 JOIN users u ON u.id = kb.user_id
+		 WHERE u.username = $1 AND kb.name = $2 AND kb.visibility = 'public'`,
+		username, kbName,
+	).StructScan(&kb)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find public knowledge base: %w", err)
+	}
+	return &kb, nil
+}
+
+// FindByUserAndName 按用户和名称查找知识库（自己的，无论公开私有）
+func (r *KnowledgeRepo) FindByUserAndName(ctx context.Context, userID, kbName string) (*model.KnowledgeBase, error) {
+	var kb model.KnowledgeBase
+	err := r.db.QueryRowxContext(ctx,
+		`SELECT kb.id, kb.user_id, kb.name, kb.description, kb.visibility, kb.created_at, kb.updated_at,
+		        (SELECT COUNT(*) FROM knowledge_files kf WHERE kf.knowledge_base_id = kb.id) AS file_count
+		 FROM knowledge_bases kb
+		 WHERE kb.user_id = $1 AND kb.name = $2`,
+		userID, kbName,
+	).StructScan(&kb)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find knowledge base by user and name: %w", err)
+	}
+	return &kb, nil
+}
+
+// GetFileByID 按文件ID获取单个文件记录
+func (r *KnowledgeRepo) GetFileByID(ctx context.Context, kbID, fileID string) (*model.KnowledgeFile, error) {
+	var f model.KnowledgeFile
+	err := r.db.QueryRowxContext(ctx,
+		`SELECT id, knowledge_base_id, filename, file_path, file_size, mime_type, preview_text, preview_type,
+		        rag_status, rag_error, chunk_count, indexed_at, created_at
+		 FROM knowledge_files
+		 WHERE id = $1 AND knowledge_base_id = $2`,
+		fileID, kbID,
+	).StructScan(&f)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get knowledge file: %w", err)
+	}
+	return &f, nil
+}
+
+func (r *KnowledgeRepo) UpdateFilePreview(ctx context.Context, kbID, fileID, previewText, previewType string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE knowledge_files
+		    SET preview_text = $1, preview_type = $2
+		  WHERE id = $3 AND knowledge_base_id = $4`,
+		previewText, previewType, fileID, kbID,
+	)
+	if err != nil {
+		return fmt.Errorf("update knowledge file preview: %w", err)
+	}
+	return nil
+}
+
+func (r *KnowledgeRepo) UpdateFileName(ctx context.Context, kbID, fileID, filename string) (*model.KnowledgeFile, error) {
+	var f model.KnowledgeFile
+	err := r.db.QueryRowxContext(ctx,
+		`UPDATE knowledge_files
+		    SET filename = $1
+		  WHERE id = $2 AND knowledge_base_id = $3
+		  RETURNING id, knowledge_base_id, filename, file_path, file_size, mime_type, preview_text, preview_type,
+		            rag_status, rag_error, chunk_count, indexed_at, created_at`,
+		filename, fileID, kbID,
+	).StructScan(&f)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("update knowledge file filename: %w", err)
+	}
+	_, _ = r.db.ExecContext(ctx,
+		`UPDATE knowledge_bases SET updated_at = now() WHERE id = $1`,
+		kbID,
+	)
+	return &f, nil
+}
+
+func (r *KnowledgeRepo) SearchFiles(ctx context.Context, kbID, keyword string, limit int) ([]model.KnowledgeFile, error) {
+	keyword = strings.TrimSpace(keyword)
+	if keyword == "" {
+		return []model.KnowledgeFile{}, nil
+	}
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	var files []model.KnowledgeFile
+	err := r.db.SelectContext(ctx, &files,
+		`SELECT id, knowledge_base_id, filename, file_path, file_size, mime_type, preview_text, preview_type,
+		        rag_status, rag_error, chunk_count, indexed_at, created_at
+		   FROM knowledge_files
+		  WHERE knowledge_base_id = $1
+		    AND (filename ILIKE '%' || $2 || '%' OR preview_text ILIKE '%' || $2 || '%')
+		  ORDER BY created_at DESC
+		  LIMIT $3`,
+		kbID, keyword, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("search knowledge files: %w", err)
+	}
+	if files == nil {
+		files = []model.KnowledgeFile{}
+	}
+	return files, nil
+}
+
+// GetFileContent 获取知识库文件路径列表（用于Agent引用）
+func (r *KnowledgeRepo) GetFileContent(ctx context.Context, kbID string) ([]model.KnowledgeFile, error) {
+	return r.ListFiles(ctx, kbID)
+}
+
+// ReplaceChunks 在一个事务中替换文件的全部分块，避免重建期间暴露半套索引。
+func (r *KnowledgeRepo) ReplaceChunks(ctx context.Context, kbID, fileID string, chunks []model.KnowledgeChunk) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin replace knowledge chunks: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var fileExists bool
+	if err := tx.GetContext(ctx, &fileExists,
+		`SELECT EXISTS (
+			SELECT 1 FROM knowledge_files WHERE id = $1 AND knowledge_base_id = $2
+		)`, fileID, kbID); err != nil {
+		return fmt.Errorf("verify knowledge file before replacing chunks: %w", err)
+	}
+	if !fileExists {
+		return fmt.Errorf("replace knowledge chunks: file %s not found in knowledge base %s", fileID, kbID)
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM knowledge_chunks WHERE file_id = $1 AND knowledge_base_id = $2`, fileID, kbID); err != nil {
+		return fmt.Errorf("delete old knowledge chunks: %w", err)
+	}
+
+	const insertQuery = `
+		INSERT INTO knowledge_chunks (
+			knowledge_base_id, file_id, chunk_index, chunk_type, content, summary,
+			token_count, char_count, metadata, embedding, embedding_model, content_hash
+		)
+		SELECT kf.knowledge_base_id, kf.id, $2, $3, $4, $5, $6, $7, $8::jsonb,
+		       $9::vector, $10, $11
+		  FROM knowledge_files kf
+		 WHERE kf.id = $1 AND kf.knowledge_base_id = $12`
+
+	for _, chunk := range chunks {
+		embedding, err := embeddingVectorLiteral(chunk.Embedding)
+		if err != nil {
+			return fmt.Errorf("serialize embedding for chunk %d: %w", chunk.ChunkIndex, err)
+		}
+		metadata := chunk.Metadata
+		if len(metadata) == 0 {
+			metadata = json.RawMessage(`{}`)
+		}
+		result, err := tx.ExecContext(ctx, insertQuery,
+			fileID, chunk.ChunkIndex, chunk.ChunkType, chunk.Content, chunk.Summary,
+			chunk.TokenCount, chunk.CharCount, metadata, embedding,
+			chunk.EmbeddingModel, chunk.ContentHash, kbID,
+		)
+		if err != nil {
+			return fmt.Errorf("insert knowledge chunk %d: %w", chunk.ChunkIndex, err)
+		}
+		if rows, err := result.RowsAffected(); err != nil {
+			return fmt.Errorf("inspect inserted knowledge chunk %d: %w", chunk.ChunkIndex, err)
+		} else if rows == 0 {
+			return fmt.Errorf("insert knowledge chunk %d: file %s not found", chunk.ChunkIndex, fileID)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit knowledge chunks: %w", err)
+	}
+	return nil
+}
+
+// UpdateFileRAGStatus 持久化索引进度；错误信息保留给 API 展示和后续重试。
+func (r *KnowledgeRepo) UpdateFileRAGStatus(ctx context.Context, kbID, fileID, status, ragError string, chunkCount int, indexedAt *time.Time) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE knowledge_files
+		    SET rag_status = $1, rag_error = $2, chunk_count = $3, indexed_at = $4
+		  WHERE id = $5 AND knowledge_base_id = $6`,
+		status, ragError, chunkCount, indexedAt, fileID, kbID,
+	)
+	if err != nil {
+		return fmt.Errorf("update knowledge file rag status: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("inspect knowledge file rag status update: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("update knowledge file rag status: file %s not found in knowledge base %s", fileID, kbID)
+	}
+	return nil
+}
+
+// SearchChunks 使用 pgvector cosine 距离召回，并在同一条 SQL 中完成 owner/public 权限校验。
+func (r *KnowledgeRepo) SearchChunks(ctx context.Context, kbID, userID, embeddingModel string, embedding []float32, limit int) ([]model.KnowledgeChunkSearchResult, error) {
+	vector, err := embeddingVectorLiteral(embedding)
+	if err != nil {
+		return nil, fmt.Errorf("serialize query embedding: %w", err)
+	}
+	if vector == nil {
+		return []model.KnowledgeChunkSearchResult{}, nil
+	}
+	embeddingModel = strings.TrimSpace(embeddingModel)
+	if embeddingModel == "" {
+		return []model.KnowledgeChunkSearchResult{}, nil
+	}
+	if limit <= 0 || limit > 50 {
+		limit = 6
+	}
+
+	var chunks []model.KnowledgeChunkSearchResult
+	err = r.db.SelectContext(ctx, &chunks,
+		`SELECT kc.id, kc.knowledge_base_id, kc.file_id, kc.chunk_index, kc.chunk_type,
+		        kc.content, kc.summary, kc.token_count, kc.char_count, kc.metadata,
+		        kc.embedding_model, kc.content_hash, kc.created_at, kc.updated_at,
+		        kf.filename, 1 - (kc.embedding <=> $3::vector) AS score
+		   FROM knowledge_chunks kc
+		   JOIN knowledge_files kf ON kf.id = kc.file_id
+		   JOIN knowledge_bases kb ON kb.id = kc.knowledge_base_id
+		  WHERE kc.knowledge_base_id = $1
+		    AND (kb.user_id = $2::uuid OR kb.visibility = 'public')
+		    AND kc.embedding IS NOT NULL
+		    AND kc.embedding_model = $4
+		  ORDER BY kc.embedding <=> $3::vector
+		  LIMIT $5`,
+		kbID, userID, vector, embeddingModel, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("search knowledge chunks: %w", err)
+	}
+	if chunks == nil {
+		chunks = []model.KnowledgeChunkSearchResult{}
+	}
+	return chunks, nil
+}
+
+// embeddingVectorLiteral 避免 repository 暴露 pgvector 驱动类型，同时拒绝 NaN/Inf 污染索引。
+func embeddingVectorLiteral(values []float32) (any, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	if len(values) != 1024 {
+		return nil, fmt.Errorf("expected 1024 dimensions, got %d", len(values))
+	}
+
+	var b strings.Builder
+	b.Grow(len(values) * 10)
+	b.WriteByte('[')
+	for i, value := range values {
+		if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
+			return nil, fmt.Errorf("dimension %d is not finite", i)
+		}
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(strconv.FormatFloat(float64(value), 'g', -1, 32))
+	}
+	b.WriteByte(']')
+	return b.String(), nil
+}
+
+// ListPublicByUsers 列出指定用户列表中其他用户的公开知识库。
+// excludeUserID 用于排除当前用户（当前用户的 KB 通过 ListByUser 单独获取）。
+func (r *KnowledgeRepo) ListPublicByUsers(ctx context.Context, userIDs []string, excludeUserID string) ([]model.KnowledgeBase, error) {
+	if len(userIDs) == 0 {
+		return []model.KnowledgeBase{}, nil
+	}
+
+	query, args, err := sqlx.In(
+		`SELECT kb.id, kb.user_id, kb.name, kb.description, kb.visibility, kb.created_at, kb.updated_at,
+		        u.username,
+		        (SELECT COUNT(*) FROM knowledge_files kf WHERE kf.knowledge_base_id = kb.id) AS file_count
+		 FROM knowledge_bases kb
+		 JOIN users u ON u.id = kb.user_id
+		 WHERE kb.user_id IN (?) AND kb.visibility = 'public' AND kb.user_id != ?
+		 ORDER BY kb.updated_at DESC`,
+		userIDs, excludeUserID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build in query for list public by users: %w", err)
+	}
+	query = r.db.Rebind(query)
+
+	var kbs []model.KnowledgeBase
+	if err := r.db.SelectContext(ctx, &kbs, query, args...); err != nil {
+		return nil, fmt.Errorf("list public knowledge bases by users: %w", err)
+	}
+	if kbs == nil {
+		kbs = []model.KnowledgeBase{}
+	}
+	return kbs, nil
+}

@@ -1,0 +1,311 @@
+.drawer :global(.ant-drawer-body) {
+  padding: 18px;
+  background: var(--color-bg-chat);
+}
+
+.drawerTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.drawerBody {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.agentPicker {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.agentPicker :global(.ant-select) {
+  width: 100%;
+}
+
+.loading {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+}
+
+.usagePanel {
+  padding: 16px;
+  border: 1px solid rgba(31, 35, 40, 0.1);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+
+.emptyUsage {
+  padding: 14px;
+  border: 1px dashed rgba(31, 35, 40, 0.16);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+
+.usageHeading,
+.usageNumbers,
+.usageFooter,
+.usageStatusRow {
+  display: flex;
+  align-items: center;
+}
+
+.usageHeading,
+.usageNumbers,
+.usageFooter {
+  justify-content: space-between;
+}
+
+.usageHeading {
+  gap: 14px;
+}
+
+.usageTitle {
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.generation {
+  margin-left: 8px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.usageStatusRow {
+  gap: 8px;
+}
+
+.estimatedBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #735c18;
+  font-size: 11px;
+}
+
+.usageStatus {
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.usageNumbers {
+  margin: 18px 0 7px;
+  gap: 5px;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.usageNumbers strong {
+  color: var(--color-text);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.usageNumbers b {
+  margin-left: auto;
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.usageProgress {
+  display: block;
+  margin: 0;
+}
+
+.meterNormal {
+  color: #237956;
+  background: rgba(35, 121, 86, 0.1);
+}
+
+.meterWarning {
+  color: #8a6300;
+  background: rgba(191, 139, 0, 0.12);
+}
+
+.meterCritical {
+  color: #b33a3a;
+  background: rgba(179, 58, 58, 0.1);
+}
+
+.usageProgress.meterNormal :global(.ant-progress-bg) {
+  background: #2f8f6b !important;
+}
+
+.usageProgress.meterWarning :global(.ant-progress-bg) {
+  background: #c59119 !important;
+}
+
+.usageProgress.meterCritical :global(.ant-progress-bg) {
+  background: #c94a4a !important;
+}
+
+.usageFooter {
+  gap: 10px;
+  margin-top: 8px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.usageFooter span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachedCheckpoint {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(31, 35, 40, 0.09);
+  color: #237956;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.sectionHeader h3 {
+  margin: 0 0 4px;
+  color: var(--color-text);
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.createActions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 128px;
+  gap: 7px;
+  width: 100%;
+}
+
+.createActions :global(.ant-select-selector),
+.createActions :global(.ant-btn) {
+  min-height: 32px;
+}
+
+.checkpointList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.markdownPreview {
+  max-height: min(68vh, 720px);
+  overflow: auto;
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.markdownPreview h1,
+.markdownPreview h2,
+.markdownPreview h3 {
+  margin: 18px 0 8px;
+  font-size: 16px;
+  letter-spacing: 0;
+}
+
+.markdownPreview pre,
+.markdownPreview code {
+  font-family: var(--font-family-mono);
+}
+
+.markdownPreview pre {
+  padding: 12px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--color-surface-muted);
+}
+
+.importForm {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 8px;
+}
+
+.importField {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.importField :global(.ant-select) {
+  width: 100%;
+}
+
+.importTarget {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 12px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.importTarget strong {
+  overflow: hidden;
+  color: var(--color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.importHint {
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid rgba(31, 35, 40, 0.09);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+:global(html.dark) .usagePanel,
+:global(html.dark) .emptyUsage {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+:global(html.dark) .estimatedBadge {
+  color: #d8b95f;
+}
+
+@media (max-width: 640px) {
+  .drawer :global(.ant-drawer-content-wrapper) {
+    width: 100vw !important;
+  }
+
+  .sectionHeader {
+    align-items: center;
+  }
+
+  .createActions {
+    grid-template-columns: minmax(0, 1fr) 128px;
+  }
+
+  .usageFooter {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .importField,
+  .importTarget {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}

@@ -1,0 +1,55 @@
+﻿server:
+  port: 8080
+  # Optional. Set to a LAN/public reachable URL (e.g. "http://10.0.0.1:8080")
+  # for remote daemon connect commands. Defaults to http://127.0.0.1:<port> when empty.
+  external_url: ""
+database:
+  host: localhost
+  port: 5432
+  user: agenthub
+  password: agenthub
+  dbname: agenthub
+  sslmode: disable
+redis:
+  host: localhost
+  port: 6379
+  password: ""
+  db: 0
+jwt:
+  secret: dev-secret-change-in-prod
+  expiry_hours: 48
+daemon:
+  token: dev-daemon-token-change-in-prod
+cors:
+  allowed_origins:
+    - http://localhost:5173
+upload:
+  dir: "./uploads"
+  # Optional. Set to a public backend origin such as "http://111.228.35.61:8080"
+  # or "https://agenthub.example.com" so attachment APIs return absolute URLs.
+  public_base_url: ""
+  max_image_mb: 20
+  max_pdf_mb: 50
+log:
+  level: info
+rate_limit:
+  rps: 100
+  burst: 200
+rag:
+  enabled: true
+  provider: ollama
+  ollama_url: http://localhost:11434
+  model: bge-m3
+  dimensions: 1024
+  semantic_threshold: 0.72
+  target_chunk_chars: 900
+  max_chunk_chars: 1400
+  chunk_overlap_chars: 150
+  top_k: 6
+  candidate_top_n: 20
+  batch_size: 32
+  request_timeout_seconds: 60
+  reranker_enabled: true
+  reranker_url: http://localhost:8081
+  reranker_model: BAAI/bge-reranker-v2-m3
+  reranker_timeout_seconds: 30

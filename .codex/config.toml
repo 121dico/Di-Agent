@@ -1,0 +1,25 @@
+project_doc_fallback_filenames = ["AGENTS.md"]
+
+[shell_environment_policy]
+inherit = "core"
+
+[shell_environment_policy.set]
+CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR = "1"
+
+[mcp_servers.chrome-devtools]
+command = "npx"
+args = [
+    "-y",
+    "chrome-devtools-mcp@latest",
+    "-e",
+    'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
+]
+
+[mcp_servers.playwright]
+command = "npx"
+args = [
+    "-y",
+    "@playwright/mcp@latest",
+    "--browser",
+    "msedge",
+]

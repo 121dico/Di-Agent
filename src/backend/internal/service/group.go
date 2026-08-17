@@ -1,0 +1,327 @@
+package service
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/agent-hub/backend/internal/model"
+)
+
+// GroupRepo 群聊服务所需的仓库接口
+type GroupRepo interface {
+	CreateGroup(ctx context.Context, ownerID, name string, memberIDs []string) (*model.Conversation, error)
+	AddMember(ctx context.Context, conversationID, userID, role string) error
+	RemoveMember(ctx context.Context, conversationID, userID string) error
+	DeleteGroup(ctx context.Context, conversationID string) error
+	ListMembers(ctx context.Context, conversationID string) ([]*model.ConversationMember, error)
+	GetMember(ctx context.Context, conversationID, userID string) (*model.ConversationMember, error)
+	UpdateMemberRole(ctx context.Context, conversationID, userID, role string) error
+	IsMember(ctx context.Context, conversationID, userID string) (bool, error)
+	GetConversationByID(ctx context.Context, id string) (*model.Conversation, error)
+	GetUserByID(ctx context.Context, id string) (*model.User, error)
+	UpdateGroupInfo(ctx context.Context, conversationID, title, avatar, description, announcement, tags string) (*model.Conversation, error)
+}
+
+var (
+	ErrNotOwner      = errors.New("只有群主才能执行此操作")
+	ErrNotAdmin      = errors.New("需要管理员权限")
+	ErrAlreadyMember = errors.New("用户已是群成员")
+	ErrGroupNotFound = errors.New("群不存在")
+	ErrNotMember     = errors.New("用户不是群成员")
+	ErrOwnerLeave    = errors.New("群主不能离开群聊，请先转让群主")
+)
+
+// GroupService 群聊业务逻辑
+type GroupService struct {
+	repo GroupRepo
+}
+
+// NewGroupService 创建群聊服务
+func NewGroupService(repo GroupRepo) *GroupService {
+	return &GroupService{repo: repo}
+}
+
+// IsConversationMember 校验用户是否为会话成员（实现 MemberChecker 接口）
+func (s *GroupService) IsConversationMember(ctx context.Context, conversationID, userID string) (bool, error) {
+	return s.repo.IsMember(ctx, conversationID, userID)
+}
+
+// CreateGroup 创建群聊
+func (s *GroupService) CreateGroup(ctx context.Context, ownerID, name string, memberIDs []string) (*model.Conversation, error) {
+	if strings.TrimSpace(name) == "" {
+		return nil, errors.New("群名不能为空格")
+	}
+
+	// memberIDs 去重且排除 owner
+	deduped := dedupMembers(memberIDs, ownerID)
+
+	conv, err := s.repo.CreateGroup(ctx, ownerID, name, deduped)
+	if err != nil {
+		return nil, fmt.Errorf("create group: %w", err)
+	}
+	return conv, nil
+}
+
+// AddMember 添加群成员
+func (s *GroupService) AddMember(ctx context.Context, conversationID, operatorID, targetUserID, role string) error {
+	// 验证请求者是 owner/admin
+	member, err := s.repo.GetMember(ctx, conversationID, operatorID)
+	if err != nil {
+		return fmt.Errorf("check operator: %w", err)
+	}
+	if member == nil {
+		return ErrNotMember
+	}
+	if member.Role != "owner" && member.Role != "admin" {
+		return ErrNotAdmin
+	}
+
+	// 验证目标用户存在
+	user, err := s.repo.GetUserByID(ctx, targetUserID)
+	if err != nil {
+		return fmt.Errorf("check target user: %w", err)
+	}
+	if user == nil {
+		return ErrUserNotFound
+	}
+
+	// 验证未被添加
+	isMember, err := s.repo.IsMember(ctx, conversationID, targetUserID)
+	if err != nil {
+		return fmt.Errorf("check existing member: %w", err)
+	}
+	if isMember {
+		return ErrAlreadyMember
+	}
+
+	if err := s.repo.AddMember(ctx, conversationID, targetUserID, role); err != nil {
+		return fmt.Errorf("add member: %w", err)
+	}
+	return nil
+}
+
+// RemoveMember 移除群成员
+func (s *GroupService) RemoveMember(ctx context.Context, conversationID, operatorID, targetUserID string) error {
+	// 验证请求者是 owner/admin
+	member, err := s.repo.GetMember(ctx, conversationID, operatorID)
+	if err != nil {
+		return fmt.Errorf("check operator: %w", err)
+	}
+	if member == nil {
+		return ErrNotMember
+	}
+	if member.Role != "owner" && member.Role != "admin" {
+		return ErrNotAdmin
+	}
+
+	// 不能移除 owner
+	target, err := s.repo.GetMember(ctx, conversationID, targetUserID)
+	if err != nil {
+		return fmt.Errorf("check target member: %w", err)
+	}
+	if target == nil {
+		return ErrNotMember
+	}
+	if target.Role == "owner" {
+		return ErrNotOwner
+	}
+
+	if err := s.repo.RemoveMember(ctx, conversationID, targetUserID); err != nil {
+		return fmt.Errorf("remove member: %w", err)
+	}
+	return nil
+}
+
+// ListMembers 列出群成员（验证调用者是否为成员）
+func (s *GroupService) ListMembers(ctx context.Context, conversationID, userID string) ([]*model.ConversationMember, error) {
+	isMember, err := s.repo.IsMember(ctx, conversationID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("check membership: %w", err)
+	}
+	if !isMember {
+		return nil, ErrNotMember
+	}
+
+	list, err := s.repo.ListMembers(ctx, conversationID)
+	if err != nil {
+		return nil, fmt.Errorf("list members: %w", err)
+	}
+	return list, nil
+}
+
+// LeaveGroup 离开群聊
+func (s *GroupService) LeaveGroup(ctx context.Context, conversationID, userID string) error {
+	member, err := s.repo.GetMember(ctx, conversationID, userID)
+	if err != nil {
+		return fmt.Errorf("check member: %w", err)
+	}
+	if member == nil {
+		return ErrNotMember
+	}
+	if member.Role == "owner" {
+		return ErrOwnerLeave
+	}
+
+	if err := s.repo.RemoveMember(ctx, conversationID, userID); err != nil {
+		return fmt.Errorf("leave group: %w", err)
+	}
+	return nil
+}
+
+// DissolveGroup 解散群聊（仅群主/创建者可操作）
+func (s *GroupService) DissolveGroup(ctx context.Context, conversationID, userID string) error {
+	member, err := s.repo.GetMember(ctx, conversationID, userID)
+	if err != nil {
+		return fmt.Errorf("check member: %w", err)
+	}
+	isOwner := member != nil && member.Role == "owner"
+	// 兼容旧数据：member 记录不存在时回退检查 conversations.user_id
+	if !isOwner {
+		conv, err := s.repo.GetConversationByID(ctx, conversationID)
+		if err != nil {
+			return fmt.Errorf("get conversation: %w", err)
+		}
+		if conv == nil || conv.UserID != userID {
+			if member == nil {
+				return ErrNotMember
+			}
+			return ErrNotOwner
+		}
+	}
+	if err := s.repo.DeleteGroup(ctx, conversationID); err != nil {
+		return fmt.Errorf("dissolve group: %w", err)
+	}
+	return nil
+}
+
+// GetGroupInfo 获取群信息+成员列表（验证调用者是否为成员）
+func (s *GroupService) GetGroupInfo(ctx context.Context, conversationID, userID string) (*model.Conversation, []*model.ConversationMember, error) {
+	conv, err := s.repo.GetConversationByID(ctx, conversationID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("get conversation: %w", err)
+	}
+	if conv == nil {
+		return nil, nil, ErrGroupNotFound
+	}
+
+	isMember, err := s.repo.IsMember(ctx, conversationID, userID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("check membership: %w", err)
+	}
+	if !isMember {
+		return nil, nil, ErrNotMember
+	}
+
+	members, err := s.repo.ListMembers(ctx, conversationID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list members: %w", err)
+	}
+	return conv, members, nil
+}
+
+// ChangeMemberRole 修改群成员角色
+func (s *GroupService) ChangeMemberRole(ctx context.Context, convID, operatorID, targetUserID, newRole string) error {
+	// 验证请求者是群主
+	op, err := s.repo.GetMember(ctx, convID, operatorID)
+	if err != nil {
+		return fmt.Errorf("check operator: %w", err)
+	}
+	if op == nil {
+		return ErrNotMember
+	}
+	if op.Role != "owner" {
+		return ErrNotOwner
+	}
+
+	// 验证目标成员
+	target, err := s.repo.GetMember(ctx, convID, targetUserID)
+	if err != nil {
+		return fmt.Errorf("check target: %w", err)
+	}
+	if target == nil {
+		return ErrNotMember
+	}
+	if target.Role == "owner" {
+		return errors.New("不能修改群主角色")
+	}
+
+	// 验证新角色
+	if newRole != "admin" && newRole != "member" {
+		return errors.New("无效的角色")
+	}
+
+	return s.repo.UpdateMemberRole(ctx, convID, targetUserID, newRole)
+}
+
+// UpdateGroupInfo 更新群聊基本信息（标题、头像、简介）
+func (s *GroupService) UpdateGroupInfo(ctx context.Context, conversationID, userID, title, avatar, description, announcement, tags string) (*model.Conversation, error) {
+	// 权限校验：owner 或 admin 才能编辑
+	member, err := s.repo.GetMember(ctx, conversationID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("check member: %w", err)
+	}
+	if member == nil {
+		return nil, ErrNotMember
+	}
+	if member.Role != "owner" && member.Role != "admin" {
+		return nil, ErrNotAdmin
+	}
+
+	// 校验 title 非空且 <= 50 字符
+	trimmedTitle := strings.TrimSpace(title)
+	if trimmedTitle == "" {
+		return nil, errors.New("群名不能为空")
+	}
+	if len([]rune(trimmedTitle)) > 50 {
+		return nil, errors.New("群名不能超过 50 个字符")
+	}
+	// 校验 description <= 200 字符
+	if len([]rune(description)) > 200 {
+		return nil, errors.New("群简介不能超过 200 个字符")
+	}
+	// 校验 announcement <= 500 字符
+	if len([]rune(announcement)) > 500 {
+		return nil, errors.New("群公告不能超过 500 个字符")
+	}
+	// tags 校验：JSON 数组格式，最多 10 个标签，每个 <= 20 字符
+	if tags != "" && tags != "[]" {
+		var tagList []string
+		if err := json.Unmarshal([]byte(tags), &tagList); err != nil {
+			return nil, errors.New("标签格式错误")
+		}
+		if len(tagList) > 10 {
+			return nil, errors.New("标签数量不能超过 10 个")
+		}
+		for _, t := range tagList {
+			if len([]rune(t)) > 20 {
+				return nil, errors.New("单个标签不能超过 20 个字符")
+			}
+		}
+	}
+
+	conv, err := s.repo.UpdateGroupInfo(ctx, conversationID, trimmedTitle, avatar, description, announcement, tags)
+	if err != nil {
+		return nil, fmt.Errorf("update group info: %w", err)
+	}
+	return conv, nil
+}
+
+// dedupMembers 去重并排除 ownerID
+func dedupMembers(ids []string, exclude string) []string {
+	seen := make(map[string]struct{})
+	result := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id == exclude {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		result = append(result, id)
+	}
+	return result
+}

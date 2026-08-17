@@ -1,0 +1,126 @@
+# === 依赖 ===
+node_modules/
+vendor/
+
+# === 前端构建产物 ===
+dist/
+build/
+*.exe
+
+# === Go 构建产物 ===
+src/backend/bin/
+src/backend/server
+src/backend/agenthub-server
+src/backend/main
+src/backend/tmp/
+src/daemon/bin/
+bin/
+!src/daemon-npm/bin/
+!src/daemon-npm/bin/**
+*.o
+*.a
+*.test
+*.exe
+
+# === Docker ===
+pgdata/
+
+# === 本地 AI 模型权重（运行时缓存，禁止提交） ===
+model-cache/
+
+# === 环境变量 ===
+.env
+.env.local
+.env.*.local
+
+# === 配置文件（含敏感信息）===
+src/backend/config/config.yaml
+src/backend/config/*.local.yaml
+src/backend/config/*.secret.yaml
+src/backend/config/*.private.yaml
+
+# === 云服务器 / SSH 本地凭据 ===
+*.pem
+*.key
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+ssh_config
+cloud*.yaml
+cloud*.json
+server*.local.json
+
+# === IDE / 编辑器 ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === 系统文件 ===
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# === 日志 ===
+*.log
+
+# === 前端缓存 ===
+*.tsbuildinfo
+.vite/
+.vite-cache/
+
+# === Go 调试文件 ===
+debug
+__debug_bin*
+
+# === 测试覆盖率 ===
+coverage/
+*.cover
+*.out
+coverage.html
+
+# === OMC 状态 ===
+.omc/
+
+# === 截图工具 ===
+screenshots/
+src/frontend/screenshot.mjs
+
+# === 根目录误生成的 package 文件 ===
+/package.json
+/package-lock.json
+
+# === Trellis ===
+.trellis/
+
+# === OpenCode ===
+.opencode/
+
+# === CodeGraph ===
+.codegraph/
+
+# === Claude Code 会话数据 ===
+.claude/sessions/
+.claude/state/
+.claude/state.backup/
+
+# === Playwright MCP 测试产物 ===
+.playwright-mcp/
+
+# === 本地上传文件（运行时生成） ===
+uploads/
+src/backend/uploads/originals/
+src/backend/uploads/thumbnails/
+
+# === 部署发布产物（运行时落盘的站点目录） ===
+data/sites/
+src/backend/data/
+
+# === 测试时从 src/backend 复制到根目录的文件（防止误提交） ===
+/config/
+/migrations/
+
+# === 本地临时运行文件 ===
+.tmp/

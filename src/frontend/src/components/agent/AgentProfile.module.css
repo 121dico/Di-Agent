@@ -1,0 +1,826 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 16px;
+  background: var(--color-bg-chat);
+}
+
+/* ── Header ── */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.identity :global(.ant-avatar) {
+  width: 48px !important;
+  height: 48px !important;
+  border-radius: 50% !important;
+  flex-shrink: 0;
+  aspect-ratio: 1 / 1;
+  background: var(--gradient-agent) !important;
+  color: #fff;
+  box-shadow: 0 8px 16px rgba(47, 143, 107, 0.2);
+}
+
+.clickableAvatar {
+  cursor: pointer;
+}
+
+.titleBlock {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.subtitle {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roleTag {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  height: 18px;
+  padding: 0 7px;
+  margin-top: 2px;
+  border-radius: 999px;
+  background: rgba(31, 35, 40, 0.06);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: lowercase;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.actions :global(.ant-btn) {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(31, 35, 40, 0.08);
+  background: var(--color-bg-white);
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.actions :global(.ant-btn:hover) {
+  border-color: rgba(47, 143, 107, 0.35);
+  color: var(--color-primary);
+}
+
+.actions :global(.ant-btn-primary) {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: transparent;
+}
+
+.actions :global(.ant-btn-primary:hover) {
+  background: #247a59;
+  color: #fff;
+}
+
+.actions :global(.ant-btn-text) {
+  width: 30px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.actions :global(.ant-btn-text:hover) {
+  background: rgba(31, 35, 40, 0.05);
+  color: var(--color-text);
+}
+
+/* ── Tabs (underline style) ── */
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0;
+  border-bottom: 1px solid var(--color-border-light);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  height: 0;
+}
+
+.tab {
+  position: relative;
+  height: 38px;
+  padding: 0 12px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: color var(--transition-fast);
+}
+
+.tab:hover {
+  color: var(--color-text);
+}
+
+.tabActive {
+  color: var(--color-primary);
+}
+
+.tabActive::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: -1px;
+  height: 2px;
+  background: var(--color-primary);
+  border-radius: 2px;
+}
+
+.body {
+  flex: 1;
+  overflow: auto;
+  margin-top: 4px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* ── Overview cards ── */
+.overviewCard {
+  padding: 16px 18px;
+  margin-bottom: 12px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 8px;
+  background: var(--color-bg-white);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.overviewCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.overviewCardTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.overviewCardHint {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+
+.overviewDescriptionText {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.overviewDescriptionText.expanded {
+  -webkit-line-clamp: unset;
+  display: block;
+}
+
+.overviewDescriptionText p {
+  margin: 0 0 6px;
+}
+
+.overviewDescriptionText p:last-child {
+  margin-bottom: 0;
+}
+
+.expandToggle {
+  margin-top: 8px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.expandToggle:hover {
+  text-decoration: underline;
+}
+
+/* ── Metrics ── */
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.metricCard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 8px;
+  background: var(--color-bg-white);
+}
+
+.metricCardLabel {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  font-weight: 600;
+}
+
+.metricCardValue {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--color-text);
+  line-height: 1.2;
+}
+
+.metricCardTrend {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #16a34a;
+}
+
+/* ── Skills row ── */
+.skillRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.skillMiniCard {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 8px;
+  background: var(--color-bg-white);
+  min-width: 0;
+}
+
+.skillMiniIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(245, 158, 11, 0.15));
+  color: #8b5cf6;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.skillMiniMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.skillMiniName {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skillMiniTag {
+  font-size: 10px;
+  color: var(--color-text-tertiary);
+  text-transform: lowercase;
+}
+
+.viewAllLink {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.viewAllLink:hover {
+  color: var(--color-primary);
+}
+
+.skillsEmpty {
+  padding: 12px 0;
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}
+
+/* ── Conversation list ── */
+.conversationList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.conversationItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(31, 35, 40, 0.02);
+  transition: background var(--transition-fast);
+}
+
+.conversationItem:hover {
+  background: rgba(47, 143, 107, 0.04);
+}
+
+.conversationIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.conversationMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.conversationContent {
+  font-size: 13px;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.conversationSub {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+
+.conversationStatus {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.conversationStatus_completed {
+  background: rgba(47, 143, 107, 0.12);
+  color: var(--color-primary);
+}
+
+.conversationStatus_running {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+}
+
+.conversationStatus_failed {
+  background: rgba(255, 92, 92, 0.12);
+  color: var(--color-danger);
+}
+
+/* ── Overview actions ── */
+.overviewActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.overviewActions :global(.ant-btn) {
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+/* ── Sections (edit mode + other tabs) ── */
+.section {
+  padding: 16px 18px;
+  margin-bottom: 12px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 8px;
+  background: var(--color-bg-white);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.sectionTitle {
+  margin-bottom: 12px;
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.field {
+  margin-bottom: 14px;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) minmax(200px, 1fr);
+  gap: 14px;
+}
+
+.formGrid .field {
+  margin-bottom: 0;
+}
+
+.label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.value {
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.descriptionText {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.descriptionText p {
+  margin: 0 0 8px;
+}
+
+.descriptionText p:last-child {
+  margin-bottom: 0;
+}
+
+.descriptionCard {
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 8px;
+  background: rgba(31, 35, 40, 0.02);
+}
+
+.descriptionHeadline {
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.descriptionBlock {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border-light);
+}
+
+.descriptionBlockTitle {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.operationList {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.infoGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(160px, 1fr));
+  gap: 14px 24px;
+}
+
+.toolControlRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.toolsetSelect {
+  min-width: 160px;
+}
+
+.toolGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.toolCountLabel {
+  margin-left: auto;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.toolFilterBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.filterPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid rgba(31, 35, 40, 0.1);
+  border-radius: 999px;
+  background: var(--color-bg-white);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.filterPill:hover {
+  border-color: rgba(47, 143, 107, 0.3);
+  color: var(--color-primary);
+}
+
+.filterPillActive {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+.filterPillActive:hover {
+  background: #247a59;
+  color: #fff;
+  border-color: #247a59;
+}
+
+.toolCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(31, 35, 40, 0.06);
+  border-radius: 8px;
+  background: var(--color-bg-white);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.toolCard:hover {
+  border-color: rgba(47, 143, 107, 0.3);
+}
+
+.toolCardSelected {
+  border-color: #52c41a;
+  box-shadow: 0 0 0 1px #52c41a;
+  background: rgba(82, 196, 26, 0.04);
+}
+
+.toolCardContent {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.toolName {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.toolDesc {
+  display: block;
+  margin-top: 2px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.toolFooter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(31, 35, 40, 0.06);
+}
+
+.toolFooterName {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-family: Consolas, monospace;
+}
+
+.toolFooterBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 5px;
+  height: 14px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.tagPreview,
+.actionPanel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.actionPanel :global(.ant-btn) {
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+/* ── Activity placeholder ── */
+.activityPlaceholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px;
+  text-align: center;
+}
+
+.activityPlaceholderIcon {
+  font-size: 36px;
+  color: var(--color-text-tertiary);
+  margin-bottom: 10px;
+}
+
+.activityPlaceholderTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 6px;
+}
+
+.activityPlaceholderDesc {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  max-width: 280px;
+}
+
+.emptyState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border-radius: 0;
+  border: none;
+}
+
+@media (max-width: 900px) {
+  .infoGrid,
+  .formGrid,
+  .metricGrid,
+  .skillRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .toolGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── 暗色模式 ── */
+:global(html.dark) .actions :global(.ant-btn) {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:global(html.dark) .actions :global(.ant-btn-text:hover) {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+:global(html.dark) .overviewCard,
+:global(html.dark) .section {
+  background: var(--color-surface-strong);
+  border-color: var(--color-border);
+}
+
+:global(html.dark) .conversationItem {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+:global(html.dark) .conversationItem:hover {
+  background: rgba(52, 211, 153, 0.06);
+}
+
+:global(html.dark) .descriptionCard {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+:global(html.dark) .roleTag {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+:global(html.dark) .filterPill {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+:global(html.dark) .filterPillActive {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+:global(html.dark) .toolCard {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+:global(html.dark) .toolCard:hover {
+  border-color: rgba(47, 143, 107, 0.4);
+}
+
+:global(html.dark) .toolCardSelected {
+  border-color: #52c41a;
+  box-shadow: 0 0 0 1px #52c41a;
+  background: rgba(82, 196, 26, 0.08);
+}
+
+:global(html.dark) .toolFooter {
+  border-top-color: rgba(255, 255, 255, 0.06);
+}

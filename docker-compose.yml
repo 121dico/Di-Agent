@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg15-trixie
+    container_name: agenthub-db
+    environment:
+      POSTGRES_USER: agenthub
+      POSTGRES_PASSWORD: agenthub
+      POSTGRES_DB: agenthub
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agenthub"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: agenthub-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 可选的本地 Embedding 服务；默认不随基础设施启动，避免占用不必要的内存。
+  # 启动完整 RAG 依赖：docker compose --profile rag up -d ollama reranker
+  ollama:
+    image: ollama/ollama:latest
+    container_name: agenthub-ollama
+    profiles: ["rag"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./model-cache/ollama:/root/.ollama
+
+  # BGE Cross-Encoder 精排服务。checkpoint 需预先下载到项目 model-cache。
+  reranker:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.9
+    container_name: agenthub-reranker
+    profiles: ["rag"]
+    command: ["--model-id", "/data/bge-reranker-v2-m3", "--port", "80"]
+    ports:
+      - "8081:80"
+    volumes:
+      - ./model-cache/huggingface:/data:ro
+
+volumes:
+  pgdata:
+  redisdata:
