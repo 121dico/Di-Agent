@@ -58,8 +58,8 @@ func (s *AuthService) Register(ctx context.Context, username, password string) (
 	if len(username) < 3 || len(username) > 50 {
 		return "", nil, fmt.Errorf("%w: 用户名长度需在 3-50 之间", ErrInvalidInput)
 	}
-	if len(password) < 6 {
-		return "", nil, fmt.Errorf("%w: 密码长度不能少于 6 位", ErrInvalidInput)
+	if len(password) < 3 {
+		return "", nil, fmt.Errorf("%w: 密码长度不能少于 3 位", ErrInvalidInput)
 	}
 
 	// 检查用户名唯一性
