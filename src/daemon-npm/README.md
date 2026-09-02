@@ -1,8 +1,10 @@
-# @hust-agenthub/daemon
+# Di Agent Daemon
 
-AgentHub daemon — 连接 AgentHub 后端（HTTP + WebSocket），在本机 spawn agent CLI（Claude Code / Codex / OpenCode / OpenClaw），把本机算力接入 AgentHub 网关。
+Di Agent Daemon 通过 HTTP + WebSocket 连接 Di Agent 后端，在本机启动 Agent CLI（Claude Code / Codex / OpenCode / OpenClaw），把本机 Agent 能力接入 Di Agent 工作台。
 
-典型场景：你在 A 机器上跑 AgentHub 后端 + 数据库，想在 B / C 机器上用 `claude` / `codex` CLI 但能复用同一套会话历史、卡片、审批流。每台机器跑一个 daemon，连回 A 的后端即可。
+典型场景：你在 A 机器上运行 Di Agent 后端与数据库，希望在 B / C 机器上调用 `claude` / `codex` CLI，并复用统一的会话历史、任务卡片和审批流。每台执行机器运行一个 Daemon 并连接 A 即可。
+
+> 当前 npm 包名仍为 `@hust-agenthub/daemon`，这是发布与升级兼容标识；面向用户的产品名称统一为 Di Agent。
 
 ## 前置条件
 
@@ -11,11 +13,11 @@ AgentHub daemon — 连接 AgentHub 后端（HTTP + WebSocket），在本机 spa
   - Claude Code: `npm install -g @anthropic-ai/claude-code` 然后 `claude` 跑一次登录
   - Codex: 参考 OpenAI 官方指引
   - OpenCode / OpenClaw: 视你需要的能力按需安装
-- **后端可达**：你能从这台机器 ping 通跑 AgentHub server 的机器（同 LAN / Tailscale / 反向代理都行）
+- **后端可达**：这台机器能够访问 Di Agent Server（同 LAN / Tailscale / 反向代理均可）
 
 ## 快速上手（LAN 部署示例）
 
-假设 A 机器（跑 AgentHub 后端）LAN IP 是 `10.11.211.178`，后端端口 `8080`。在 B 机器：
+假设 A 机器（运行 Di Agent 后端）的 LAN IP 是 `10.11.211.178`，后端端口为 `8080`。在 B 机器：
 
 ```bash
 npx @hust-agenthub/daemon \
@@ -37,6 +39,8 @@ API key 由后端签发。在 A 机器（后端所在机器）：
 `--api-key` 决定了这个 daemon 以哪个用户身份注册任务、上报结果。多台 daemon 用同一个 key = 共享同一身份；用不同 key = 各自独立身份。
 
 ## 命令行参数 & 环境变量
+
+环境变量当前保留 `AGENTHUB_*` 前缀，以兼容已部署的 Daemon 与服务端配置。
 
 | 参数 | 环境变量 | 必填 | 说明 |
 |------|---------|------|------|
@@ -67,7 +71,7 @@ B 机器上想一直挂着，用 launchd / systemd / pm2 / nohup 都行。最简
 nohup npx @hust-agenthub/daemon \
   --server-url http://10.11.211.178:8080 \
   --api-key <key> \
-  > ~/agenthub-daemon.log 2>&1 &
+  > ~/di-agent-daemon.log 2>&1 &
 ```
 
 ## 版本
