@@ -4,8 +4,6 @@
 
 Di Agent 以对话为统一入口，把 Claude Code、Codex、OpenCode、OpenClaw、ZCode 等本地 Agent CLI 接入一个可管理的工作空间。用户可以连接电脑、创建智能体、配置 Prompt / Skills / 工具，在单聊或群聊中分派任务，并实时查看执行过程、结构化产物和数据报告。
 
-![Di Agent 智能体工作区](./agent-page.png)
-
 ## 产品能力
 
 - **多 Agent 接入**：Daemon 自动发现本机 Agent CLI，并通过统一协议连接 Di Agent 服务端。
