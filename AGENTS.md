@@ -27,9 +27,11 @@ AgentHub — IM-chat-driven multi-agent collaboration platform. Users chat with 
 ## Repository and Release Target
 
 - Primary repository: `https://git.xiaojukeji.com/lijiangli/energy_tag_agent.git`
-- Default push remote: `energy-tag-agent`
+- Required mirror repository: `https://github.com/121dico/Di-Agent.git`
+- Default push remote: `energy-tag-agent`, configured with both repositories as push destinations.
 - Default delivery branch: `price_sensitive`
-- Unless the user explicitly requests another destination, publish project changes to `energy-tag-agent/price_sensitive`, not `main`.
+- Unless the user explicitly requests another destination, publish project changes to the `price_sensitive` branch in both repositories, never directly to `main`.
+- Every default push must update both repositories with identical content and must verify that both remote `price_sensitive` refs resolve to the same commit.
 
 ## Monorepo Layout
 
