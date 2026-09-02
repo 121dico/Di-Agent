@@ -158,6 +158,12 @@ categories or values. A snapshot detail table must support cross-field search,
 clickable column sorting, page-size selection, and pagination while retaining
 the immutable source rows.
 
+Legend toggles on a distribution chart must preserve the original denominator
+and sector geometry. A disabled category remains in its proportional position
+with a neutral gray treatment; restoring it transitions back to the semantic
+color. Never renormalize or reflow the remaining sectors merely to hide a
+series.
+
 (To be filled by the team)
 
 ---

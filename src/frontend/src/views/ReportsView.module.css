@@ -9,7 +9,7 @@
 .reportHubTabs button[aria-current='page']::after { opacity: 1; transform: scaleX(1); }
 .reportHubTabs button:focus-visible { outline: 2px solid var(--wb-focus); outline-offset: -4px; border-radius: var(--radius-2); }
 
-.page { --report-blue: #2f6fdb; --report-blue-soft: rgba(47, 111, 219, .08); --report-teal: #15857a; --report-violet: #765bc4; --report-amber: #d18a24; --report-coral: #d05c50; --panel: var(--wb-surface); --border: var(--wb-border-subtle); --text-1: var(--wb-text-primary); --text-2: var(--wb-text-secondary); --text-3: var(--wb-text-tertiary); --report-font-micro: clamp(11px, .66vw, 13px); --report-font-meta: clamp(12px, .76vw, 15px); --report-font-body: clamp(14px, .86vw, 17px); --report-font-card: clamp(16px, .98vw, 19px); --report-font-section: clamp(18px, 1.14vw, 22px); min-width: 0; min-height: 0; display: flex; flex: 1; flex-direction: column; overflow: auto; color: var(--text-1); background: var(--wb-surface); font-feature-settings: 'tnum' 1; scroll-behavior: smooth; }
+.page { --report-blue: #2f6fdb; --report-blue-soft: rgba(47, 111, 219, .08); --report-teal: #15857a; --report-violet: #765bc4; --report-amber: #d18a24; --report-coral: #d05c50; --report-donut-muted: #d8dadd; --panel: var(--wb-surface); --border: var(--wb-border-subtle); --text-1: var(--wb-text-primary); --text-2: var(--wb-text-secondary); --text-3: var(--wb-text-tertiary); --report-font-micro: clamp(11px, .66vw, 13px); --report-font-meta: clamp(12px, .76vw, 15px); --report-font-body: clamp(14px, .86vw, 17px); --report-font-card: clamp(16px, .98vw, 19px); --report-font-section: clamp(18px, 1.14vw, 22px); min-width: 0; min-height: 0; display: flex; flex: 1; flex-direction: column; overflow: auto; color: var(--text-1); background: var(--wb-surface); font-feature-settings: 'tnum' 1; scroll-behavior: smooth; }
 .loading { flex: 1; display: grid; place-items: center; background: var(--wb-surface); }
 .sectionHead { position: sticky; top: 0; z-index: var(--z-sticky); min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 20px; flex: 0 0 auto; padding: 9px 18px; border-bottom: 1px solid var(--wb-border-subtle); background: rgba(255, 255, 255, .95); backdrop-filter: blur(16px) saturate(1.05); }
 .sectionTitle { min-width: 0; display: flex; align-items: center; gap: 12px; }
@@ -88,7 +88,7 @@
 .railFoot span { color: var(--text-3); font-size: 8px; letter-spacing: .12em; }
 .railFoot strong { color: var(--text-2); font-size: 9px; font-weight: 500; }
 
-.dashboard { container-type: inline-size; min-width: 0; width: 100%; max-width: 1440px; display: grid; grid-template-columns: minmax(0, 1fr) clamp(288px, 22vw, 360px); column-gap: 20px; align-items: start; padding: 22px 24px 64px; }
+.dashboard { container-type: inline-size; min-width: 0; width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) clamp(300px, 20vw, 372px); column-gap: clamp(16px, 1.4vw, 28px); align-items: start; padding: 22px clamp(20px, 2vw, 36px) 64px; }
 .dashboard > .summaryHero, .dashboard > .anchorBar, .dashboard > .emptyCard { grid-column: 1 / -1; }
 .summaryHero { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 2px 2px 20px; border-bottom: 1px solid var(--wb-border-subtle); }
 .summaryHero > div { min-width: 0; }
@@ -110,7 +110,7 @@
 .anchorBar a:hover::after, .anchorBar .anchorActive::after { opacity: 1; transform: scaleX(1); }
 .anchorBar a:focus-visible { outline: 2px solid var(--wb-focus); outline-offset: -3px; border-radius: var(--radius-2); }
 
-.filterDock { position: static; grid-column: 2; grid-row: 3 / span 2; width: 100%; min-width: 0; display: grid; grid-template-columns: 1fr; gap: 14px; align-self: start; padding: 16px; margin: 0 0 30px; border: 1px solid var(--wb-border-subtle); border-radius: var(--radius-5); background: var(--wb-surface-subtle); }
+.filterDock { position: static; grid-column: 2; grid-row: 3; width: 100%; min-width: 0; display: grid; grid-template-columns: 1fr; gap: 14px; align-self: start; padding: 16px; margin: 0 0 30px; border: 1px solid var(--wb-border-subtle); border-radius: var(--radius-5); background: var(--wb-surface-subtle); }
 .filterIntro { min-width: 0; display: flex; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--wb-border-subtle); }
 .filterIntro > span { width: 30px; height: 30px; display: grid; place-items: center; flex: 0 0 30px; border: 1px solid var(--wb-border-subtle); border-radius: var(--radius-3); color: var(--text-2); background: var(--wb-surface-subtle); }
 .filterIntro > div { min-width: 0; display: grid; gap: 3px; }
@@ -141,7 +141,7 @@
 
 .summaryBlock { margin-bottom: 30px; scroll-margin-top: 118px; }
 .overviewBlock { grid-column: 1; grid-row: 3; }
-.trendBlock { grid-column: 1; grid-row: 4; }
+.trendBlock { grid-column: 1 / -1; grid-row: 4; }
 .fullWidthBlock { grid-column: 1 / -1; }
 .blockHead { min-height: 28px; display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; padding: 0 2px; margin-bottom: 10px; }
 .blockHead > div { min-width: 0; display: flex; align-items: center; gap: 8px; }
@@ -178,7 +178,7 @@
 .legend button:focus-visible { outline: 2px solid var(--wb-focus); outline-offset: 2px; border-radius: 2px; }
 .legend button i { width: 7px; height: 7px; border-radius: 50%; box-shadow: 0 0 0 2px var(--wb-surface); }
 .legendMuted { opacity: .32; }
-.chartGrid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr); gap: 14px; }
+.chartGrid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(400px, 1fr); gap: clamp(14px, 1.2vw, 22px); }
 .trendCard { grid-column: 1 / -1; padding: 20px; }
 .incrementAnalysisCard { grid-column: 1 / -1; }
 .scoreCard, .distributionCard { min-height: 430px; }
@@ -258,9 +258,10 @@
 .volumeTrendPanel .chartSignals > div { border-right: 0; padding: 2px 4px; }
 .volumeEmpty { min-height: 250px; display: grid; place-items: center; }
 
-.donutLayout { min-height: 320px; display: grid; grid-template-columns: minmax(190px, .85fr) minmax(190px, 1.15fr); align-items: center; gap: 16px; }
-.donutLayout svg { width: 100%; max-width: 250px; max-height: 250px; justify-self: center; overflow: visible; }
-.donutSegment { opacity: .92; cursor: pointer; outline: none; transform-origin: center; transition: opacity var(--motion-control) var(--ease-standard), stroke-width var(--motion-control) var(--ease-standard); animation: donutIn 560ms var(--ease-out) both; }
+.donutLayout { min-height: 340px; display: grid; grid-template-columns: minmax(176px, 1.06fr) minmax(0, .94fr); align-items: center; gap: clamp(10px, 1vw, 18px); }
+.donutLayout svg { width: min(100%, 304px); max-height: 304px; justify-self: center; overflow: visible; }
+.donutSegment { opacity: .94; cursor: pointer; outline: none; transform-origin: center; transition: stroke 460ms var(--ease-standard), opacity 460ms var(--ease-standard), stroke-width var(--motion-control) var(--ease-standard); animation: donutIn 560ms var(--ease-out) both; }
+.donutSegmentMuted { opacity: .68; }
 .donutSegment:hover, .donutSegment:focus, .donutSegmentActive { opacity: 1; stroke-width: 35; }
 .donutValue { fill: var(--text-1); font-family: var(--pr-number-font); font-size: 30px; font-weight: 720; letter-spacing: -.03em; }
 .donutLabel { fill: var(--text-3); font-size: 9px; font-weight: 560; }
@@ -268,10 +269,11 @@
 .donutLegend button { width: 100%; display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 9px 8px; border: 0; border-radius: var(--radius-3); color: var(--text-2); background: transparent; font: inherit; font-size: 10px; text-align: left; cursor: pointer; transition: color var(--motion-control) var(--ease-standard), background-color var(--motion-control) var(--ease-standard), opacity var(--motion-control) var(--ease-standard); }
 .donutLegend button:hover, .donutLegend button:focus-visible, .donutLegendActive { color: var(--text-1); background: var(--wb-surface-hover); }
 .donutLegend button:focus-visible { outline: 2px solid var(--wb-focus); outline-offset: -2px; }
-.donutLegend i { width: 8px; height: 8px; border-radius: 50%; }
+.donutLegend i { width: 8px; height: 8px; border-radius: 50%; transition: background-color 460ms var(--ease-standard), transform var(--motion-control) var(--ease-out); }
+.donutLegend button:hover i, .donutLegend button:focus-visible i, .donutLegendActive i { transform: scale(1.18); }
 .donutLegend b { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.donutLegend em { color: var(--text-3); font-family: var(--pr-number-font); font-style: normal; white-space: nowrap; }
-.legendMuted { opacity: .32; }
+.donutLegend em { overflow: hidden; color: var(--text-3); font-family: var(--pr-number-font); font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+.donutLegend .legendMuted { opacity: .56; }
 
 .searchCard { padding: 18px; }
 .userSearchBar { display: grid; grid-template-columns: minmax(280px, 1fr) auto; gap: 10px; align-items: center; }
@@ -494,6 +496,7 @@
 @media (prefers-reduced-motion: reduce) {
   .page { scroll-behavior: auto; }
   .curve, .chartPointGroup, .barTrendCurve, .incrementBar, .donutSegment, .pending, .chartTooltip { animation: none; }
+  .donutSegment, .donutLegend i { transition: none; }
   .reportHubTabs button::after, .anchorBar a::after, .rangeControl button::after { transition: none; }
   .sourceCard, .sourceCardArrow { transition: none; }
 }

@@ -333,25 +333,32 @@ export function DonutChart({ distribution, hidden, onToggle }: { distribution: A
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
   if (distribution.length === 0) return <Empty description="暂无分布数据" />;
   const allTotal = distribution.reduce((sum, item) => sum + item.value, 0);
-  const items = distribution.filter((item) => !hidden.has(item.label));
-  const total = items.reduce((sum, item) => sum + item.value, 0);
-  const activeItem = activeLabel ? items.find((item) => item.label === activeLabel) : undefined;
+  const activeItem = activeLabel ? distribution.find((item) => item.label === activeLabel) : undefined;
   const radius = 84;
   const circumference = 2 * Math.PI * radius;
   let consumed = 0;
   return <div className={styles.donutLayout}>
     <svg viewBox="0 0 260 260" role="img" aria-label="报表扇形分布图" onMouseLeave={() => setActiveLabel(null)}>
       <circle cx="130" cy="130" r={radius} fill="none" stroke="var(--wb-surface-hover)" strokeWidth="30" />
-      <g transform="rotate(-90 130 130)">{items.map((item, index) => {
-        const length = (item.value / Math.max(total, 1)) * circumference;
+      <g transform="rotate(-90 130 130)">{distribution.map((item, index) => {
+        const isHidden = hidden.has(item.label);
+        const length = (item.value / Math.max(allTotal, 1)) * circumference;
         const offset = -consumed;
         consumed += length;
-        return <circle key={item.label} cx="130" cy="130" r={radius} fill="none" stroke={sensitivityColors[item.label] ?? '#8E8E93'} strokeWidth="30" strokeDasharray={`${length} ${circumference - length}`} strokeDashoffset={offset} className={`${styles.donutSegment} ${activeLabel === item.label ? styles.donutSegmentActive : ''}`} style={{ animationDelay: `${index * 90}ms` }} tabIndex={0} aria-label={`${item.label}: ${item.value.toLocaleString('zh-CN')} 人`} onMouseEnter={() => setActiveLabel(item.label)} onFocus={() => setActiveLabel(item.label)} onBlur={() => setActiveLabel(null)} onClick={() => onToggle(item.label)}><title>{`${item.label}: ${item.value.toLocaleString('zh-CN')} 人 · ${allTotal ? Number((item.value / allTotal * 100).toFixed(1)) : 0}%`}</title></circle>;
+        return <circle key={item.label} cx="130" cy="130" r={radius} fill="none" stroke={isHidden ? 'var(--report-donut-muted)' : (sensitivityColors[item.label] ?? '#8E8E93')} strokeWidth="30" strokeDasharray={`${length} ${circumference - length}`} strokeDashoffset={offset} data-donut-sector data-state={isHidden ? 'disabled' : 'enabled'} className={`${styles.donutSegment} ${isHidden ? styles.donutSegmentMuted : ''} ${activeLabel === item.label ? styles.donutSegmentActive : ''}`} style={{ animationDelay: `${index * 90}ms` }} tabIndex={0} aria-label={`${item.label}: ${item.value.toLocaleString('zh-CN')} 人，${isHidden ? '已关闭' : '已显示'}`} onMouseEnter={() => setActiveLabel(item.label)} onFocus={() => setActiveLabel(item.label)} onBlur={() => setActiveLabel(null)} onClick={() => onToggle(item.label)} onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onToggle(item.label);
+          }
+        }}><title>{`${item.label}: ${item.value.toLocaleString('zh-CN')} 人 · ${allTotal ? Number((item.value / allTotal * 100).toFixed(1)) : 0}% · ${isHidden ? '已关闭' : '已显示'}`}</title></circle>;
       })}</g>
-      <text x="130" y="126" textAnchor="middle" className={styles.donutValue}>{compactCount(activeItem?.value ?? total)}</text>
-      <text x="130" y="149" textAnchor="middle" className={styles.donutLabel}>{activeItem?.label ?? '已有价敏指标用户'}</text>
+      <text x="130" y="126" textAnchor="middle" className={styles.donutValue}>{compactCount(activeItem?.value ?? allTotal)}</text>
+      <text x="130" y="149" textAnchor="middle" className={styles.donutLabel}>{activeItem ? `${activeItem.label}${hidden.has(activeItem.label) ? ' · 已关闭' : ''}` : '已有价敏指标用户'}</text>
     </svg>
-    <div className={styles.donutLegend}>{distribution.map((item) => <button type="button" key={item.label} aria-pressed={!hidden.has(item.label)} className={`${hidden.has(item.label) ? styles.legendMuted : ''} ${activeLabel === item.label ? styles.donutLegendActive : ''}`} onMouseEnter={() => setActiveLabel(item.label)} onMouseLeave={() => setActiveLabel(null)} onFocus={() => setActiveLabel(item.label)} onBlur={() => setActiveLabel(null)} onClick={() => onToggle(item.label)}><i style={{ background: sensitivityColors[item.label] ?? '#8E8E93' }} /><b>{item.label}</b><em>{item.value.toLocaleString('zh-CN')} 人 · {allTotal ? Number((item.value / allTotal * 100).toFixed(1)) : 0}%</em></button>)}</div>
+    <div className={styles.donutLegend}>{distribution.map((item) => {
+      const isHidden = hidden.has(item.label);
+      return <button type="button" key={item.label} aria-pressed={!isHidden} data-state={isHidden ? 'disabled' : 'enabled'} className={`${isHidden ? styles.legendMuted : ''} ${activeLabel === item.label ? styles.donutLegendActive : ''}`} onMouseEnter={() => setActiveLabel(item.label)} onMouseLeave={() => setActiveLabel(null)} onFocus={() => setActiveLabel(item.label)} onBlur={() => setActiveLabel(null)} onClick={() => onToggle(item.label)}><i style={{ background: isHidden ? 'var(--report-donut-muted)' : (sensitivityColors[item.label] ?? '#8E8E93') }} /><b>{item.label}</b><em>{item.value.toLocaleString('zh-CN')} 人 · {allTotal ? Number((item.value / allTotal * 100).toFixed(1)) : 0}%</em></button>;
+    })}</div>
   </div>;
 }
 

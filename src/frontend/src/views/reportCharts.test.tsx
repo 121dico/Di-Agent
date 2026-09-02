@@ -96,6 +96,32 @@ describe('report chart interactions', () => {
     expect(onToggle).toHaveBeenCalledWith('高价敏');
   });
 
+  it('keeps every donut sector proportional while a disabled sector turns neutral', () => {
+    act(() => {
+      root.render(
+        <DonutChart
+          distribution={[{ label: '高价敏', value: 20 }, { label: '中价敏', value: 50 }, { label: '低价敏', value: 30 }]}
+          hidden={new Set(['中价敏'])}
+          onToggle={() => undefined}
+        />,
+      );
+    });
+
+    const sectors = Array.from(container.querySelectorAll('[data-donut-sector]'));
+    expect(sectors).toHaveLength(3);
+
+    const lengths = sectors.map((sector) => Number(sector.getAttribute('stroke-dasharray')?.split(' ')[0]));
+    const totalLength = lengths.reduce((sum, length) => sum + length, 0);
+    expect(lengths[0]! / totalLength).toBeCloseTo(0.2, 3);
+    expect(lengths[1]! / totalLength).toBeCloseTo(0.5, 3);
+    expect(lengths[2]! / totalLength).toBeCloseTo(0.3, 3);
+
+    expect(sectors[1]!.getAttribute('data-state')).toBe('disabled');
+    expect(sectors[1]!.getAttribute('stroke')).toBe('var(--report-donut-muted)');
+    expect(sectors[0]!.getAttribute('data-state')).toBe('enabled');
+    expect(sectors[0]!.getAttribute('stroke')).toBe('#D75A50');
+  });
+
   it('renders signed daily net growth around a real zero baseline', () => {
     act(() => {
       root.render(
