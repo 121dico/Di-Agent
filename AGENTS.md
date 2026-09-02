@@ -24,6 +24,13 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 
 AgentHub — IM-chat-driven multi-agent collaboration platform. Users chat with multiple AI Agents (Claude Code, Codex, OpenCode) through a Feishu/WeChat-style interface. Supports 1-on-1 chat, group chat, task dispatch, and artifact preview.
 
+## Repository and Release Target
+
+- Primary repository: `https://git.xiaojukeji.com/lijiangli/energy_tag_agent.git`
+- Default push remote: `energy-tag-agent`
+- Default delivery branch: `price_sensitive`
+- Unless the user explicitly requests another destination, publish project changes to `energy-tag-agent/price_sensitive`, not `main`.
+
 ## Monorepo Layout
 
 ```
