@@ -4,7 +4,9 @@ import remarkGfm from 'remark-gfm';
 import { Avatar, Tooltip, Button, Dropdown, Empty, Input, Modal, Typography } from 'antd';
 import { message as antMessage } from '@/utils/message';
 import {
+  BarChartOutlined,
   FolderOpenOutlined,
+  InfoCircleOutlined,
   LogoutOutlined,
   MoreOutlined,
   RobotOutlined,
@@ -12,11 +14,9 @@ import {
   SettingOutlined,
   StopOutlined,
   UserAddOutlined,
-  InfoCircleOutlined,
   DeleteOutlined,
   LinkOutlined,
   PushpinOutlined,
-  DashboardOutlined,
   BranchesOutlined,
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
@@ -47,6 +47,7 @@ import { modal as appModal } from '@/utils/modal';
 import { ConversationContextDrawer } from './ConversationContextDrawer';
 import { getConversationFork } from '@/api/context';
 import type { ConversationFork } from '@/types/context';
+import { useConversationActions } from './useConversationActions';
 import styles from './ChatWindow.module.css';
 
 const ACCEPTED_TYPES =
@@ -73,11 +74,17 @@ function getPinnedMessageAuthor(item: PinnedMessage): string {
   return '用户';
 }
 
-export const ChatWindow: React.FC = () => {
+interface ChatWindowProps {
+  onOpenPersonalReport?: () => void;
+  personalReportOpen?: boolean;
+}
+
+export const ChatWindow: React.FC<ChatWindowProps> = ({ onOpenPersonalReport, personalReportOpen = false }) => {
   const { conversations, activeId } = useConversation();
   const user = useAuthStore((s) => s.user);
   const agents = useAgentStore((s) => s.agents);
   const fetchConversations = useConversationStore((s) => s.fetchConversations);
+  const createConversationFork = useConversationStore((s) => s.forkConversation);
   const setActiveConversation = useConversationStore((s) => s.setActive);
   const activeConv = useMemo(() => conversations.find((c) => c.id === activeId), [conversations, activeId]);
   const memberPanelOpen = useConversationStore((s) => s.memberPanelOpen);
@@ -86,6 +93,7 @@ export const ChatWindow: React.FC = () => {
   const markAllRead = useMessageStore((s) => s.markAllRead);
   const toggleMessagePin = useMessageStore((s) => s.toggleMessagePin);
   const typingUsersMap = useWsStore((s) => activeId ? (s.typingUsers[activeId] ?? EMPTY_TYPING) : EMPTY_TYPING);
+  const agentTyping = useWsStore((s) => activeId ? (s.agentTyping[activeId] ?? false) : false);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
   const [threadMessage, setThreadMessage] = useState<Message | null>(null);
@@ -101,14 +109,25 @@ export const ChatWindow: React.FC = () => {
   const [blackboardLoading, setBlackboardLoading] = useState(false);
   const [blackboardSaving, setBlackboardSaving] = useState(false);
   const [contextDrawerOpen, setContextDrawerOpen] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [conversationAgents, setConversationAgents] = useState<ConversationAgent[]>([]);
   const [forkLineage, setForkLineage] = useState<ConversationFork | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeIdRef = useRef<string | null>(activeId ?? null);
   const wsClient = useWsStore((s) => s.wsClient);
-  const isStreaming = useMessageStore(
-    (s) => (activeId ? (s.messages[activeId] ?? EMPTY_MESSAGES).some((msg) => msg.status === 'streaming') : false),
+  const activeMessages = useMessageStore(
+    (s) => (activeId ? (s.messages[activeId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES),
   );
+  const isStreaming = activeMessages.some((msg) => msg.status === 'streaming');
+  const handleForkCreated = useCallback(() => setContextDrawerOpen(false), []);
+  const conversationActions = useConversationActions({
+    conversation: activeConv,
+    messages: activeMessages,
+    conversationAgents,
+    isGenerating: isStreaming || agentTyping,
+    createFork: createConversationFork,
+    onForkCreated: handleForkCreated,
+  });
 
   const { send: sendMessage } = useMessages(activeId ?? null);
 
@@ -309,7 +328,8 @@ export const ChatWindow: React.FC = () => {
   }, [activeId, sendMessage]);
 
   const handleStopTask = useCallback(() => {
-    if (!wsClient || !activeId) return;
+    if (!wsClient || !activeId || stopping || !isStreaming) return;
+    setStopping(true);
     wsClient.send(JSON.stringify({
       type: 'user.stop_stream',
       data: { conversation_id: activeId },
@@ -318,8 +338,13 @@ export const ChatWindow: React.FC = () => {
     for (const msg of store.messages[activeId] ?? []) {
       if (msg.status === 'streaming') store.cancelStreaming(activeId, msg.id);
     }
-    antMessage.info('已停止生成');
-  }, [wsClient, activeId]);
+    window.setTimeout(() => setStopping(false), 600);
+  }, [wsClient, activeId, isStreaming, stopping]);
+
+  useEffect(() => {
+    if (!isStreaming && !stopping) return;
+    if (!isStreaming) setStopping(false);
+  }, [isStreaming, stopping]);
 
   useEffect(() => {
     if (!activeId) return;
@@ -551,9 +576,14 @@ export const ChatWindow: React.FC = () => {
                 {avatarText}
               </Avatar>
             )}
-            <h1 className={styles.title}>
-              {displayName}
-            </h1>
+            <div className={styles.titleBlock}>
+              <h1 className={styles.title}>
+                {displayName}
+              </h1>
+              <span className={styles.conversationKind}>
+                {isAgent ? '智能体对话' : isGroup ? '协作对话' : '用户对话'}
+              </span>
+            </div>
             {forkLineage && (
               <Tooltip title={`来源：${forkLineage.parent_title || '父对话'}`}>
                 <Button
@@ -574,17 +604,21 @@ export const ChatWindow: React.FC = () => {
           </div>
         </Tooltip>
         <div className={styles.headerActions}>
+          {onOpenPersonalReport && (
+            <Tooltip title="个人报表工作区">
+              <Button
+                type="text"
+                icon={<BarChartOutlined />}
+                size="small"
+                aria-label="打开个人报表工作区"
+                aria-pressed={personalReportOpen}
+                onClick={onOpenPersonalReport}
+              />
+            </Tooltip>
+          )}
           <Tooltip title="文件">
             <Button type="text" icon={<FolderOpenOutlined />} size="small" onClick={() => fileInputRef.current?.click()} />
           </Tooltip>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={ACCEPTED_TYPES}
-            multiple
-            onChange={handleFileSelect}
-            className={styles.hiddenFileInput}
-          />
           {isGroup && (
             <Tooltip title="邀请成员">
               <Button
@@ -596,32 +630,29 @@ export const ChatWindow: React.FC = () => {
             </Tooltip>
           )}
           <Tooltip title="搜索消息">
-            <Button type="text" icon={<SearchOutlined />} size="small" onClick={toggleSearch} />
+            <Button type="text" icon={<SearchOutlined />} size="small" aria-pressed={searchOpen} onClick={toggleSearch} />
           </Tooltip>
           <Tooltip title="上下文黑板">
-            <Button type="text" icon={<PushpinOutlined />} size="small" onClick={openBlackboard} />
+            <Button type="text" icon={<PushpinOutlined />} size="small" aria-pressed={blackboardOpen} onClick={openBlackboard} />
           </Tooltip>
-          {(isAgent || isGroup) && (
-            <Tooltip title="上下文用量与检查点">
-              <Button
-                className={styles.contextButton}
-                type="text"
-                icon={<DashboardOutlined />}
-                size="small"
-                onClick={() => setContextDrawerOpen(true)}
-              >
-                <span className={styles.contextButtonLabel}>上下文</span>
-              </Button>
-            </Tooltip>
-          )}
-          <Tooltip title="停止任务">
-            <Button type="text" icon={<StopOutlined />} size="small" disabled={!isStreaming} onClick={handleStopTask} />
+          <Tooltip title={isStreaming ? '停止当前生成' : '当前没有正在运行的任务'}>
+            <Button
+              type="text"
+              icon={<StopOutlined />}
+              size="small"
+              loading={stopping}
+              disabled={!isStreaming || stopping}
+              aria-label={stopping ? '正在停止生成' : '停止当前生成'}
+              onClick={handleStopTask}
+            />
           </Tooltip>
-          <Tooltip title={isGroup ? '群聊设置' : '对话设置'}>
+          <Tooltip title={isGroup ? '群聊设置' : '仅群聊支持成员与群设置'}>
             <Button
               type="text"
               icon={<SettingOutlined />}
               size="small"
+              disabled={!isGroup}
+              aria-label={isGroup ? '打开群聊设置' : '对话设置不可用：仅群聊支持'}
               onClick={() => isGroup && setMemberPanelOpen(true)}
             />
           </Tooltip>
@@ -636,6 +667,14 @@ export const ChatWindow: React.FC = () => {
           </Dropdown>
         </div>
       </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={ACCEPTED_TYPES}
+        multiple
+        onChange={handleFileSelect}
+        className={styles.hiddenFileInput}
+      />
       {searchOpen && (
         <ChatSearchPanel
           searchLoading={searchLoading}
@@ -675,6 +714,16 @@ export const ChatWindow: React.FC = () => {
         conversationId={activeConv.id}
         replyTo={replyTo}
         onCancelReply={() => setReplyTo(null)}
+        onOpenContext={(isAgent || isGroup) ? () => setContextDrawerOpen(true) : undefined}
+        contextActive={contextDrawerOpen}
+        conversationActions={{
+          onCopy: () => void conversationActions.copyConversation(),
+          onFork: () => void conversationActions.forkConversation(),
+          copying: conversationActions.copying,
+          forking: conversationActions.forking,
+          forkDisabled: Boolean(conversationActions.forkDisabledReason),
+          forkDisabledReason: conversationActions.forkDisabledReason,
+        }}
         onRegisterProcessFiles={registerProcessFiles}
       />
       {isGroup && activeId && (

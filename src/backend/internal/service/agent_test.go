@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/agent-hub/backend/internal/model"
+	"github.com/agent-hub/backend/pkg/ws"
 )
 
 type fakeAgentRepo struct {
@@ -25,6 +26,7 @@ type fakeAgentRepo struct {
 	updatedUser   string
 	updatedTools  string
 	updatedSkills string
+	completeOK    *bool
 }
 
 func (r *fakeAgentRepo) ListAvailable(ctx context.Context, userID string) ([]model.Agent, error) {
@@ -61,7 +63,63 @@ func (r *fakeAgentRepo) ClaimDaemonTask(ctx context.Context, machineID string) (
 }
 
 func (r *fakeAgentRepo) CompleteDaemonTask(ctx context.Context, id, machineID, result, taskError string) (bool, error) {
+	if r.completeOK != nil {
+		return *r.completeOK, nil
+	}
 	return true, nil
+}
+
+func TestCompleteDaemonTaskAcceptsMatchingTerminalRedelivery(t *testing.T) {
+	completeOK := false
+	repo := &fakeAgentRepo{
+		completeOK: &completeOK,
+		daemonTask: &model.DaemonTask{
+			ID:        "task-1",
+			MachineID: "machine-1",
+			Status:    "completed",
+			Result:    "最终结果",
+		},
+	}
+	svc := NewAgentService(repo, nil)
+
+	task, err := svc.CompleteDaemonTask(
+		context.Background(),
+		&model.DaemonMachine{ID: "machine-1"},
+		"task-1",
+		"最终结果",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("matching redelivery: %v", err)
+	}
+	if task != repo.daemonTask {
+		t.Fatal("matching redelivery did not return existing daemon task")
+	}
+}
+
+func TestCompleteDaemonTaskRejectsMismatchedTerminalRedelivery(t *testing.T) {
+	completeOK := false
+	repo := &fakeAgentRepo{
+		completeOK: &completeOK,
+		daemonTask: &model.DaemonTask{
+			ID:        "task-1",
+			MachineID: "machine-1",
+			Status:    "completed",
+			Result:    "原结果",
+		},
+	}
+	svc := NewAgentService(repo, nil)
+
+	_, err := svc.CompleteDaemonTask(
+		context.Background(),
+		&model.DaemonMachine{ID: "machine-1"},
+		"task-1",
+		"被篡改的结果",
+		"",
+	)
+	if !errors.Is(err, ErrAgentNotFound) {
+		t.Fatalf("mismatched redelivery error = %v, want ErrAgentNotFound", err)
+	}
 }
 
 func (r *fakeAgentRepo) UpsertSystemAgent(ctx context.Context, name, cliTool, version, capabilitiesJSON, machineID string) error {
@@ -115,7 +173,7 @@ func (r *fakeAgentRepo) UpsertMachineAgent(ctx context.Context, userID, machineI
 	return nil
 }
 
-func (r *fakeAgentRepo) UpsertMachineAgentCandidate(ctx context.Context, machineID, name, cliTool, version, capabilitiesJSON string) error {
+func (r *fakeAgentRepo) UpsertMachineAgentCandidate(ctx context.Context, machineID, name, cliTool, variant, version, capabilitiesJSON string) error {
 	r.candidates = append(r.candidates, machineID+":"+cliTool)
 	return nil
 }
@@ -318,6 +376,49 @@ func TestOpenDaemonSkillLocationRejectsUnknownSourcePath(t *testing.T) {
 	}
 	if repo.daemonTask != nil {
 		t.Fatalf("unexpected daemon task: %#v", repo.daemonTask)
+	}
+}
+
+func TestInstallGitHubSkillDispatchesOnlyToOwnedAgentMachine(t *testing.T) {
+	userID := "user-1"
+	machineID := "machine-1"
+	repo := &fakeAgentRepo{
+		currentAgent: &model.Agent{ID: "agent-1", UserID: &userID, MachineID: &machineID, CLITool: "codex"},
+		machines:     []model.DaemonMachine{{ID: machineID, UserID: userID}},
+	}
+	resultCh := make(chan *ws.TaskResult, 1)
+	resultCh <- &ws.TaskResult{Result: `{"name":"ask-matt","installed_path":"/tmp/skills/ask-matt"}`}
+	hub := &fakeDaemonDispatcher{
+		isConnected:         func(string) bool { return true },
+		registerTaskPromise: func(string) chan *ws.TaskResult { return resultCh },
+		sendToMachine:       func(string, ws.WSMessage) error { return nil },
+	}
+	svc := NewAgentService(repo, nil)
+	svc.SetDaemonHub(hub)
+
+	installed, err := svc.InstallGitHubSkill(context.Background(), userID, "agent-1", GitHubSkillInstallRequest{
+		SourceURL: "https://github.com/mattpocock/skills",
+		Subpath:   "skills/ask-matt",
+	})
+	if err != nil {
+		t.Fatalf("install skill: %v", err)
+	}
+	if installed.Name != "ask-matt" {
+		t.Fatalf("installed skill = %#v", installed)
+	}
+	calls := hub.Calls()
+	if calls.SendToMachine != 1 || calls.LastSendMachineID != machineID {
+		t.Fatalf("unexpected dispatch: %#v", calls)
+	}
+}
+
+func TestInstallGitHubSkillRejectsNonGitHubSource(t *testing.T) {
+	svc := NewAgentService(&fakeAgentRepo{}, nil)
+	_, err := svc.InstallGitHubSkill(context.Background(), "user-1", "agent-1", GitHubSkillInstallRequest{
+		SourceURL: "https://example.com/skill.zip",
+	})
+	if !errors.Is(err, ErrAgentInvalidInput) {
+		t.Fatalf("expected invalid input, got %v", err)
 	}
 }
 

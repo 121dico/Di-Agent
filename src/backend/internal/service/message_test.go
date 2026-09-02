@@ -140,8 +140,8 @@ func (r *fakeMsgRepo) UpdateMessageCards(ctx context.Context, messageID, cardsJS
 }
 
 // HideMessage / UnhideMessage / GetHiddenMessageIDs —— message_hides 功能的 no-op 桩。
-func (r *fakeMsgRepo) HideMessage(ctx context.Context, userID, messageID string) error     { return nil }
-func (r *fakeMsgRepo) UnhideMessage(ctx context.Context, userID, messageID string) error   { return nil }
+func (r *fakeMsgRepo) HideMessage(ctx context.Context, userID, messageID string) error   { return nil }
+func (r *fakeMsgRepo) UnhideMessage(ctx context.Context, userID, messageID string) error { return nil }
 func (r *fakeMsgRepo) GetHiddenMessageIDs(ctx context.Context, userID, conversationID string) (map[string]bool, error) {
 	return map[string]bool{}, nil
 }
@@ -187,6 +187,7 @@ func (r *fakeMsgRepo) ListStreaming(ctx context.Context) ([]model.Message, error
 	}
 	return out, nil
 }
+
 // ListStaleStreaming 返回 created_at < before 的 streaming message。
 // 用于 streaming watchdog 测试（PR5：stale 标记前查询元数据用于广播）。
 func (r *fakeMsgRepo) ListStaleStreaming(ctx context.Context, before time.Time) ([]model.Message, error) {
@@ -671,50 +672,50 @@ func TestSendMessageRejectsForeignAgent(t *testing.T) {
 // TestExtractCardsFromContent 覆盖 fenced block 解析、合并、占位符剥离等行为。
 func TestExtractCardsFromContent(t *testing.T) {
 	cases := []struct {
-		name                      string
-		input                     string
-		expectedCardsLen          int
-		expectedStrippedContains  []string
+		name                       string
+		input                      string
+		expectedCardsLen           int
+		expectedStrippedContains   []string
 		expectedStrippedNotContain []string
-		expectedCardsJSONContains []string
-		expectCardIDNonEmpty      bool // for block_without_id case
+		expectedCardsJSONContains  []string
+		expectCardIDNonEmpty       bool // for block_without_id case
 	}{
 		{
 			name: "single_block_single_card",
 			input: "我先解释一下：\n```agenthub\n" +
 				`{"cards":[{"type":"info","id":"i1","fields":{}}]}` + "\n```\n尾文本",
-			expectedCardsLen:          1,
-			expectedStrippedContains:  []string{"[CARD:i1]", "我先解释一下：", "尾文本"},
+			expectedCardsLen:           1,
+			expectedStrippedContains:   []string{"[CARD:i1]", "我先解释一下：", "尾文本"},
 			expectedStrippedNotContain: []string{"```agenthub", "\"cards\""},
-			expectedCardsJSONContains: []string{`"type":"info"`, `"id":"i1"`},
+			expectedCardsJSONContains:  []string{`"type":"info"`, `"id":"i1"`},
 		},
 		{
 			name: "single_block_multi_card",
 			input: "开头\n```agenthub\n" +
 				`{"cards":[{"type":"info","id":"c1"},{"type":"diff","id":"c2"}]}` + "\n```\n结尾",
-			expectedCardsLen:          2,
-			expectedStrippedContains:  []string{"[CARD:c1]", "[CARD:c2]"},
+			expectedCardsLen:           2,
+			expectedStrippedContains:   []string{"[CARD:c1]", "[CARD:c2]"},
 			expectedStrippedNotContain: []string{"```agenthub", "\"cards\""},
-			expectedCardsJSONContains: []string{`"id":"c1"`, `"id":"c2"`},
+			expectedCardsJSONContains:  []string{`"id":"c1"`, `"id":"c2"`},
 		},
 		{
 			name: "multi_block_multi_card",
 			input: "头部\n```agenthub\n" +
 				`{"cards":[{"type":"info","id":"a1"}]}` + "\n```\n中间文字\n```agenthub\n" +
 				`{"cards":[{"type":"diff","id":"b1"}]}` + "\n```\n尾部",
-			expectedCardsLen:          2,
-			expectedStrippedContains:  []string{"[CARD:a1]", "[CARD:b1]", "中间文字"},
+			expectedCardsLen:           2,
+			expectedStrippedContains:   []string{"[CARD:a1]", "[CARD:b1]", "中间文字"},
 			expectedStrippedNotContain: []string{"```agenthub", "\"cards\""},
-			expectedCardsJSONContains: []string{`"id":"a1"`, `"id":"b1"`},
+			expectedCardsJSONContains:  []string{`"id":"a1"`, `"id":"b1"`},
 		},
 		{
 			name: "block_in_middle",
 			input: "前文说明\n```agenthub\n" +
 				`{"cards":[{"type":"info","id":"mid1"}]}` + "\n```\n后文说明",
-			expectedCardsLen:          1,
-			expectedStrippedContains:  []string{"[CARD:mid1]", "前文说明", "后文说明"},
+			expectedCardsLen:           1,
+			expectedStrippedContains:   []string{"[CARD:mid1]", "前文说明", "后文说明"},
 			expectedStrippedNotContain: []string{"```agenthub", "\"cards\""},
-			expectedCardsJSONContains: []string{`"id":"mid1"`},
+			expectedCardsJSONContains:  []string{`"id":"mid1"`},
 		},
 		{
 			name: "block_without_id",
@@ -725,24 +726,24 @@ func TestExtractCardsFromContent(t *testing.T) {
 			expectedStrippedContains: []string{"[CARD:"},
 		},
 		{
-			name: "invalid_json",
-			input: "开头\n```agenthub\nthis is not json{]\n```\n结尾",
-			expectedCardsLen:          0,
-			expectedStrippedContains:  []string{"```agenthub", "this is not json{]", "结尾"},
+			name:                       "invalid_json",
+			input:                      "开头\n```agenthub\nthis is not json{]\n```\n结尾",
+			expectedCardsLen:           0,
+			expectedStrippedContains:   []string{"```agenthub", "this is not json{]", "结尾"},
 			expectedStrippedNotContain: []string{"[CARD:"},
 		},
 		{
-			name: "no_block",
-			input:                     "纯文本回复，没有卡片",
-			expectedCardsLen:          0,
-			expectedStrippedContains:  []string{"纯文本回复，没有卡片"},
+			name:                       "no_block",
+			input:                      "纯文本回复，没有卡片",
+			expectedCardsLen:           0,
+			expectedStrippedContains:   []string{"纯文本回复，没有卡片"},
 			expectedStrippedNotContain: []string{"[CARD:"},
 		},
 		{
-			name: "whole_content_json_not_matched",
-			input:                     `{"cards":[{"type":"info","id":"x1"}]}`,
-			expectedCardsLen:          0,
-			expectedStrippedContains:  []string{`{"cards":[`},
+			name:                       "whole_content_json_not_matched",
+			input:                      `{"cards":[{"type":"info","id":"x1"}]}`,
+			expectedCardsLen:           0,
+			expectedStrippedContains:   []string{`{"cards":[`},
 			expectedStrippedNotContain: []string{"[CARD:"},
 		},
 	}

@@ -30,7 +30,7 @@
 }
 
 .webpageModalBodyExpanded {
-  height: calc(100vh - 64px);
+  height: calc(var(--ui-viewport-height) - 64px);
 }
 
 .webpageControls {
@@ -65,11 +65,11 @@
 }
 
 .documentModalBody {
-  height: calc(100vh - 96px);
+  height: calc(var(--ui-viewport-height) - 96px);
 }
 
 .documentModal :global(.ant-modal-content) {
-  min-height: calc(100vh - 32px);
+  min-height: calc(var(--ui-viewport-height) - 32px);
 }
 
 .toolbar {

@@ -3,9 +3,9 @@
 // streaming_buffer 在 backend 内存里累积 StreamingState，按 task_id 索引。
 //
 // 工作流：
-//   1. daemon Hub 收到 task.progress → 调 PushEvents 把 events reduce 到累积状态
-//   2. task.complete 时 message service 调 GetState 拿累积 blocks → 序列化为 blocks_json
-//   3. FinalizeStreaming 后调 Delete 释放内存
+//  1. daemon Hub 收到 task.progress → 调 PushEvents 把 events reduce 到累积状态
+//  2. task.complete 时 message service 调 GetState 拿累积 blocks → 序列化为 blocks_json
+//  3. FinalizeStreaming 后调 Delete 释放内存
 //
 // 设计权衡：
 //   - 不持久化：backend 重启丢失（接受，watchdog 60s 兜底）
@@ -42,8 +42,9 @@ func NewStreamingBuffer() *StreamingBuffer {
 //
 // 注意：sync.Map 只保证 map 层面并发安全，*StreamingState 内部修改需要调用方
 // 保证同一 taskID 不并发。当前调用路径：
-//   daemon.go handleTaskProgress → PushEvents
-//   handleTaskProgress 由 daemonHub.readLoop 单 goroutine 串行调用，满足约束。
+//
+//	daemon.go handleTaskProgress → PushEvents
+//	handleTaskProgress 由 daemonHub.readLoop 单 goroutine 串行调用，满足约束。
 func (b *StreamingBuffer) PushEvents(taskID string, events []model.AgentEvent) {
 	if taskID == "" || len(events) == 0 {
 		return

@@ -14,6 +14,7 @@ import (
 	"github.com/agent-hub/backend/internal/model"
 	"github.com/agent-hub/backend/internal/service"
 	"github.com/agent-hub/backend/pkg/ws"
+	"github.com/gin-gonic/gin"
 	"nhooyr.io/websocket"
 )
 
@@ -25,6 +26,10 @@ import (
 // It records calls to key methods so tests can assert side effects.
 type fakeDaemonAgentRepo struct {
 	mu sync.Mutex
+
+	daemonTask        *model.DaemonTask
+	lifecycleCalls    []string
+	lifecycleRecorder *[]string
 
 	// statusCalls records (agentID, status) pairs from UpdateAgentStatus
 	statusCalls []agentStatusCall
@@ -48,7 +53,9 @@ func (r *fakeDaemonAgentRepo) GetByID(_ context.Context, _ string) (*model.Agent
 	return nil, nil
 }
 func (r *fakeDaemonAgentRepo) GetDaemonTask(_ context.Context, _ string) (*model.DaemonTask, error) {
-	return nil, nil
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.daemonTask, nil
 }
 func (r *fakeDaemonAgentRepo) CreateDaemonTask(_ context.Context, _, _, _, _, _, _, _ string) (*model.DaemonTask, error) {
 	return &model.DaemonTask{ID: "task-1", Status: "pending"}, nil
@@ -57,6 +64,12 @@ func (r *fakeDaemonAgentRepo) ClaimDaemonTask(_ context.Context, _ string) (*mod
 	return nil, nil
 }
 func (r *fakeDaemonAgentRepo) CompleteDaemonTask(_ context.Context, _, _, _, _ string) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.lifecycleCalls = append(r.lifecycleCalls, "persist")
+	if r.lifecycleRecorder != nil {
+		*r.lifecycleRecorder = append(*r.lifecycleRecorder, "persist")
+	}
 	return true, nil
 }
 func (r *fakeDaemonAgentRepo) UpsertSystemAgent(_ context.Context, _, _, _, _, _ string) error {
@@ -80,7 +93,7 @@ func (r *fakeDaemonAgentRepo) GetDaemonMachineByID(_ context.Context, _ string) 
 func (r *fakeDaemonAgentRepo) MarkDaemonMachineConnected(_ context.Context, _, _ string) error {
 	return nil
 }
-func (r *fakeDaemonAgentRepo) UpsertMachineAgentCandidate(_ context.Context, _, _, _, _, _ string) error {
+func (r *fakeDaemonAgentRepo) UpsertMachineAgentCandidate(_ context.Context, _, _, _, _, _, _ string) error {
 	return nil
 }
 func (r *fakeDaemonAgentRepo) ListAgentCandidates(_ context.Context, _ string) ([]model.AgentCandidate, error) {
@@ -153,6 +166,47 @@ func (r *fakeDaemonAgentRepo) getMarkMachineStoppedCalls() []string {
 	return out
 }
 
+type fakeTaskBoardSyncer struct {
+	lifecycleCalls *[]string
+	task           *model.DaemonTask
+}
+
+func (s *fakeTaskBoardSyncer) CreateFromDaemonTask(_ context.Context, task *model.DaemonTask, _, _ string) error {
+	*s.lifecycleCalls = append(*s.lifecycleCalls, "sync")
+	s.task = task
+	return nil
+}
+
+type customEventCall struct {
+	conversationID string
+	memberIDs      []string
+	eventType      string
+	data           interface{}
+}
+
+type fakeDaemonUserNotifier struct {
+	lifecycleCalls *[]string
+	events         []customEventCall
+}
+
+func (n *fakeDaemonUserNotifier) PushCustomEvent(conversationID string, memberIDs []string, eventType string, data interface{}) {
+	*n.lifecycleCalls = append(*n.lifecycleCalls, "notify")
+	n.events = append(n.events, customEventCall{
+		conversationID: conversationID,
+		memberIDs:      append([]string(nil), memberIDs...),
+		eventType:      eventType,
+		data:           data,
+	})
+}
+
+type fakeDaemonConversationRepo struct {
+	memberIDs []string
+}
+
+func (r *fakeDaemonConversationRepo) ListMemberIDs(_ context.Context, _ string) ([]string, error) {
+	return append([]string(nil), r.memberIDs...), nil
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -176,6 +230,91 @@ func newTestDaemonHandler(t *testing.T) (*DaemonHandler, *ws.DaemonHub, *fakeDae
 
 	handler := NewDaemonHandler(agentSvc, nil, "test-daemon-token", slog.Default(), []string{"*"}, daemonHub, nil, nil, nil)
 	return handler, daemonHub, fakeRepo
+}
+
+func TestHandleTaskComplete_SyncsThenNotifiesConversationMembers(t *testing.T) {
+	handler, _, agentRepo := newTestDaemonHandler(t)
+	task := &model.DaemonTask{
+		ID:             "daemon-task-1",
+		UserID:         "owner-1",
+		ConversationID: "agent-conv-1",
+		AgentID:        "agent-1",
+		MachineID:      "machine-1",
+		Prompt:         "整理任务明细",
+	}
+	agentRepo.daemonTask = task
+	lifecycle := []string{}
+	agentRepo.lifecycleRecorder = &lifecycle
+	syncer := &fakeTaskBoardSyncer{lifecycleCalls: &lifecycle}
+	notifier := &fakeDaemonUserNotifier{lifecycleCalls: &lifecycle}
+	handler.SetTaskBoardSyncer(syncer)
+	handler.taskNotifier = notifier
+	handler.convRepo = &fakeDaemonConversationRepo{memberIDs: []string{"owner-1", "member-2"}}
+
+	handler.handleTaskComplete(json.RawMessage(`{
+		"task_id":"daemon-task-1",
+		"result":"任务已完成"
+	}`), &model.DaemonMachine{ID: "machine-1", UserID: "owner-1"})
+
+	// repo 的 slice 头可能因 append 变化，因此从各依赖观察最终顺序。
+	if got := lifecycle; len(got) != 3 || got[0] != "persist" || got[1] != "sync" || got[2] != "notify" {
+		t.Fatalf("lifecycle order = %v, want [persist sync notify]", got)
+	}
+	if syncer.task != task {
+		t.Fatal("task board sync did not receive the persisted daemon task")
+	}
+	if len(notifier.events) != 1 {
+		t.Fatalf("custom events = %d, want 1", len(notifier.events))
+	}
+	event := notifier.events[0]
+	if event.conversationID != "agent-conv-1" || event.eventType != "task.changed" {
+		t.Fatalf("event = %#v, want conversation-scoped task.changed", event)
+	}
+	if len(event.memberIDs) != 2 || event.memberIDs[0] != "owner-1" || event.memberIDs[1] != "member-2" {
+		t.Fatalf("event members = %v, want conversation members", event.memberIDs)
+	}
+	payload, ok := event.data.(map[string]interface{})
+	if !ok || payload["conversation_id"] != "agent-conv-1" {
+		t.Fatalf("event payload = %#v, want conversation_id", event.data)
+	}
+}
+
+func TestCompleteTaskHTTP_SyncsThenNotifiesConversationMembers(t *testing.T) {
+	handler, _, agentRepo := newTestDaemonHandler(t)
+	task := &model.DaemonTask{
+		ID:             "daemon-task-http",
+		UserID:         "owner-1",
+		ConversationID: "agent-conv-http",
+		AgentID:        "agent-1",
+		MachineID:      "machine-1",
+		Prompt:         "通过 polling 完成任务",
+	}
+	agentRepo.daemonTask = task
+	lifecycle := []string{}
+	agentRepo.lifecycleRecorder = &lifecycle
+	handler.SetTaskBoardSyncer(&fakeTaskBoardSyncer{lifecycleCalls: &lifecycle})
+	notifier := &fakeDaemonUserNotifier{lifecycleCalls: &lifecycle}
+	handler.taskNotifier = notifier
+	handler.convRepo = &fakeDaemonConversationRepo{memberIDs: []string{"owner-1"}}
+
+	router := gin.New()
+	router.POST("/daemon/tasks/:id/complete", func(c *gin.Context) {
+		handler.CompleteTask(c, &model.DaemonMachine{ID: "machine-1", UserID: "owner-1"})
+	})
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/daemon/tasks/daemon-task-http/complete", strings.NewReader(`{"result":"polling result"}`))
+	request.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	if got := lifecycle; len(got) != 3 || got[0] != "persist" || got[1] != "sync" || got[2] != "notify" {
+		t.Fatalf("lifecycle order = %v, want [persist sync notify]", got)
+	}
+	if len(notifier.events) != 1 || notifier.events[0].conversationID != "agent-conv-http" {
+		t.Fatalf("events = %#v, want one conversation-scoped event", notifier.events)
+	}
 }
 
 // dialDaemonWS creates an in-memory WebSocket connection pair.

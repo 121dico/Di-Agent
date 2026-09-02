@@ -1,0 +1,14 @@
+.card { position: relative; width: min(100%, 520px); display: flex; align-items: center; gap: 12px; padding: 14px; overflow: hidden; border: 1px solid var(--pr-border); border-radius: var(--radius-5); color: var(--wb-text-primary); background: linear-gradient(135deg, rgba(15, 118, 110, .055), transparent 45%), var(--pr-surface-glass); box-shadow: var(--pr-shadow-raised), inset 0 1px 0 var(--pr-border-highlight); font: inherit; text-align: left; cursor: pointer; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast); }
+.card::after { content: ''; position: absolute; top: 0; left: 14px; width: 34px; height: 2px; background: var(--pr-data-teal); }
+.card:hover { border-color: rgba(95, 99, 104, .3); box-shadow: var(--pr-shadow-overlay); transform: translateY(-1px); }
+.card:active { transform: translateY(0); }
+.icon { width: 38px; height: 38px; display: grid; place-items: center; flex: 0 0 38px; border: 1px solid var(--pr-border); border-radius: var(--radius-3); color: var(--pr-data-teal); background: rgba(255, 255, 255, .82); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .92); }
+.content { min-width: 0; display: grid; flex: 1; gap: 3px; }
+.content strong, .content small, .content em { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.content strong { font-size: 13px; font-weight: 680; }
+.content small { color: var(--wb-text-secondary); font-size: 11px; }
+.content em { color: var(--wb-text-tertiary); font-size: 10px; font-style: normal; }
+
+@media (prefers-reduced-transparency: reduce) {
+  .card { background: var(--wb-surface); backdrop-filter: none; -webkit-backdrop-filter: none; }
+}

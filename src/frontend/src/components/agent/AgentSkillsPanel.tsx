@@ -29,6 +29,7 @@ import { parseSkills, skillsToPlatformJSON } from './agentPresentation';
 import { CreateTemplateManagerModal } from './CreateTemplateManagerModal';
 import type { Skill } from './agentPresentation';
 import { listUserTemplates, type UserTemplate } from '@/api/userTemplate';
+import { installGitHubSkill } from '@/api/agent';
 import styles from './AgentSkillsPanel.module.css';
 
 interface AgentSkillsPanelProps {
@@ -59,6 +60,10 @@ export const AgentSkillsPanel: React.FC<AgentSkillsPanelProps> = ({ agent }) => 
   const [skillTemplate, setSkillTemplate] = useState('none');
   const [createForm, setCreateForm] = useState({ name: '', category: '', description: '', trigger: '', detail: '' });
   const [dbTemplates, setDbTemplates] = useState<UserTemplate[]>([]);
+  const [installModalOpen, setInstallModalOpen] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const [installForm, setInstallForm] = useState({ sourceURL: '', ref: '', subpath: '' });
+  const fetchAgents = useAgentStore((s) => s.fetchAgents);
 
   const { items: rawSkills, refetch: refetchCatalogSkills } = useCatalogDomain('platform_skill');
 
@@ -432,6 +437,29 @@ export const AgentSkillsPanel: React.FC<AgentSkillsPanelProps> = ({ agent }) => 
     setSkillManageOpen(false);
   };
 
+  const handleInstallGitHubSkill = async () => {
+    if (!installForm.sourceURL.trim()) {
+      message.warning('请输入公开 GitHub 仓库地址');
+      return;
+    }
+    setInstalling(true);
+    try {
+      const installed = await installGitHubSkill(agent.id, {
+        source_url: installForm.sourceURL.trim(),
+        ref: installForm.ref.trim() || undefined,
+        subpath: installForm.subpath.trim() || undefined,
+      });
+      message.success(`Skill「${installed.name}」已部署到 Agent 所在电脑`);
+      setInstallModalOpen(false);
+      setInstallForm({ sourceURL: '', ref: '', subpath: '' });
+      await fetchAgents(true);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : 'Skill 安装失败');
+    } finally {
+      setInstalling(false);
+    }
+  };
+
   return (
     <div className={styles.container}>
       <div className={styles.panelActions}>
@@ -480,6 +508,12 @@ export const AgentSkillsPanel: React.FC<AgentSkillsPanelProps> = ({ agent }) => 
             保存
           </Button>
           <Button
+            icon={<PlusOutlined />}
+            onClick={() => setInstallModalOpen(true)}
+          >
+            从 GitHub 安装
+          </Button>
+          <Button
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => { setCreateForm({ name: '', category: '', description: '', trigger: '', detail: '' }); setCreateModalOpen(true); }}
@@ -488,6 +522,48 @@ export const AgentSkillsPanel: React.FC<AgentSkillsPanelProps> = ({ agent }) => 
           </Button>
         </div>
       </div>
+
+      <Modal
+        open={installModalOpen}
+        title="从 GitHub 安装 Skill"
+        okText="确认安装到本机"
+        cancelText="取消"
+        confirmLoading={installing}
+        okButtonProps={{ disabled: !installForm.sourceURL.trim() }}
+        onOk={handleInstallGitHubSkill}
+        onCancel={() => { if (!installing) setInstallModalOpen(false); }}
+        destroyOnHidden
+      >
+        <div className={styles.installForm}>
+          <div className={styles.installNotice}>
+            仅支持公开 GitHub HTTPS 仓库。确认后会下载并校验 SKILL.md，再原子部署到当前 Agent 所在电脑；不会执行仓库内脚本，也不会覆盖同名 Skill。
+          </div>
+          <label className={styles.installField}>
+            <span>仓库地址</span>
+            <Input
+              value={installForm.sourceURL}
+              placeholder="https://github.com/owner/repository"
+              onChange={(event) => setInstallForm((current) => ({ ...current, sourceURL: event.target.value }))}
+            />
+          </label>
+          <label className={styles.installField}>
+            <span>分支或 Tag（可选）</span>
+            <Input
+              value={installForm.ref}
+              placeholder="main"
+              onChange={(event) => setInstallForm((current) => ({ ...current, ref: event.target.value }))}
+            />
+          </label>
+          <label className={styles.installField}>
+            <span>Skill 子目录（可选）</span>
+            <Input
+              value={installForm.subpath}
+              placeholder="skills/my-skill"
+              onChange={(event) => setInstallForm((current) => ({ ...current, subpath: event.target.value }))}
+            />
+          </label>
+        </div>
+      </Modal>
 
       <div className={styles.subTabs}>
         <button

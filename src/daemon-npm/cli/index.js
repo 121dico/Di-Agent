@@ -21,6 +21,7 @@ const { createClaudeCliSpec } = require('./claude');
 const { createCodexCliSpec } = require('./codex');
 const { createOpenCodeCliSpec } = require('./opencode');
 const { createOpenClawCliSpec } = require('./openclaw');
+const { createZcodeCliSpec } = require('./zcode');
 
 // initCliTools 接收 daemon 上下文（依赖注入），构造并注册全部已知 spec。
 // ctx 必须包含 spec 需要的全部辅助函数（见 cli/*.js 中的 ctx.* 引用）。
@@ -31,6 +32,7 @@ function initCliTools(ctx) {
   registerCliTool(createCodexCliSpec(ctx));
   registerCliTool(createOpenCodeCliSpec(ctx));
   registerCliTool(createOpenClawCliSpec(ctx));
+  registerCliTool(createZcodeCliSpec(ctx));
 }
 
 module.exports = {

@@ -27,13 +27,13 @@
 }
 
 .card:hover {
-  background: rgba(47, 143, 107, 0.06);
-  border-color: rgba(47, 143, 107, 0.12);
+  background: rgba(15, 118, 110, 0.06);
+  border-color: rgba(15, 118, 110, 0.12);
 }
 
 .cardActive {
-  background: rgba(47, 143, 107, 0.1);
-  border-color: rgba(47, 143, 107, 0.28);
+  background: rgba(15, 118, 110, 0.1);
+  border-color: rgba(15, 118, 110, 0.28);
 }
 
 .card :global(.ant-avatar) {

@@ -239,7 +239,7 @@ func (r *AgentRepo) UpsertMachineAgent(ctx context.Context, userID, machineID, m
 }
 
 // UpsertMachineAgentCandidate 保存指定电脑扫描到的候选 Agent。
-func (r *AgentRepo) UpsertMachineAgentCandidate(ctx context.Context, machineID, name, cliTool, version, capabilitiesJSON string) error {
+func (r *AgentRepo) UpsertMachineAgentCandidate(ctx context.Context, machineID, name, cliTool, variant, version, capabilitiesJSON string) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin upsert machine agent candidate: %w", err)
@@ -247,15 +247,16 @@ func (r *AgentRepo) UpsertMachineAgentCandidate(ctx context.Context, machineID, 
 	defer tx.Rollback()
 
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO daemon_agent_candidates (machine_id, name, cli_tool, version, capabilities_json, last_seen_at)
-		 VALUES ($1, $2, $3, $4, $5, NOW())
+		`INSERT INTO daemon_agent_candidates (machine_id, name, cli_tool, variant, version, capabilities_json, last_seen_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, NOW())
 		 ON CONFLICT (machine_id, cli_tool) DO UPDATE
 		 SET name = EXCLUDED.name,
+		     variant = EXCLUDED.variant,
 		     version = EXCLUDED.version,
 		     capabilities_json = EXCLUDED.capabilities_json,
 		     last_seen_at = NOW(),
 		     updated_at = NOW()`,
-		machineID, name, cliTool, version, capabilitiesJSON,
+		machineID, name, cliTool, variant, version, capabilitiesJSON,
 	); err != nil {
 		return fmt.Errorf("upsert machine agent candidate: %w", err)
 	}
@@ -283,7 +284,7 @@ func (r *AgentRepo) UpsertMachineAgentCandidate(ctx context.Context, machineID, 
 func (r *AgentRepo) ListAgentCandidates(ctx context.Context, userID string) ([]model.AgentCandidate, error) {
 	list := make([]model.AgentCandidate, 0)
 	err := r.db.SelectContext(ctx, &list,
-		`SELECT c.id, c.machine_id, m.name AS machine_name, c.name, c.cli_tool,
+		`SELECT c.id, c.machine_id, m.name AS machine_name, c.name, c.cli_tool, c.variant,
 		        c.version, c.capabilities_json, c.last_seen_at, c.created_at, c.updated_at
 		 FROM daemon_agent_candidates c
 		 JOIN daemon_machines m ON m.id = c.machine_id

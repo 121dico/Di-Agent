@@ -43,11 +43,11 @@ const (
 // 注意：tool_use 的 partial JSON 输入累积到 Text 字段（不是独立 InputJSON 字段），
 // 这与 frontend streamingReducer 行为一致（PR1 已锁死）。
 type MessageBlock struct {
-	Index     int       `json:"index" db:"index"`
-	Kind      BlockKind `json:"kind" db:"kind"`
-	Text      string    `json:"text,omitempty" db:"text"`
-	ToolName  string    `json:"tool_name,omitempty" db:"tool_name"`
-	ToolUseID string    `json:"tool_use_id,omitempty" db:"tool_use_id"`
-	IsError   bool      `json:"is_error,omitempty" db:"is_error"`
+	Index     int            `json:"index" db:"index"`
+	Kind      BlockKind      `json:"kind" db:"kind"`
+	Text      string         `json:"text,omitempty" db:"text"`
+	ToolName  string         `json:"tool_name,omitempty" db:"tool_name"`
+	ToolUseID string         `json:"tool_use_id,omitempty" db:"tool_use_id"`
+	IsError   bool           `json:"is_error,omitempty" db:"is_error"`
 	Card      map[string]any `json:"card,omitempty" db:"-"`
 }

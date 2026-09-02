@@ -2,9 +2,12 @@ package handler
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/agent-hub/backend/internal/middleware"
@@ -16,13 +19,19 @@ import (
 
 // AgentHandler Agent 管理接口处理器
 type AgentHandler struct {
-	svc     *service.AgentService
-	userHub *ws.Hub
+	svc       *service.AgentService
+	userHub   *ws.Hub
+	ipTracker service.MachineIPTracker // 可选：daemon 连接 IP 查询（判断本机/远程）
 }
 
 // NewAgentHandler 创建 Agent 处理器
 func NewAgentHandler(svc *service.AgentService, userHub *ws.Hub) *AgentHandler {
 	return &AgentHandler{svc: svc, userHub: userHub}
+}
+
+// SetIPTracker 注入 daemon 连接 IP 追踪器（用于机器列表标注本机/远程）。
+func (h *AgentHandler) SetIPTracker(t service.MachineIPTracker) {
+	h.ipTracker = t
 }
 
 // AgentRequest 自建 Agent 请求体
@@ -131,6 +140,18 @@ func (h *AgentHandler) ListDaemonMachines(c *gin.Context) {
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, 50034, "查询电脑连接列表失败")
 		return
+	}
+	// 标注 is_local：浏览器请求 IP 与该机器 daemon 连接来源 IP 一致 = 用户正在
+	// 使用的这台电脑。回环地址与服务器自身网卡 IP 归一化为 "@server"，兼容
+	// "服务器本机 daemon 连 127.0.0.1、浏览器走局域网 IP" 的组合。
+	browserIP := c.ClientIP()
+	for i := range list {
+		daemonIP := ""
+		if h.ipTracker != nil {
+			daemonIP = h.ipTracker.LookupIP(list[i].ID)
+		}
+		local := effectiveClientIP(browserIP) == effectiveClientIP(daemonIP)
+		list[i].IsLocal = &local
 	}
 	middleware.SuccessResponse(c, list)
 }
@@ -426,13 +447,14 @@ func (h *AgentHandler) StopAgent(c *gin.Context) {
 func (h *AgentHandler) GetMachineConnect(c *gin.Context) {
 	machineID := c.Param("id")
 	userID := middleware.GetUserID(c)
-	command, machine, apiKey, err := h.svc.GetMachineConnectCommand(c.Request.Context(), machineID, userID)
+	command, installCommand, machine, apiKey, err := h.svc.GetMachineConnectCommand(c.Request.Context(), machineID, userID)
 	if err != nil {
 		middleware.HandleServiceError(c, err, "获取连接命令失败")
 		return
 	}
 	middleware.SuccessResponse(c, map[string]interface{}{
 		"command":         command,
+		"install_command": installCommand,
 		"api_key":         apiKey,
 		"daemon_npm_path": resolveDaemonNPMPath(),
 		"machine":         machine,
@@ -513,4 +535,54 @@ func (h *AgentHandler) pushAgentStatus(agentID, status string) {
 	} else {
 		h.userHub.Broadcast(msg)
 	}
+}
+
+// effectiveClientIP 把来源 IP 归一化：回环地址或服务器自身网卡 IP 返回 "@server"，
+// 其余原样返回。用于"浏览器与 daemon 是否同一台电脑"的比对。
+func effectiveClientIP(ip string) string {
+	if ip == "" {
+		return ""
+	}
+	if ip == "127.0.0.1" || ip == "::1" || strings.HasPrefix(ip, "127.") {
+		return "@server"
+	}
+	if serverInterfaceIPs()[ip] {
+		return "@server"
+	}
+	return ip
+}
+
+var (
+	serverIPsOnce sync.Once
+	serverIPs     map[string]bool
+)
+
+// serverInterfaceIPs 返回服务器所有网卡的 IPv4/IPv6 地址集合（懒加载缓存）。
+func serverInterfaceIPs() map[string]bool {
+	serverIPsOnce.Do(func() {
+		serverIPs = make(map[string]bool)
+		ifaces, err := net.Interfaces()
+		if err != nil {
+			return
+		}
+		for _, iface := range ifaces {
+			addrs, err := iface.Addrs()
+			if err != nil {
+				continue
+			}
+			for _, addr := range addrs {
+				var ip net.IP
+				switch v := addr.(type) {
+				case *net.IPNet:
+					ip = v.IP
+				case *net.IPAddr:
+					ip = v.IP
+				}
+				if ip != nil {
+					serverIPs[ip.String()] = true
+				}
+			}
+		}
+	})
+	return serverIPs
 }

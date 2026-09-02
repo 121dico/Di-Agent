@@ -5,14 +5,15 @@
 // 设计目标：
 //   - 纯函数（不修改入参 state），返回新对象
 //   - 与 frontend src/store/streamingReducer.ts 严格对齐：
-//     * 字段命名 / 累积策略 / 边界条件 / 终态保护
-//     * 同步 TS 的 12 个测试场景（streaming_reducer_test.go）
+//   - 字段命名 / 累积策略 / 边界条件 / 终态保护
+//   - 同步 TS 的 12 个测试场景（streaming_reducer_test.go）
 //   - 双兼容老 snake_case 与新 dot.case 事件类型
 //
 // 使用方式：
-//   state := InitialStreamingState()
-//   state = ReduceEvents(events, state)
-//   // state.Blocks / state.Status
+//
+//	state := InitialStreamingState()
+//	state = ReduceEvents(events, state)
+//	// state.Blocks / state.Status
 //
 // 注意：与 frontend TS 版本是双端权威镜像——修改任一方必须同步另一方 + 同步测试。
 package service
@@ -54,11 +55,11 @@ func InitialStreamingState() StreamingState {
 //   - text / text.delta：最后一个 block.kind === 'text' 时累积 text；否则新建
 //   - thinking / thinking.delta：同 text，累积到 thinking block
 //   - tool_use / tool.call.start：
-//     * tool 非空 → 新 tool_use block（带 tool_name / tool_use_id）
-//     * tool 为空 → input_json_delta，追加到最后一个 tool_use block 的 Text
-//       （注意：当前线上 daemon 把 partial_json 放在 `input` 字段，但 appendDeltas
-//       读 `content`；reducer 为了保持运行时行为一致，也优先读 `content`，
-//       其次读 `input`（若为 string）。）
+//   - tool 非空 → 新 tool_use block（带 tool_name / tool_use_id）
+//   - tool 为空 → input_json_delta，追加到最后一个 tool_use block 的 Text
+//     （注意：当前线上 daemon 把 partial_json 放在 `input` 字段，但 appendDeltas
+//     读 `content`；reducer 为了保持运行时行为一致，也优先读 `content`，
+//     其次读 `input`（若为 string）。）
 //   - tool.call.input：按 tool_use_id 路由（找不到回退到最后一个 tool_use block），
 //     追加 delta 到目标 block 的 Text
 //   - tool.call.end：no-op（block 边界，不累积）
@@ -203,7 +204,7 @@ func applyThinkingDelta(state StreamingState, event model.AgentEvent) StreamingS
 //     此分支对应 daemon 的 content_block_start 路径（toolUseEvent(name, {}, id)），
 //     此时 Input 是空对象占位 `{}`，不应作为 delta 追加——直接忽略 Input 字段。
 //   - tool 为空 → input_json_delta（老协议）：
-//     当前 daemon 把 partial_json 放 `input` 字段（events.js toolUseEvent('',
+//     当前 daemon 把 partial_json 放 `input` 字段（events.js toolUseEvent(”,
 //     partial_json) → input = string partial）。reducer 双兼容：优先 `content`，
 //     其次 `input`（RawMessage → 解包为 string）。
 //     追加到最后一个 tool_use block 的 Text。找不到 tool_use block 容错：忽略。
@@ -250,7 +251,7 @@ func applyToolUseStart(state StreamingState, event model.AgentEvent) StreamingSt
 
 // decodeInputRawMessage 把 Input RawMessage 解包为 partial_json 字符串。
 //
-// daemon events.js toolUseEvent('', partial_json) 让 input 字段为 JS string，
+// daemon events.js toolUseEvent(”, partial_json) 让 input 字段为 JS string，
 // JSON.stringify 后是带引号的 JSON string（如 `"{\"cmd\":\"ls\"}"`）。Unmarshal
 // 进 RawMessage 后 bytes 仍是带引号的 JSON 表示。直接 string() 转换会保留外层
 // 引号和转义 → tool_use.Text 累积成 `"{"cmd":"ls"}"` 这样的双转义串。

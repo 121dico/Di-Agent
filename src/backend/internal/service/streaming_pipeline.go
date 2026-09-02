@@ -8,11 +8,11 @@
 //  2. Dispatcher.dispatchPlanCore（群聊 @mention worker 路径，dispatcher.go）
 //
 // 共享的状态：
-//  - 预创建 streaming placeholder message（status=streaming）
-//  - 注册 daemonHub task 映射（taskID→messageID / taskID→agentName）
-//  - defer 清理（promise / taskMessages / taskAgents / streamingBuffer）
-//  - FinalizeStreaming 落库（success: content/blocks_json/cards；error: 空内容 + status=error）
-//  - 失败时 broadcastStreamingTerminal 让前端切到终态
+//   - 预创建 streaming placeholder message（status=streaming）
+//   - 注册 daemonHub task 映射（taskID→messageID / taskID→agentName）
+//   - defer 清理（promise / taskMessages / taskAgents / streamingBuffer）
+//   - FinalizeStreaming 落库（success: content/blocks_json/cards；error: 空内容 + status=error）
+//   - 失败时 broadcastStreamingTerminal 让前端切到终态
 package service
 
 import (
@@ -95,11 +95,11 @@ type StreamingBufferStore interface {
 //  3. RegisterTaskPromise / RegisterTaskMessage / RegisterTaskAgent
 //
 // 调用方负责：
-//  - 在调用本方法前先 CreateDaemonTask 拿到 taskID
-//  - 在本方法返回后立即注册 defer 清理（RemoveTaskPromise / DeleteTaskMessage /
-//    DeleteTaskAgent / StreamingBuffer.Delete）
-//  - 在 dispatch 失败 / wait 失败 / task failed 时调 FinalizeStreamingPipeline(..., Error, ...)
-//  - 在 dispatch 成功时调 FinalizeStreamingPipeline(..., Complete, ...)
+//   - 在调用本方法前先 CreateDaemonTask 拿到 taskID
+//   - 在本方法返回后立即注册 defer 清理（RemoveTaskPromise / DeleteTaskMessage /
+//     DeleteTaskAgent / StreamingBuffer.Delete）
+//   - 在 dispatch 失败 / wait 失败 / task failed 时调 FinalizeStreamingPipeline(..., Error, ...)
+//   - 在 dispatch 成功时调 FinalizeStreamingPipeline(..., Complete, ...)
 //
 // taskAgentIndex 可为 nil（调用方不需要 task→agentName 索引时，如单聊路径直接
 // 类型断言 daemonHub）。
@@ -148,12 +148,12 @@ func SetupStreamingPipeline(
 // FinalizeStreamingPipelineOptions 控制 FinalizeStreamingPipeline 的行为。
 // zero value（Cards=nil, BlocksJSON=""）用于失败路径：只 UPDATE status 不重写 content。
 type FinalizeStreamingPipelineOptions struct {
-	Status         string // model.MessageStatusComplete / model.MessageStatusError
-	Content        string // 失败路径传空串
-	BlocksJSON     string // 失败路径传空串；成功路径来自 streamingBuffer.GetState
-	ArtifactsJSON  string // 失败路径传空串；成功路径重写 artifacts
-	Cards          []map[string]any
-	Artifacts      []model.Artifact // 持久化到独立 artifacts 表（成功路径）
+	Status        string // model.MessageStatusComplete / model.MessageStatusError
+	Content       string // 失败路径传空串
+	BlocksJSON    string // 失败路径传空串；成功路径来自 streamingBuffer.GetState
+	ArtifactsJSON string // 失败路径传空串；成功路径重写 artifacts
+	Cards         []map[string]any
+	Artifacts     []model.Artifact // 持久化到独立 artifacts 表（成功路径）
 }
 
 // FinalizeStreamingPipeline 完成 streaming placeholder 的最终化：

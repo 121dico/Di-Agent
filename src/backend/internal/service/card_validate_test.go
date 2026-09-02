@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-// TestValidateCard_SupportedTypes 验证 6 个已知类型 + 必填字段齐全时通过校验。
+// TestValidateCard_SupportedTypes 验证已知类型 + 必填字段齐全时通过校验。
 func TestValidateCard_SupportedTypes(t *testing.T) {
 	cases := []map[string]any{
 		{"type": "plan", "id": "p1", "questions": []any{}},
@@ -13,6 +13,7 @@ func TestValidateCard_SupportedTypes(t *testing.T) {
 		{"type": "info", "id": "i1", "fields": map[string]any{}},
 		{"type": "diff", "id": "d1", "workDir": "/path", "files": []any{"App.tsx"}},
 		{"type": "project", "id": "pj1", "workDir": "/path"},
+		{"type": "personal_report", "id": "r1", "report_id": "report-1"},
 	}
 	for i, card := range cases {
 		vc, err := ValidateCard(card)
@@ -44,10 +45,11 @@ func TestValidateCard_UnknownType(t *testing.T) {
 // TestValidateCard_MissingRequired 验证 diff / project 缺 workDir 时拒绝（严格）。
 func TestValidateCard_MissingRequired(t *testing.T) {
 	cases := []map[string]any{
-		{"type": "diff", "id": "d1", "files": []any{"x.ts"}},    // 缺 workDir
-		{"type": "diff", "id": "d2", "workDir": "/p"},           // 缺 files
-		{"type": "project", "id": "p1"},                         // 缺 workDir
-		{"type": "plan", "id": ""},                              // 空 id
+		{"type": "diff", "id": "d1", "files": []any{"x.ts"}}, // 缺 workDir
+		{"type": "diff", "id": "d2", "workDir": "/p"},        // 缺 files
+		{"type": "project", "id": "p1"},                      // 缺 workDir
+		{"type": "personal_report", "id": "r1"},              // 缺 report_id
+		{"type": "plan", "id": ""},                           // 空 id
 	}
 	for i, card := range cases {
 		if _, err := ValidateCard(card); err == nil {
@@ -60,10 +62,10 @@ func TestValidateCard_MissingRequired(t *testing.T) {
 // LLM 偶尔会漏 questions/actions 等字段——前端组件已有 ?? [] 兜底，不应阻塞入库。
 func TestValidateCard_MissingOptionalWarn(t *testing.T) {
 	cases := []map[string]any{
-		{"type": "plan", "id": "p1"},       // 缺 questions（前端 PlanCard 已 ?? []）
-		{"type": "approval", "id": "a1"},   // 缺 actions
-		{"type": "progress", "id": "pr1"},  // 缺 tasks
-		{"type": "info", "id": "i1"},       // 缺 fields
+		{"type": "plan", "id": "p1"},      // 缺 questions（前端 PlanCard 已 ?? []）
+		{"type": "approval", "id": "a1"},  // 缺 actions
+		{"type": "progress", "id": "pr1"}, // 缺 tasks
+		{"type": "info", "id": "i1"},      // 缺 fields
 	}
 	for i, card := range cases {
 		vc, err := ValidateCard(card)
@@ -82,10 +84,10 @@ func TestValidateCard_MissingOptionalWarn(t *testing.T) {
 func TestValidateCards_FiltersInvalid(t *testing.T) {
 	cards := []map[string]any{
 		{"type": "info", "id": "ok1", "fields": map[string]any{}},
-		{"type": "unknown", "id": "bad1"},                  // 拒绝（未知 type）
-		{"type": "diff", "id": "bad2", "files": []any{}},   // 拒绝（缺 workDir）
-		{"type": "info", "id": "ok2"},                      // 保留（缺 fields 只 warn）
-		nil,                                                 // 拒绝（nil）
+		{"type": "unknown", "id": "bad1"},                // 拒绝（未知 type）
+		{"type": "diff", "id": "bad2", "files": []any{}}, // 拒绝（缺 workDir）
+		{"type": "info", "id": "ok2"},                    // 保留（缺 fields 只 warn）
+		nil,                                              // 拒绝（nil）
 	}
 	valid := ValidateCards(cards)
 	if len(valid) != 2 {
@@ -109,7 +111,7 @@ func TestValidateCards_FiltersInvalid(t *testing.T) {
 // 本测试只能直接断言后端这一侧；前端两侧由前端测试覆盖（见 cards.test.ts）。
 func TestSupportedCardTypes_FourSourceConsistency(t *testing.T) {
 	// 后端支持的类型集合
-	expected := []string{"plan", "approval", "progress", "info", "diff", "project"}
+	expected := []string{"plan", "approval", "progress", "info", "diff", "project", "personal_report"}
 	for _, tp := range expected {
 		if !IsSupportedCardType(tp) {
 			t.Errorf("SupportedCardTypes missing required type %q", tp)

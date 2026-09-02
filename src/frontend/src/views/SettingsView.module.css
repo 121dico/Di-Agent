@@ -4,7 +4,7 @@
   flex-direction: column;
   overflow: hidden;
   background:
-    radial-gradient(circle at 18% 0%, rgba(47, 143, 107, 0.08), transparent 32%),
+    radial-gradient(circle at 18% 0%, rgba(15, 118, 110, 0.08), transparent 32%),
     linear-gradient(180deg, var(--color-surface) 0%, var(--color-bg-tertiary) 100%);
 }
 
@@ -63,7 +63,7 @@
   position: relative;
   padding: 3px;
   border-radius: 18px;
-  background: linear-gradient(135deg, rgba(22, 163, 101, 0.22), rgba(80, 152, 203, 0.18));
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.22), rgba(80, 152, 203, 0.18));
   cursor: pointer;
 }
 
@@ -165,7 +165,7 @@
 
 .navItem:hover {
   color: var(--color-primary);
-  background: rgba(22, 163, 101, 0.07);
+  background: rgba(15, 118, 110, 0.07);
 }
 
 .settingsContent {

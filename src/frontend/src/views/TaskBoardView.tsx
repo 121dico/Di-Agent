@@ -36,7 +36,8 @@ import type { CreateTaskPayload, OrchTaskCard, TaskPriority, TaskStatus, Workspa
 import { ROLE_ORCHESTRATOR } from '@/types/role';
 import { useConversationAgents } from '@/hooks/useConversationAgents';
 import layoutStyles from '@/layout/AppLayout.module.css';
-import { resolveActiveGroupConversationId } from './taskBoardSelection';
+import { getTaskBoardConversations, resolveActiveTaskConversationId } from './taskBoardSelection';
+import { isTaskCardBodyTarget } from './taskCardActivation';
 import styles from './TaskBoardView.module.css';
 
 interface TaskFormValues {
@@ -168,11 +169,14 @@ const TaskBoardView: React.FC = () => {
   const [form] = Form.useForm<TaskFormValues>();
   const activeConversationId = useConversationStore((s) => s.activeConversationId);
   const allConversations = useConversationStore((s) => s.conversations);
-  const conversations = useMemo(() => allConversations.filter((c) => c.type === 'group'), [allConversations]);
+  const conversations = useMemo(
+    () => getTaskBoardConversations(allConversations),
+    [allConversations],
+  );
   const setActiveConversation = useConversationStore((s) => s.setActive);
   const fetchConversations = useConversationStore((s) => s.fetchConversations);
   const taskConversationId = useMemo(
-    () => resolveActiveGroupConversationId(conversations, activeConversationId),
+    () => resolveActiveTaskConversationId(conversations, activeConversationId),
     [activeConversationId, conversations],
   );
   const activeConversation = conversations.find((item) => item.id === taskConversationId);
@@ -262,7 +266,7 @@ const TaskBoardView: React.FC = () => {
 
   const openCreate = () => {
     if (!taskConversationId) {
-      antMessage.warning('请先在左侧选择一个群聊');
+      antMessage.warning('请先在左侧选择一个任务会话');
       return;
     }
     setEditingTask(null);
@@ -287,7 +291,7 @@ const TaskBoardView: React.FC = () => {
         antMessage.success('任务已更新');
       } else {
         if (!taskConversationId) {
-          antMessage.warning('请先在左侧选择一个群聊');
+          antMessage.warning('请先在左侧选择一个任务会话');
           return;
         }
         const payload: CreateTaskPayload = {
@@ -397,7 +401,19 @@ const TaskBoardView: React.FC = () => {
     const displayTime = isOrchCard ? card.dispatched_at : task.created_at;
 
     return (
-      <article className={styles.taskCard} key={item.id}>
+      <article
+        className={styles.taskCard}
+        key={item.id}
+        onClick={(event) => {
+          if (isTaskCardBodyTarget(event.target, event.currentTarget)) setDetailTask(item);
+        }}
+      >
+        <button
+          className={styles.cardOpenButton}
+          type="button"
+          aria-label={`查看任务详情：${displayTitle}`}
+          onClick={() => setDetailTask(item)}
+        />
         {/* Row 1: Creator */}
         <div className={styles.cardRow}>
           <div className={styles.userInfo}>
@@ -489,18 +505,18 @@ const TaskBoardView: React.FC = () => {
     );
   };
 
-  const emptyDescription = taskConversationId ? '当前群聊暂无任务' : '请先在左侧选择一个群聊';
+  const emptyDescription = taskConversationId ? '当前会话暂无任务' : '请先在左侧选择一个任务会话';
 
   return (
     <div className={layoutStyles.chatPanel}>
       <div className={layoutStyles.convPanel}>
         <div className={layoutStyles.convPanelHeader}>
-          <span className={layoutStyles.convPanelTitle}>群聊</span>
+          <span className={layoutStyles.convPanelTitle}>任务会话</span>
           <div className={layoutStyles.convPanelTools}>
             <Button
               type="text"
               icon={<ReloadOutlined />}
-              aria-label="刷新群聊"
+              aria-label="刷新任务会话"
               onClick={() => fetchConversations()}
             />
           </div>
@@ -513,8 +529,8 @@ const TaskBoardView: React.FC = () => {
           <header className={styles.workspaceHeader}>
             <div className={styles.workspaceIcon}><TeamOutlined /></div>
             <div className={styles.workspaceMeta}>
-              <h1 className={styles.workspaceTitle}>{activeConversation?.title ?? '当前群聊任务'}</h1>
-              <div className={styles.workspaceSub}>群聊任务看板</div>
+              <h1 className={styles.workspaceTitle}>{activeConversation?.title ?? '当前会话任务'}</h1>
+              <div className={styles.workspaceSub}>会话任务看板</div>
             </div>
             <Space className={styles.headerActions}>
               <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={fetchTasks}>
@@ -526,7 +542,7 @@ const TaskBoardView: React.FC = () => {
             </Space>
           </header>
 
-          <nav className={styles.tabs} aria-label="群聊任务">
+          <nav className={styles.tabs} aria-label="会话任务">
             <button className={`${styles.tab} ${styles.tabActive}`} type="button">
               <FolderOutlined /> 任务看板
             </button>

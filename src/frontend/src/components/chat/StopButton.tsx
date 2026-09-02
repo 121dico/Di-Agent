@@ -40,6 +40,7 @@ function StopButtonInner({ conversationId, messageId, taskId, onCanceled }: Stop
     } catch (err) {
       // API 失败不回滚状态——backend 会通过 watchdog 或 task.complete 广播终态。
       console.warn('cancel streaming API failed (UI already optimistically canceled):', err);
+      antdMessage.warning('本地已停止显示，服务端确认暂时失败');
     }
   }, [submitting, conversationId, messageId, taskId, onCanceled, cancelStreaming]);
 
@@ -49,7 +50,8 @@ function StopButtonInner({ conversationId, messageId, taskId, onCanceled }: Stop
       className={styles.stopBtn}
       onClick={handleClick}
       disabled={submitting}
-      aria-label="停止生成"
+      aria-label={submitting ? '正在停止生成' : '停止生成'}
+      aria-busy={submitting}
     >
       <span className={styles.stopIcon} aria-hidden />
       {submitting ? '停止中…' : '停止生成'}

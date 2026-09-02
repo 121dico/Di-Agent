@@ -474,8 +474,8 @@ func (r *fakeMsgRepoForHandler) ListReplies(_ context.Context, _ string) ([]mode
 // UpdateMessageCards / HideMessage / UnhideMessage / GetHiddenMessageIDs ——
 // 卡片更新与 message_hides 功能的 no-op 桩，满足 service.MsgRepo 接口。
 func (r *fakeMsgRepoForHandler) UpdateMessageCards(_ context.Context, _, _ string) error { return nil }
-func (r *fakeMsgRepoForHandler) HideMessage(_ context.Context, _, _ string) error       { return nil }
-func (r *fakeMsgRepoForHandler) UnhideMessage(_ context.Context, _, _ string) error     { return nil }
+func (r *fakeMsgRepoForHandler) HideMessage(_ context.Context, _, _ string) error        { return nil }
+func (r *fakeMsgRepoForHandler) UnhideMessage(_ context.Context, _, _ string) error      { return nil }
 func (r *fakeMsgRepoForHandler) GetHiddenMessageIDs(_ context.Context, _, _ string) (map[string]bool, error) {
 	return map[string]bool{}, nil
 }

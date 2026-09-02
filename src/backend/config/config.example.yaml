@@ -3,6 +3,13 @@
   # Optional. Set to a LAN/public reachable URL (e.g. "http://10.0.0.1:8080")
   # for remote daemon connect commands. Defaults to http://127.0.0.1:<port> when empty.
   external_url: ""
+  # Optional HTTPS listener (same handler). A self-signed cert is enough to put
+  # browsers into a secure context (unlocks navigator.clipboard etc., which fail
+  # silently on plain-HTTP LAN origins). Daemon/curl/install scripts keep using
+  # the plain HTTP port above. Generate with: bash scripts/gen-cert.sh <LAN-IP>
+  tls_port: 8443
+  tls_cert: certs/server.crt
+  tls_key: certs/server.key
 database:
   host: localhost
   port: 5432

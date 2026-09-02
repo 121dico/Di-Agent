@@ -93,7 +93,7 @@ type AgentStore interface {
 	MarkDaemonMachineConnected(ctx context.Context, id, machineID string) error
 	UpdateMachineCapabilities(ctx context.Context, id string, capabilities []string) error
 	FindMachineWithCapability(ctx context.Context, userID, capability string) (*model.DaemonMachine, error)
-	UpsertMachineAgentCandidate(ctx context.Context, machineID, name, cliTool, version, capabilitiesJSON string) error
+	UpsertMachineAgentCandidate(ctx context.Context, machineID, name, cliTool, variant, version, capabilitiesJSON string) error
 	ListAgentCandidates(ctx context.Context, userID string) ([]model.AgentCandidate, error)
 	AddCandidateAgent(ctx context.Context, userID, candidateID, displayName, expectedCLITool, systemPrompt, toolsConfig, customSkills string, enableManagementTools bool) (*model.Agent, error)
 	CreateCustom(ctx context.Context, userID, name, cliTool, systemPrompt, toolsConfig, avatar, capabilitiesJSON, customSkills string, enableManagementTools bool) (*model.Agent, error)
@@ -109,6 +109,12 @@ type AgentStore interface {
 	DeleteOwned(ctx context.Context, id, userID string) (bool, error)
 	IsAgentInConversation(ctx context.Context, conversationID, agentID, userID string) (bool, error)
 	SetDaemonTaskOrch(ctx context.Context, taskID, orchTaskID, workerName string)
+}
+
+// AgentRuntimeStore is the canonical interface for persisted Agent runtime metrics.
+// Satisfied by *AgentRuntimeRepo.
+type AgentRuntimeStore interface {
+	GetRuntimeOverview(ctx context.Context, userID, agentID string, since time.Time, recentLimit int) (*model.AgentRuntimeOverview, error)
 }
 
 // OrchTaskStore is the canonical interface for orchestration task persistence.
@@ -141,6 +147,16 @@ type ArtifactStore interface {
 	GetLatestByRoot(ctx context.Context, rootID string) (*model.Artifact, error)
 	GetLatestRootByConversation(ctx context.Context, convID string) (string, error)
 	GetLatestByConversationAndName(ctx context.Context, convID, name string) (*model.Artifact, error)
+}
+
+// PersonalReportStore persists owner-only reports produced from Agent conversations.
+// Satisfied by *PersonalReportRepo.
+type PersonalReportStore interface {
+	ListByOwner(ctx context.Context, ownerUserID string) ([]model.PersonalReport, error)
+	GetByID(ctx context.Context, id string) (*model.PersonalReport, error)
+	Create(ctx context.Context, report *model.PersonalReport) error
+	Update(ctx context.Context, report *model.PersonalReport) error
+	Delete(ctx context.Context, id, ownerUserID string) (bool, error)
 }
 
 // KnowledgeStore is the canonical interface for knowledge base persistence.

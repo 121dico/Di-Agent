@@ -1,10 +1,10 @@
 .searchPanel {
   max-height: 400px;
   overflow-y: auto;
-  border-bottom: 1px solid rgba(31, 35, 40, 0.08);
-  background-color: var(--color-surface);
-  backdrop-filter: blur(10px);
-  animation: panelSlideIn 0.2s ease-out;
+  border-bottom: 1px solid var(--wb-border-subtle);
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-filter);
+  animation: panelSlideIn var(--motion-overlay) var(--ease-out);
 }
 
 @keyframes panelSlideIn {
@@ -22,7 +22,9 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 10px 12px;
+  width: min(100%, var(--chat-reading-width));
+  margin: 0 auto;
+  padding: 10px 0;
 }
 
 .searchInput { flex: 1; }
@@ -30,6 +32,8 @@
 .searchResults {
   max-height: 340px;
   overflow-y: auto;
+  width: min(100%, var(--chat-reading-width));
+  margin: 0 auto;
 }
 
 .searchResultItem {
@@ -64,8 +68,8 @@
 }
 
 .highlight {
-  background-color: rgba(47, 143, 107, 0.2);
-  color: var(--color-primary);
+  background: rgba(10, 102, 255, .14);
+  color: var(--wb-text-primary);
   border-radius: 2px;
   padding: 0 1px;
   font-weight: 600;
@@ -86,7 +90,10 @@
   text-align: center;
 }
 
-/* ── 暗色模式 ── */
-:global(html.dark) .searchPanel {
-  border-bottom-color: rgba(255, 255, 255, 0.06);
+@media (max-width: 1100px) {
+  .searchBar, .searchResults { width: calc(100% - 32px); }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .searchPanel { background: var(--wb-surface); backdrop-filter: none; }
 }

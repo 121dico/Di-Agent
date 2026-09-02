@@ -4,10 +4,10 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/google/uuid"
 	"github.com/agent-hub/backend/internal/middleware"
 	"github.com/agent-hub/backend/internal/service"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // FriendHandler 好友接口处理器

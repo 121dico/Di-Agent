@@ -1,5 +1,9 @@
-import { put } from './client';
+import { get, put } from './client';
 import type { User } from '@/types/auth';
+
+export async function getCurrentUser(): Promise<User> {
+  return get<User>('/api/users/me');
+}
 
 /** 更新当前用户头像，返回最新用户资料。 */
 export async function updateUserAvatar(avatar: string): Promise<User> {

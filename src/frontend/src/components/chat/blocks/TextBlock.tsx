@@ -1,10 +1,11 @@
 import React, { useMemo } from 'react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { MessageBlock } from '@/types/message';
 import type { BlockRenderContext } from './BlockRegistry';
 import styles from './Blocks.module.css';
 import { registerBlock } from './BlockRegistry';
+import { CodeBlock } from '../CodeBlock';
 
 const REMARK_PLUGINS = [remarkGfm];
 
@@ -16,18 +17,35 @@ interface TextBlockProps {
   ctx?: BlockRenderContext;
 }
 
-/**
- * 文本 block——按 markdown 流式渲染。
- *
- * 复用 ReactMarkdown 直接渲染（未引入 MessageBubble 的 MarkdownRenderer，因为
- * 这里不需要 code artifact 接通：流式期间 artifact 尚未持久化，且完整渲染依赖
- * cards 拆段逻辑由 MessageBubble 顶层负责；block 层只负责纯文本 markdown）。
- */
+// markdown 组件映射：代码块走 CodeBlock（深底色 + 语言头 + 语法高亮 + 可折叠），
+// 与 MessageBubble 的 MarkdownRenderer 视觉对齐——流式期间也能看到完整格式，
+// 而不是裸 <pre><code> 的白色纯文本。
+const streamMarkdownComponents: Components = {
+  code({ className, children }) {
+    const text = String(children ?? '');
+    const isBlock = className?.startsWith('language-') || text.includes('\n');
+    if (isBlock) {
+      return (
+        <CodeBlock className={className} expandable>
+          {children}
+        </CodeBlock>
+      );
+    }
+    return <code className={styles.inlineCode}>{children}</code>;
+  },
+  // 外层 <pre> 由 code 组件内的 CodeBlock 接管，剥掉默认包裹
+  pre({ children }) {
+    return <>{children}</>;
+  },
+};
+
 function TextBlockInner({ block, streaming = false }: TextBlockProps) {
   const content = useMemo(() => block.text ?? '', [block.text]);
   return (
     <div className={styles.textBlock}>
-      <ReactMarkdown remarkPlugins={REMARK_PLUGINS}>{content}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={streamMarkdownComponents}>
+        {content}
+      </ReactMarkdown>
       {streaming && <span className={styles.streamingCursor} aria-hidden />}
     </div>
   );
@@ -38,5 +56,4 @@ export const TextBlock = React.memo(TextBlockInner);
 // ---------------------------------------------------------------------------
 // 自注册：import './TextBlock'（经 blocks/index.ts）触发 registerBlock 副作用。
 // 组件定义与注册信息内聚在同一文件，便于维护。
-// ---------------------------------------------------------------------------
 registerBlock('text', { component: TextBlock });

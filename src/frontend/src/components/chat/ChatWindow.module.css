@@ -3,10 +3,8 @@
   flex-direction: column;
   height: 100%;
   position: relative;
-  background-color: var(--color-bg-chat);
-  background-image:
-    radial-gradient(circle at 12% 0%, rgba(255, 255, 255, 0.75), transparent 40%),
-    radial-gradient(circle at 100% 80%, rgba(255, 255, 255, 0.65), transparent 35%);
+  background-color: var(--wb-surface);
+  background-image: none;
 }
 
 /* 拖拽上传遮罩：覆盖整个聊天窗口（消息区 + 输入区），高亮提示用户在任意位置松手即可上传。 */
@@ -19,10 +17,10 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  background: rgba(47, 143, 107, 0.1);
-  border: 2px dashed var(--color-primary);
-  border-radius: 8px;
-  color: var(--color-primary);
+  background: rgba(10, 102, 255, 0.08);
+  border: 2px dashed var(--wb-focus);
+  border-radius: 20px;
+  color: var(--wb-link);
   font-size: 15px;
   font-weight: 600;
   pointer-events: none;
@@ -37,42 +35,41 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 56px;
-  padding: 0 18px;
-  background-color: var(--color-surface);
-  border-bottom: 1px solid rgba(31, 35, 40, 0.08);
+  min-height: 58px;
+  padding: 0 16px 0 18px;
+  background: var(--wb-surface);
+  border-bottom: 1px solid var(--wb-border-subtle);
   position: relative;
   z-index: 1;
-  backdrop-filter: blur(10px);
 }
 
 .headerLeft {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   min-width: 0;
   flex: 1;
 }
 
 .conversationAvatar {
   flex-shrink: 0;
-  background: var(--gradient-agent);
+  background: var(--wb-action);
   color: var(--color-bg-white);
   font-size: 12px;
   font-weight: 700;
-  box-shadow: 0 6px 12px rgba(47, 143, 107, 0.2);
+  box-shadow: none;
 }
 
 .title {
   margin: 0;
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 650;
   font-family: var(--font-family-display);
   color: var(--color-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.4;
+  line-height: 1.25;
 }
 
 .forkOriginButton {
@@ -88,8 +85,8 @@
   align-items: center;
   height: 20px;
   padding: 0 8px;
-  border-radius: 999px;
-  background: rgba(47, 143, 107, 0.12);
+  border-radius: var(--radius-pill);
+  background: rgba(118, 118, 128, 0.12);
   color: var(--color-text-secondary);
   font-size: 11px;
   font-weight: 600;
@@ -98,8 +95,18 @@
 .titleBlock {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
+}
+
+.conversationKind {
+  overflow: hidden;
+  color: var(--wb-text-tertiary);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .robotStrip {
@@ -118,12 +125,12 @@
 .headerActions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   flex-shrink: 0;
-  padding: 4px;
-  border-radius: 999px;
-  background: var(--color-surface-muted);
-  border: 1px solid rgba(31, 35, 40, 0.06);
+  padding: 0;
+  border-radius: var(--radius-3);
+  background: transparent;
+  border: 0;
 }
 
 .contextButton {
@@ -133,6 +140,28 @@
 
 .contextButtonLabel {
   white-space: nowrap;
+}
+
+.headerActions :global(.ant-btn) {
+  color: var(--wb-text-secondary);
+  border-radius: var(--radius-3);
+  transition: color var(--motion-control) var(--ease-standard), background-color var(--motion-control) var(--ease-standard);
+}
+
+.headerActions :global(.ant-btn:hover) {
+  color: var(--wb-text-primary) !important;
+  background: var(--wb-surface-hover) !important;
+}
+
+.headerActions :global(.ant-btn[aria-pressed='true']) {
+  color: var(--wb-link) !important;
+  background: var(--wb-surface-selected) !important;
+}
+
+.headerActions :global(.ant-btn:disabled) {
+  color: #a6a7a8 !important;
+  background: transparent !important;
+  cursor: not-allowed;
 }
 
 @media (max-width: 1100px) {
@@ -154,7 +183,7 @@
   height: 34px;
   border: none;
   background: transparent;
-  border-radius: 8px;
+  border-radius: 9px;
   cursor: pointer;
   font-size: 16px;
   color: var(--color-text-secondary);
@@ -162,8 +191,8 @@
 }
 
 .headerBtn:hover {
-  background-color: var(--color-primary-bg);
-  color: var(--color-primary);
+  background-color: rgba(118, 118, 128, .1);
+  color: var(--color-text);
 }
 
 .hiddenFileInput {
@@ -174,11 +203,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 18px;
+  width: min(calc(100% - 48px), 860px);
+  margin: 0 auto;
+  padding: 7px 0 2px 40px;
   font-size: 12px;
   color: var(--color-text-secondary);
-  background-color: var(--color-surface);
-  animation: typingSlideIn 0.2s ease;
+  background: transparent;
+  animation: typingSlideIn var(--motion-overlay) var(--ease-out);
 }
 
 .typingDots {
@@ -191,7 +222,7 @@
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: var(--color-primary);
+  background: var(--wb-focus);
   animation: typingBounce 1.2s ease-in-out infinite;
 }
 
@@ -271,9 +302,9 @@
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px 12px;
-  border: 1px solid rgba(47, 143, 107, 0.14);
-  border-radius: 12px;
-  background: linear-gradient(180deg, rgba(47, 143, 107, 0.055), rgba(255, 255, 255, 0.92));
+  border: 1px solid var(--wb-border-subtle);
+  border-radius: var(--radius-5);
+  background: var(--wb-surface-subtle);
 }
 
 .pinnedItemHeader {
@@ -359,9 +390,9 @@
 .pinnedMarkdown :global(blockquote) {
   margin: 7px 0;
   padding: 4px 9px;
-  border-left: 3px solid var(--color-primary);
+  border-left: 3px solid var(--wb-link);
   border-radius: 4px;
-  background: rgba(47, 143, 107, 0.06);
+  background: var(--wb-surface-selected);
   color: var(--color-text-secondary);
 }
 
@@ -370,22 +401,16 @@
 }
 
 @keyframes highlightFade {
-  0% { background-color: rgba(47, 143, 107, 0.2); }
+  0% { background-color: rgba(10, 102, 255, 0.16); }
   100% { background-color: transparent; }
 }
 
-/* ── 暗色模式 ── */
-:global(html.dark) .container {
-  background-image:
-    radial-gradient(circle at 12% 0%, rgba(52, 211, 153, 0.06), transparent 40%),
-    radial-gradient(circle at 100% 80%, rgba(52, 211, 153, 0.04), transparent 35%);
+@media (prefers-reduced-motion: reduce) {
+  .typingIndicator { animation: none; }
+  .typingDot { animation: none; opacity: .72; }
+  .highlightFlash { animation: none; background: var(--wb-surface-selected); }
 }
 
-:global(html.dark) .header {
-  border-bottom-color: rgba(255, 255, 255, 0.06);
-}
-
-:global(html.dark) .headerActions {
-  border-color: rgba(255, 255, 255, 0.06);
-  background: var(--color-surface-muted);
+@media (prefers-reduced-transparency: reduce) {
+  .dropOverlay { backdrop-filter: none; background: rgba(238, 245, 255, .96); }
 }

@@ -1,0 +1,197 @@
+:root,
+html.dark {
+  color-scheme: light;
+
+  /* Foundations */
+  --wb-canvas: #f3f2ef;
+  --wb-app: #f7f7f5;
+  --wb-surface: #ffffff;
+  --wb-surface-subtle: #f7f7f5;
+  --wb-surface-hover: #f1f1ef;
+  --wb-surface-selected: #eef5ff;
+  --wb-text-primary: #1d1d1f;
+  --wb-text-secondary: #5f6368;
+  --wb-text-tertiary: #686b70;
+  --wb-border-subtle: #e5e5e2;
+  --wb-border-default: #d8d8d4;
+  --wb-action: #1d1d1f;
+  --wb-action-hover: #343437;
+  --wb-link: #005fcc;
+  --wb-focus: #0a66ff;
+  --wb-success: #167c46;
+  --wb-warning: #9a5700;
+  --wb-error: #c2352a;
+
+  /* Geometry */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --radius-1: 4px;
+  --radius-2: 6px;
+  --radius-3: 8px;
+  --radius-4: 10px;
+  --radius-5: 12px;
+  --radius-6: 16px;
+  --radius-pill: 999px;
+  --reading-width: 840px;
+  --chat-reading-width: 860px;
+
+  /* Motion: feedback first, travel only when it explains hierarchy. */
+  --motion-instant: 0ms;
+  --motion-fast: 120ms;
+  --motion-control: 160ms;
+  --motion-overlay: 200ms;
+  --motion-panel: 240ms;
+  --motion-snap: 220ms;
+  --motion-navigation-intent: 320ms;
+  --motion-navigation: 380ms;
+  --motion-route: 220ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --transition-fast: var(--motion-fast) var(--ease-standard);
+
+  /* Elevation: restrained and reserved for real floating layers */
+  --shadow-raised: 0 1px 2px rgba(29, 29, 31, 0.04), 0 4px 14px rgba(29, 29, 31, 0.055);
+  --shadow-overlay: 0 12px 34px rgba(29, 29, 31, 0.12), 0 2px 8px rgba(29, 29, 31, 0.06);
+  --shadow-floating: 0 20px 56px rgba(29, 29, 31, 0.16), 0 4px 14px rgba(29, 29, 31, 0.08);
+  --glass-bg: rgba(255, 255, 255, 0.82);
+  --glass-bg-strong: rgba(255, 255, 255, 0.92);
+  --glass-border: rgba(216, 216, 212, 0.78);
+  --glass-filter: blur(20px) saturate(1.08);
+
+  /* Personal reports: a bright, restrained analytical canvas. */
+  --pr-canvas: #f3f6f8;
+  --pr-canvas-glow: rgba(126, 164, 201, 0.14);
+  --pr-surface: rgba(255, 255, 255, 0.94);
+  --pr-surface-glass: rgba(255, 255, 255, 0.78);
+  --pr-surface-soft: rgba(248, 250, 252, 0.82);
+  --pr-border: rgba(141, 155, 170, 0.22);
+  --pr-border-highlight: rgba(255, 255, 255, 0.9);
+  --pr-shadow-raised: 0 1px 2px rgba(31, 41, 55, 0.04), 0 10px 30px rgba(57, 74, 92, 0.07);
+  --pr-shadow-overlay: 0 24px 70px rgba(34, 48, 64, 0.16), 0 4px 16px rgba(34, 48, 64, 0.08);
+  --pr-data-teal: #0f766e;
+  --pr-data-blue: #3b82f6;
+  --pr-data-amber: #d97706;
+  --pr-data-coral: #dc5f57;
+  --pr-data-violet: #7c3aed;
+  --pr-number-font: 'SF Pro Display', 'DIN Alternate', 'PingFang SC', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* Layering */
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-nav: 20;
+  --z-inspector: 30;
+  --z-task: 40;
+  --z-popover: 50;
+  --z-drawer: 60;
+  --z-modal: 70;
+  --z-critical: 80;
+  --z-toast: 90;
+
+  /* Compatibility aliases while the broader product migrates component-by-component. */
+  --color-primary: var(--wb-action);
+  --color-primary-hover: var(--wb-action-hover);
+  --color-primary-active: #0f0f10;
+  --color-primary-light: var(--wb-surface-selected);
+  --color-primary-bg: var(--wb-surface-selected);
+  --color-bg: var(--wb-canvas);
+  --color-bg-app: var(--wb-app);
+  --color-bg-white: var(--wb-surface);
+  --color-bg-tertiary: var(--wb-surface-subtle);
+  --color-text: var(--wb-text-primary);
+  --color-text-secondary: var(--wb-text-secondary);
+  --color-text-tertiary: var(--wb-text-tertiary);
+  --color-border: var(--wb-border-default);
+  --color-border-light: var(--wb-border-subtle);
+  --color-separator: var(--wb-border-subtle);
+  --color-danger: var(--wb-error);
+  --color-danger-hover: #a72d24;
+  --color-danger-bg: rgba(194, 53, 42, 0.08);
+  --color-danger-border: rgba(194, 53, 42, 0.22);
+  --color-success: var(--wb-success);
+  --color-warning: var(--wb-warning);
+  --color-user-bubble-from: var(--wb-action);
+  --color-user-bubble-to: var(--wb-action);
+  --color-user-bubble-link: #dceaff;
+  --color-user-bubble-code-bg: rgba(255, 255, 255, 0.14);
+  --color-bg-settings: var(--wb-app);
+  --color-bg-convlist: var(--wb-surface-subtle);
+  --color-bg-chat: var(--wb-surface);
+  --color-surface: var(--wb-surface);
+  --color-surface-strong: var(--wb-surface);
+  --color-surface-muted: var(--wb-surface-subtle);
+  --material-thin: var(--glass-bg);
+  --material-regular: var(--glass-bg-strong);
+  --material-thick: var(--wb-surface);
+  --sidebar-material: var(--wb-surface-subtle);
+  --list-material: var(--wb-surface-subtle);
+  --content-material: var(--wb-surface);
+  --shadow-sm: var(--shadow-raised);
+  --shadow-md: var(--shadow-overlay);
+  --shadow-lg: var(--shadow-floating);
+  --shadow-card: var(--shadow-raised);
+  --shadow-bubble-user: none;
+  --shadow-bubble-assistant: none;
+  --shadow-input-focus: 0 0 0 3px rgba(10, 102, 255, 0.18);
+  --gradient-brand: var(--wb-action);
+  --gradient-agent: var(--wb-action);
+  --gradient-avatar-group: var(--wb-action);
+  --font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+  --font-family-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+}
+
+body {
+  background: var(--wb-canvas);
+}
+
+:focus-visible {
+  outline-color: rgba(10, 102, 255, 0.72);
+}
+
+::selection {
+  color: var(--wb-text-primary);
+  background: rgba(10, 102, 255, 0.16);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  html.dark {
+    --motion-fast: 0ms;
+    --motion-control: 0ms;
+    --motion-overlay: 0ms;
+    --motion-panel: 0ms;
+    --motion-snap: 0ms;
+    --motion-navigation-intent: 0ms;
+    --motion-navigation: 0ms;
+    --motion-route: 0ms;
+  }
+
+  html:focus-within { scroll-behavior: auto; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root,
+  html.dark {
+    --glass-bg: #ffffff;
+    --glass-bg-strong: #ffffff;
+    --glass-border: var(--wb-border-default);
+    --glass-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root,
+  html.dark {
+    --wb-text-secondary: #484b50;
+    --wb-text-tertiary: #55585d;
+    --wb-border-subtle: #c9c9c4;
+    --wb-border-default: #aaa9a3;
+  }
+}

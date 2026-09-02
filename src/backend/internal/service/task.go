@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"github.com/agent-hub/backend/internal/model"
 )
@@ -51,13 +52,47 @@ var (
 
 // TaskService 处理任务看板业务逻辑。
 type TaskService struct {
-	repo        TaskRepo
-	orchCardRepo OrchTaskCardRepo
+	repo            TaskRepo
+	orchCardRepo    OrchTaskCardRepo
+	daemonSyncMu    sync.Mutex
+	daemonSyncLocks map[string]*daemonTaskSyncLock
+}
+
+type daemonTaskSyncLock struct {
+	mu   sync.Mutex
+	refs int
 }
 
 // NewTaskService 创建任务服务。
 func NewTaskService(repo TaskRepo) *TaskService {
-	return &TaskService{repo: repo}
+	return &TaskService{
+		repo:            repo,
+		daemonSyncLocks: make(map[string]*daemonTaskSyncLock),
+	}
+}
+
+// lockDaemonTaskHash 把同一 daemon task 的查询、创建和结果补写串成一个临界区。
+// 锁表属于当前 TaskService 实例，不引入包级全局状态；引用归零后立即回收。
+func (s *TaskService) lockDaemonTaskHash(taskHash string) func() {
+	s.daemonSyncMu.Lock()
+	lock := s.daemonSyncLocks[taskHash]
+	if lock == nil {
+		lock = &daemonTaskSyncLock{}
+		s.daemonSyncLocks[taskHash] = lock
+	}
+	lock.refs++
+	s.daemonSyncMu.Unlock()
+
+	lock.mu.Lock()
+	return func() {
+		lock.mu.Unlock()
+		s.daemonSyncMu.Lock()
+		lock.refs--
+		if lock.refs == 0 {
+			delete(s.daemonSyncLocks, taskHash)
+		}
+		s.daemonSyncMu.Unlock()
+	}
 }
 
 // SetOrchCardRepo 注入 orch_task_cards 仓库。
@@ -93,6 +128,78 @@ func (s *TaskService) List(ctx context.Context, userID string, filter model.Task
 }
 
 // Create 创建任务。
+// CreateFromDaemonTask 把已完成的 daemon 任务同步到任务看板（幂等：task_hash 去重）。
+// title/description 保存任务要求，worker_result 保存完成结果或错误；failed 状态标 blocked。
+func (s *TaskService) CreateFromDaemonTask(ctx context.Context, t *model.DaemonTask, result, taskErr string) error {
+	if t == nil || t.ID == "" || t.UserID == "" {
+		return nil
+	}
+	taskHash := "daemon-" + t.ID
+	unlock := s.lockDaemonTaskHash(taskHash)
+	defer unlock()
+
+	existing, err := s.repo.GetByTaskHash(ctx, taskHash)
+	if err != nil {
+		return fmt.Errorf("find daemon workspace task: %w", err)
+	}
+	trim := func(str string, max int) string {
+		runes := []rune(str)
+		if len(runes) > max {
+			return string(runes[:max]) + "…"
+		}
+		return str
+	}
+	status := "done"
+	workerResult := result
+	if taskErr != "" {
+		status = "blocked"
+		workerResult = taskErr
+	}
+	workerResult = trim(workerResult, 2000)
+	// 创建成功但结果写入失败时，daemon 可能重发 task.complete。已有卡片仍需补写
+	// worker_result，不能因 task_hash 已存在而永久留下没有明细的任务。
+	if existing != nil {
+		if existing.WorkerResult != nil && *existing.WorkerResult == workerResult {
+			return nil
+		}
+		if err := s.repo.UpdateWorkerResult(ctx, existing.ID, workerResult); err != nil {
+			return fmt.Errorf("repair daemon workspace result: %w", err)
+		}
+		return nil
+	}
+	convID := t.ConversationID
+	agentID := t.AgentID
+	var orchTaskID *string
+	if t.OrchTaskID != "" {
+		orchTaskID = &t.OrchTaskID
+	}
+	var workerName *string
+	if t.WorkerName != "" {
+		workerName = &t.WorkerName
+	}
+	created, err := s.repo.Create(ctx, t.UserID, model.TaskCreateInput{
+		ConversationID: &convID,
+		AgentID:        &agentID,
+		Title:          trim(t.Prompt, 80),
+		Description:    trim(t.Prompt, 500),
+		Status:         status,
+		Priority:       "medium",
+		OrchTaskID:     orchTaskID,
+		WorkerName:     workerName,
+		TaskHash:       &taskHash,
+	})
+	if err != nil {
+		return fmt.Errorf("create daemon workspace task: %w", err)
+	}
+	if created == nil || created.ID == "" {
+		return fmt.Errorf("create daemon workspace task: empty task")
+	}
+	if err := s.repo.UpdateWorkerResult(ctx, created.ID, workerResult); err != nil {
+		return fmt.Errorf("persist daemon workspace result: %w", err)
+	}
+	return nil
+}
+
 func (s *TaskService) Create(ctx context.Context, userID string, input model.TaskCreateInput) (*model.WorkspaceTask, error) {
 	input.Title = strings.TrimSpace(input.Title)
 	input.Description = strings.TrimSpace(input.Description)

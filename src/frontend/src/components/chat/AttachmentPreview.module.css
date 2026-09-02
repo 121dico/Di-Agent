@@ -2,6 +2,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  width: min(100%, var(--chat-reading-width));
+  margin: 0 auto;
   padding-bottom: 10px;
 }
 
@@ -9,9 +11,9 @@
   position: relative;
   width: 80px;
   height: 80px;
-  border-radius: 10px;
+  border-radius: var(--radius-3);
   overflow: hidden;
-  border: 1.5px solid var(--color-border);
+  border: 1px solid var(--wb-border-default);
   background: var(--color-bg-white);
   display: flex;
   flex-direction: column;
@@ -21,8 +23,8 @@
 }
 
 .item:hover {
-  border-color: var(--color-primary);
-  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.12);
+  border-color: rgba(10, 102, 255, .38);
+  box-shadow: var(--shadow-raised);
 }
 
 .thumb {
@@ -119,17 +121,4 @@
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: center;
-}
-
-/* ── 暗色模式 ── */
-:global(html.dark) .overlay {
-  background: rgba(0, 0, 0, 0.55);
-}
-
-:global(html.dark) .overlayError {
-  background: rgba(69, 26, 26, 0.8);
-}
-
-:global(html.dark) .removeBtn {
-  color: rgba(255, 255, 255, 0.45);
 }

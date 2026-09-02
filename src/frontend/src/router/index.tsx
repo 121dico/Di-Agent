@@ -10,6 +10,8 @@ import { useAuthStore } from '@/store/authStore';
 import LoginView from '@/views/LoginView';
 import RegisterView from '@/views/RegisterView';
 import NotFoundView from '@/views/NotFoundView';
+import { RouteErrorFallback } from '@/components/shell/AppErrorFallback';
+import { canAccessWorkspacePath } from '@/utils/workspaceAccess';
 
 const ChatView = lazy(() => import('@/views/ChatView'));
 const ContactsView = lazy(() => import('@/views/ContactsView'));
@@ -17,6 +19,7 @@ const AgentsView = lazy(() => import('@/views/AgentsView'));
 const SkillsView = lazy(() => import('@/views/SkillsView'));
 const KnowledgeView = lazy(() => import('@/views/KnowledgeView'));
 const TaskBoardView = lazy(() => import('@/views/TaskBoardView'));
+const ReportsView = lazy(() => import('@/views/ReportsView'));
 const SettingsView = lazy(() => import('@/views/SettingsView'));
 
 const withSuspense = (el: React.ReactNode) => (
@@ -43,14 +46,22 @@ function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function AdminWorkspaceRoute({ path, children }: { path: string; children: React.ReactNode }) {
+  const isAdmin = useAuthStore((state) => state.user?.is_admin ?? false);
+  if (!canAccessWorkspacePath(path, isAdmin)) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
 const routes: RouteObject[] = [
   {
     path: '/login',
     element: <PublicOnlyRoute><LoginView /></PublicOnlyRoute>,
+    errorElement: <RouteErrorFallback />,
   },
   {
     path: '/register',
     element: <PublicOnlyRoute><RegisterView /></PublicOnlyRoute>,
+    errorElement: <RouteErrorFallback />,
   },
   {
     path: '/',
@@ -59,19 +70,22 @@ const routes: RouteObject[] = [
         <AppLayout />
       </ProtectedRoute>
     ),
+    errorElement: <RouteErrorFallback />,
     children: [
       { index: true, element: withSuspense(<ChatView />) },
       { path: 'contacts', element: withSuspense(<ContactsView />) },
       { path: 'agents', element: withSuspense(<AgentsView />) },
-      { path: 'skills', element: withSuspense(<SkillsView />) },
-      { path: 'knowledge', element: withSuspense(<KnowledgeView />) },
-      { path: 'tasks', element: withSuspense(<TaskBoardView />) },
+      { path: 'skills', element: <AdminWorkspaceRoute path="/skills">{withSuspense(<SkillsView />)}</AdminWorkspaceRoute> },
+      { path: 'knowledge', element: <AdminWorkspaceRoute path="/knowledge">{withSuspense(<KnowledgeView />)}</AdminWorkspaceRoute> },
+      { path: 'tasks', element: <AdminWorkspaceRoute path="/tasks">{withSuspense(<TaskBoardView />)}</AdminWorkspaceRoute> },
+      { path: 'reports', element: withSuspense(<ReportsView />) },
       { path: 'settings', element: withSuspense(<SettingsView />) },
     ],
   },
   {
     path: '*',
     element: <NotFoundView />,
+    errorElement: <RouteErrorFallback />,
   },
 ];
 

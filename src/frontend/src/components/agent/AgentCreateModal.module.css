@@ -28,6 +28,19 @@
   color: var(--color-text-tertiary);
 }
 
+.selectionActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.selectionActions :global(.ant-checkbox-wrapper) {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .helper {
   font-size: 11px;
   color: var(--color-text-tertiary);
@@ -65,7 +78,7 @@
 .templatePill:hover {
   border-color: var(--color-primary);
   color: var(--color-primary);
-  background: rgba(47, 143, 107, 0.04);
+  background: rgba(15, 118, 110, 0.04);
 }
 
 /* ── Toolbar (matches prompt template style) ── */
@@ -105,7 +118,7 @@
 }
 
 .filterPill:hover {
-  border-color: rgba(47, 143, 107, 0.3);
+  border-color: rgba(15, 118, 110, 0.3);
   color: var(--color-primary);
 }
 
@@ -153,13 +166,13 @@
 }
 
 .toolCard:hover {
-  border-color: rgba(47, 143, 107, 0.25);
+  border-color: rgba(15, 118, 110, 0.25);
 }
 
 .toolCardSelected {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 1px var(--color-primary);
-  background: rgba(47, 143, 107, 0.03);
+  background: rgba(15, 118, 110, 0.03);
 }
 
 .toolCardPlatform {
@@ -243,13 +256,13 @@
 }
 
 .skillCard:hover {
-  border-color: rgba(47, 143, 107, 0.3);
+  border-color: rgba(15, 118, 110, 0.3);
 }
 
 .skillCardSelected {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 1px var(--color-primary);
-  background: rgba(47, 143, 107, 0.04);
+  background: rgba(15, 118, 110, 0.04);
 }
 
 .skillCardName {
@@ -325,4 +338,22 @@
   .skillGrid {
     grid-template-columns: 1fr;
   }
+}
+
+.baseColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.baseMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.baseMetaText {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
 }

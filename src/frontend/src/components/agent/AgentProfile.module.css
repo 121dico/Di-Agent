@@ -32,7 +32,7 @@
   aspect-ratio: 1 / 1;
   background: var(--gradient-agent) !important;
   color: #fff;
-  box-shadow: 0 8px 16px rgba(47, 143, 107, 0.2);
+  box-shadow: 0 8px 16px rgba(15, 118, 110, 0.2);
 }
 
 .clickableAvatar {
@@ -107,7 +107,7 @@
 }
 
 .actions :global(.ant-btn:hover) {
-  border-color: rgba(47, 143, 107, 0.35);
+  border-color: rgba(15, 118, 110, 0.35);
   color: var(--color-primary);
 }
 
@@ -217,6 +217,15 @@
 .overviewCardHint {
   font-size: 11px;
   color: var(--color-text-tertiary);
+}
+
+.runtimeState {
+  grid-column: 1 / -1;
+  width: 100%;
+  padding: 20px 12px;
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  text-align: center;
 }
 
 .overviewDescriptionText {
@@ -387,7 +396,7 @@
 }
 
 .conversationItem:hover {
-  background: rgba(47, 143, 107, 0.04);
+  background: rgba(15, 118, 110, 0.04);
 }
 
 .conversationIcon {
@@ -436,7 +445,7 @@
 }
 
 .conversationStatus_completed {
-  background: rgba(47, 143, 107, 0.12);
+  background: rgba(15, 118, 110, 0.12);
   color: var(--color-primary);
 }
 
@@ -615,7 +624,7 @@
 }
 
 .filterPill:hover {
-  border-color: rgba(47, 143, 107, 0.3);
+  border-color: rgba(15, 118, 110, 0.3);
   color: var(--color-primary);
 }
 
@@ -644,7 +653,7 @@
 }
 
 .toolCard:hover {
-  border-color: rgba(47, 143, 107, 0.3);
+  border-color: rgba(15, 118, 110, 0.3);
 }
 
 .toolCardSelected {
@@ -787,7 +796,7 @@
 }
 
 :global(html.dark) .conversationItem:hover {
-  background: rgba(52, 211, 153, 0.06);
+  background: rgba(22, 140, 128, 0.06);
 }
 
 :global(html.dark) .descriptionCard {
@@ -812,7 +821,7 @@
 }
 
 :global(html.dark) .toolCard:hover {
-  border-color: rgba(47, 143, 107, 0.4);
+  border-color: rgba(15, 118, 110, 0.4);
 }
 
 :global(html.dark) .toolCardSelected {

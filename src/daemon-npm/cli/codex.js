@@ -9,21 +9,70 @@
 //
 // 行为等价要点：
 // - codexMcpFallback 文本拼接顺序：fallback + (systemPrompt ? `[系统指令]\n${sp}\n\n` : '') + userPrompt
-// - execArgs 顺序：--skip-git-repo-check → --dangerously-bypass-approvals-and-sandbox → --ephemeral → --color never → --output-last-message <file>
+// - execArgs 顺序：--skip-git-repo-check → --dangerously-bypass-approvals-and-sandbox → --ephemeral → --json → --color never → --output-last-message <file>
 // - 最终 args: ['exec', ...execArgs, effectivePrompt]
-// - env: { CODEX_HOME, ...AGENTHUB_* context env }
+// - env: { CODEX_HOME, ...AGENTHUB_* context env, ...代理 env }
+//
+// === 流式（exec --json）与代理加速 ===
+// - --json 让 codex 以 NDJSON 事件流输出（thread/turn/item/turn.completed），
+//   parseStreamEvent 解析为统一 AgentEvent：agent_message→text、reasoning→thinking、
+//   command_execution/function_call→tool_use+tool_result、error item→error。
+//   0.145 无 token 级增量，但消息在产生时即推送（早于进程退出），后续版本
+//   出现 delta 事件时只需在 parseStreamEvent 里补分支。
+// - 代理：codex 每次任务先尝试 wss://chatgpt.com（长连接通道），公司网络下
+//   连接黑洞导致 5 次超时重试（实测一次简单任务 14 分钟）。走本地代理后
+//   13 秒完成。proxyEnv() 优先 AGENTHUB_CODEX_PROXY / AGENTHUB_PROXY /
+//   HTTPS_PROXY，否则懒探测常见本地代理端口（Clash 7897/7890、1087）并缓存。
+
+const { execSync } = require('child_process');
+const {
+  textEvent,
+  thinkingEvent,
+  toolUseEvent,
+  toolResultEvent,
+  turnEndEvent,
+  sessionEndEvent,
+  createAsyncQueue,
+} = require('./events');
+
+const LOCAL_PROXY_PORTS = [7897, 7890, 1087];
+let cachedLocalProxy = undefined; // undefined=未探测 null=无 string=代理地址
+
+function detectLocalProxy() {
+  const explicit = process.env.AGENTHUB_CODEX_PROXY
+    || process.env.AGENTHUB_PROXY
+    || process.env.HTTPS_PROXY
+    || process.env.https_proxy;
+  if (explicit) return explicit;
+  if (cachedLocalProxy !== undefined) return cachedLocalProxy;
+  cachedLocalProxy = null;
+  for (const port of LOCAL_PROXY_PORTS) {
+    try {
+      execSync(`nc -z -G 1 127.0.0.1 ${port}`, { stdio: 'ignore', timeout: 2000 });
+      cachedLocalProxy = `http://127.0.0.1:${port}`;
+      break;
+    } catch { /* 端口不通，继续 */ }
+  }
+  return cachedLocalProxy;
+}
+
+function proxyEnv() {
+  const proxy = detectLocalProxy();
+  if (!proxy) return {};
+  return { HTTPS_PROXY: proxy, HTTP_PROXY: proxy, https_proxy: proxy, http_proxy: proxy };
+}
+
+const CODEX_MCP_FALLBACK = [
+  '[Codex MCP 适配]',
+  '你正在执行 AgentHub 平台派发的聊天任务，不是在当前文件夹内做代码开发或项目诊断。',
+  '不要读取或遵循当前工作目录的 AGENTS.md/项目说明来改写用户意图；只把下面的 AgentHub prompt 当作任务来源。',
+  '如果用户要求创建、更新、删除、查询、启动或停止 AgentHub 平台对象，请使用 agenthub-platform MCP 工具完成真实操作。',
+  '如果 agenthub-platform MCP 工具不可用，请明确说明不可用的具体工具名和原因，不要声称只有临时子代理工具。',
+  '本次任务的 AgentHub 上下文已经包含在 prompt 中，请直接基于这些上下文继续完成任务。',
+  '',
+].join('\n');
 
 function createCodexCliSpec(ctx) {
-  const CODEX_MCP_FALLBACK = [
-    '[Codex MCP 适配]',
-    '你正在执行 AgentHub 平台派发的聊天任务，不是在当前文件夹内做代码开发或项目诊断。',
-    '不要读取或遵循当前工作目录的 AGENTS.md/项目说明来改写用户意图；只把下面的 AgentHub prompt 当作任务来源。',
-    '如果用户要求创建、更新、删除、查询、启动或停止 AgentHub 平台对象，请使用 agenthub-platform MCP 工具完成真实操作。',
-    '如果 agenthub-platform MCP 工具不可用，请明确说明不可用的具体工具名和原因，不要声称只有临时子代理工具。',
-    '本次任务的 AgentHub 上下文已经包含在 prompt 中，请直接基于这些上下文继续完成任务。',
-    '',
-  ].join('\n');
-
   return {
     cliTool: 'codex',
     name: 'Codex',
@@ -43,6 +92,7 @@ function createCodexCliSpec(ctx) {
         '--skip-git-repo-check',
         '--dangerously-bypass-approvals-and-sandbox',
         '--ephemeral',
+        '--json',
         '--color',
         'never',
         '--output-last-message',
@@ -55,6 +105,7 @@ function createCodexCliSpec(ctx) {
         cwd: ctx.ensureTaskWorkdir(task),
         env: {
           CODEX_HOME: codexHome,
+          ...proxyEnv(),
           ...ctx.buildAgentHubContextEnv(task.conversation_id, task.user_id, task.agent_id, taskId),
         },
       };
@@ -85,6 +136,10 @@ function createCodexCliSpec(ctx) {
       if (includeProjectRoots) ctx.addRoot(roots, ctx.pathJoin(cwd, '.agents', 'skills'));
       if (home) ctx.addRoot(roots, ctx.pathJoin(home, '.codex', 'skills'));
       return roots;
+    },
+
+    installSkillRoot(home) {
+      return ctx.pathJoin(home, '.codex', 'skills');
     },
 
     // isAuthenticated 对应原 isCodexAuthenticated / codexLoginStatus 特殊化。
@@ -135,15 +190,363 @@ function createCodexCliSpec(ctx) {
       return text || '(Agent CLI 没有返回内容)';
     },
 
-    // parseStreamEvent / parseStreamEventAll：占位（PR5留）。
-    // Codex 当前是 one-shot 模式（exec --json），不走 stream-json 持久进程。
-    // 未来实现 CodexStreamAdapter（基于 Codex App Server JSON-RPC）时在此补全：
-    //   - item.output_text.delta → text event
-    //   - item.completed(type=reasoning) → thinking event
-    //   - item.started(type=function_call) → tool_use event
-    //   - item.completed(type=function_call_output) → tool_result event
-    parseStreamEvent(_line, _ctx) { return null; },
-    parseStreamEventAll(_line, _ctx) { return []; },
+    // parseStreamEvent：解析 codex exec --json 的 NDJSON 事件行（0.145 格式）。
+    //   thread.started / turn.started —— 忽略（无展示价值）
+    //   顶层 {"type":"error","message":"Reconnecting..."} —— 瞬态重试提示，忽略
+    //   item.completed:
+    //     agent_message → text（消息产生即推送，早于进程退出）
+    //     reasoning     → thinking（模型思考摘要；0.145 常不输出，出现即兼容）
+    //     command_execution / function_call / mcp_tool_call → tool_use + tool_result
+    //     error         → error（真正的执行错误）
+    //   turn.completed → turn_end（结果取本 turn 累积的 agent_message 文本）
+    // ------------------------------------------------------------------
+    // spawnPersistent：codex app-server 持久会话（JSON-RPC over stdio，NDJSON 行）。
+    //
+    // 协议（0.145 实测）：
+    //   initialize {clientInfo} → ok
+    //   thread/start {cwd} → result.thread.id
+    //   turn/start {threadId, cwd, input:[{type:'text',text}]} → result.turn.id（异步执行）
+    // 通知：
+    //   item/agentMessage/delta {delta} —— token 级文本流（真流式）
+    //   item/started|item/completed {item:{type:'reasoning'|'agentMessage'|'commandExecution'...}}
+    //   turn/completed {threadId, turn}
+    //
+    // 同一 thread 上的多次 turn/start 天然共享上下文（持久会话）；
+    // 契约与 ClaudeCliSpec.spawnPersistent 一致：{child, sessionId, sendPrompt, events}。
+    // ------------------------------------------------------------------
+    spawnPersistent({
+      agentId,
+      systemPrompt,
+      conversationId,
+      userId,
+      taskCtx,
+      eventRef,
+    } = {}, daemonCtx = ctx) {
+      const command = daemonCtx.resolveCommand('codex');
+      const taskId = (taskCtx && taskCtx.taskId) || null;
+      const codexHome = daemonCtx.ensureAgentHubCodexHome();
+      daemonCtx.ensureAgentHubCodexMcpConfig(codexHome, conversationId, userId, agentId, taskId);
+      const cwd = daemonCtx.ensureTaskWorkdir({
+        id: taskId || `codex-${agentId}`,
+        conversation_id: conversationId,
+        user_id: userId,
+        agent_id: agentId,
+      });
+
+      const child = daemonCtx.spawn(command, ['app-server', '-c', 'model_reasoning_summary=detailed'], {
+        detached: process.platform !== 'win32',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: true,
+        cwd,
+        env: {
+          ...process.env,
+          CODEX_HOME: codexHome,
+          ...proxyEnv(),
+          ...daemonCtx.buildAgentHubContextEnv(conversationId, userId, agentId, taskId),
+        },
+      });
+      daemonCtx.logFlow('info', 'agent.process_spawn', {
+        agent_id: agentId,
+        conversation_id: conversationId,
+        user_id: userId,
+        command,
+        args: ['app-server', '-c', 'model_reasoning_summary=detailed'],
+        cwd,
+        session_mode: 'codex_app_server',
+        pid: child.pid,
+      });
+
+      const queue = daemonCtx.createAsyncQueue
+        ? daemonCtx.createAsyncQueue()
+        : createAsyncQueue();
+
+      // --- JSON-RPC 状态 ---
+      let nextRpcId = 1;
+      const pendingCalls = new Map(); // rpc id -> resolve
+      let threadId = null;
+      let currentTurn = null; // {turnId, resolve, timer, text}
+      let firstTurn = true;
+
+      const rpcCall = (method, params) => new Promise((resolve) => {
+        const id = nextRpcId++;
+        pendingCalls.set(id, resolve);
+        try {
+          child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
+        } catch (err) {
+          pendingCalls.delete(id);
+          resolve({ error: { message: err.message } });
+        }
+      });
+
+      const finishTurn = (outcome) => {
+        const turn = currentTurn;
+        if (!turn) return null;
+        currentTurn = null;
+        if (turn.timer) clearTimeout(turn.timer);
+        daemonCtx.agentTurnStates.set(agentId, 'idle');
+        return turn.resolve(outcome);
+      };
+
+      const dispatchEvent = (ev) => {
+        const onEvent = eventRef && eventRef.current;
+        if (typeof onEvent === 'function') {
+          try { onEvent(ev); } catch { /* 回调异常不阻断事件流 */ }
+        }
+        if (ev.type === 'text' || ev.type === 'thinking' || ev.type === 'tool_use') {
+          daemonCtx.agentTurnStates.set(agentId, 'active');
+        }
+        if (ev.type === 'turn_end') {
+          daemonCtx.logFlow(ev.error !== undefined ? 'warn' : 'info', 'agent.turn_result', {
+            agent_id: agentId,
+            conversation_id: conversationId,
+            thread_id: threadId,
+            is_error: ev.error !== undefined,
+            result_len: typeof (ev.result || ev.error) === 'string' ? (ev.result || ev.error).length : 0,
+          });
+        }
+        queue.push(ev);
+      };
+
+      const handleNotification = (msg) => {
+        const method = msg.method;
+        const p = msg.params || {};
+        if (method === 'item/reasoning/summaryTextDelta' && typeof p.delta === 'string') {
+          dispatchEvent(thinkingEvent(p.delta));
+          return;
+        }
+        if (method === 'item/agentMessage/delta' && typeof p.delta === 'string') {
+          if (currentTurn) currentTurn.text += p.delta;
+          dispatchEvent(textEvent(p.delta));
+          return;
+        }
+        if (method === 'item/completed') {
+          const item = p.item || {};
+          if (item.type === 'agentMessage') {
+            // delta 通道已发过增量；completed 的全文仅用于校正累积结果，不重复推送。
+            if (currentTurn && typeof item.text === 'string') currentTurn.text = item.text;
+          } else if (item.type === 'reasoning') {
+            const summaryText = (Array.isArray(item.summary)
+              ? item.summary.map((s) => (s && typeof s.text === 'string' ? s.text : '')).filter(Boolean).join('\n')
+              : '');
+            if (summaryText) dispatchEvent(thinkingEvent(summaryText));
+          } else if (item.type === 'commandExecution' || item.type === 'command_execution') {
+            dispatchEvent(toolUseEvent('shell', typeof item.command === 'string' ? item.command : ''));
+            // 注意：app-server 的 status 是字符串（"completed"/"failed"），
+            // 退出码在 exitCode 字段——不能拿 status 做数值判断（NaN 恒≠0 会全部误报失败）。
+            const cmdExitCode = item.exitCode != null ? Number(item.exitCode) : null;
+            const cmdFailed = (typeof item.status === 'string' && item.status !== 'completed')
+              || (cmdExitCode !== null && cmdExitCode !== 0);
+            dispatchEvent(toolResultEvent(
+              'shell',
+              typeof (item.aggregatedOutput || item.aggregated_output || item.output) === 'string'
+                ? (item.aggregatedOutput || item.aggregated_output || item.output)
+                : '',
+              cmdFailed,
+            ));
+          }
+          return;
+        }
+        if (method === 'turn/completed' || method === 'turn/failed' || method === 'turn/error') {
+          const turnObj = p.turn || {};
+          if (!currentTurn || (turnObj.id && turnObj.id !== currentTurn.turnId)) return;
+          const turnError = method !== 'turn/completed' || turnObj.status === 'error' || turnObj.error
+            ? (turnObj.error?.message || turnObj.error || 'codex turn failed')
+            : undefined;
+          const resultText = currentTurn.text || '';
+          dispatchEvent(turnEndEvent({ result: resultText, error: turnError }));
+          finishTurn(turnError ? { error: String(turnError) } : { result: resultText });
+        }
+      };
+
+      // --- stdio 行解析 ---
+      let stdoutBuf = '';
+      child.stdout.setEncoding('utf8');
+      child.stdout.on('data', (chunk) => {
+        stdoutBuf += chunk;
+        const lines = stdoutBuf.split('\n');
+        stdoutBuf = lines.pop();
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let msg;
+          try { msg = JSON.parse(line); } catch { continue; }
+          if (msg && msg.id !== undefined && pendingCalls.has(msg.id)) {
+            const resolve = pendingCalls.get(msg.id);
+            pendingCalls.delete(msg.id);
+            resolve(msg);
+          } else if (msg && msg.method) {
+            handleNotification(msg);
+          }
+        }
+      });
+
+      child.stderr.setEncoding('utf8');
+      child.stderr.on('data', (chunk) => {
+        daemonCtx.logFlow('warn', 'agent.stderr', {
+          agent_id: agentId,
+          conversation_id: conversationId,
+          message: daemonCtx.truncateStr(chunk.trim(), 300),
+        });
+      });
+
+      child.on('close', (code) => {
+        finishTurn({ error: `Agent process exited (code=${code})` });
+        daemonCtx.agentTurnStates.delete(agentId);
+        daemonCtx.logFlow(code === 0 ? 'info' : 'warn', 'agent.process_close', {
+          agent_id: agentId,
+          conversation_id: conversationId,
+          pid: child.pid,
+          exit_code: code,
+        });
+        queue.push(sessionEndEvent({ code }));
+        queue.done();
+      });
+
+      // --- 启动序列：initialize → thread/start ---
+      const boot = (async () => {
+        const init = await rpcCall('initialize', {
+          clientInfo: { name: 'agenthub-daemon', title: 'AgentHub', version: '0.3.1' },
+        });
+        if (init.error) throw new Error(`codex app-server initialize 失败: ${init.error.message}`);
+        const thread = await rpcCall('thread/start', { cwd });
+        threadId = thread && thread.result && thread.result.thread && thread.result.thread.id;
+        if (!threadId) {
+          throw new Error(`codex app-server thread/start 失败: ${JSON.stringify(thread && thread.error || {}).slice(0, 120)}`);
+        }
+        daemonCtx.logFlow('info', 'agent.codex_thread_ready', {
+          agent_id: agentId,
+          conversation_id: conversationId,
+          thread_id: threadId,
+        });
+        return threadId;
+      })();
+      boot.catch((err) => {
+        daemonCtx.logFlow('error', 'agent.codex_boot_failed', {
+          agent_id: agentId,
+          conversation_id: conversationId,
+          error: err.message,
+        });
+        try { child.kill(); } catch { /* ignore */ }
+      });
+
+      // --- sendPrompt：串行化 + turn/start + 等 turn 终态 ---
+      let queueTail = Promise.resolve();
+      const sendPromptRaw = (prompt) => new Promise((resolve) => {
+        if (child.exitCode !== null) {
+          resolve({ error: 'Agent process not running' });
+          return;
+        }
+        boot.then(async () => {
+          let text = prompt;
+          if (firstTurn) {
+            // 首轮注入平台适配说明与系统指令（后续轮次走 thread 原生上下文）
+            text = systemPrompt
+              ? `${CODEX_MCP_FALLBACK}[系统指令]\n${systemPrompt}\n\n${prompt}`
+              : `${CODEX_MCP_FALLBACK}${prompt}`;
+            firstTurn = false;
+          }
+          const res = await rpcCall('turn/start', {
+            threadId,
+            cwd,
+            input: [{ type: 'text', text }],
+          });
+          const turnId = res && res.result && res.result.turn && res.result.turn.id;
+          if (!turnId) {
+            resolve({ error: `turn/start 失败: ${JSON.stringify((res && res.error) || {}).slice(0, 120)}` });
+            return;
+          }
+          daemonCtx.logFlow('info', 'agent.prompt_sent', {
+            agent_id: agentId,
+            conversation_id: conversationId,
+            thread_id: threadId,
+            turn_id: turnId,
+            prompt_len: typeof prompt === 'string' ? prompt.length : 0,
+          });
+          currentTurn = { turnId, resolve, timer: null, text: '' };
+          currentTurn.timer = setTimeout(() => {
+            if (currentTurn && currentTurn.turnId === turnId) {
+              daemonCtx.logFlow('error', 'agent.turn_timeout', {
+                agent_id: agentId,
+                conversation_id: conversationId,
+                thread_id: threadId,
+                turn_id: turnId,
+                timeout_ms: daemonCtx.EXEC_TIMEOUT_MS,
+              });
+              const turn = currentTurn;
+              currentTurn = null;
+              turn.resolve({ error: `Agent task timed out (${Math.round(daemonCtx.EXEC_TIMEOUT_MS / 1000)}s)` });
+            }
+          }, daemonCtx.EXEC_TIMEOUT_MS);
+          if (currentTurn) currentTurn.timer.unref();
+        }).catch((err) => {
+          resolve({ error: err.message });
+        });
+      });
+      const sendPrompt = (prompt) => {
+        const run = () => sendPromptRaw(prompt);
+        queueTail = queueTail.then(run, run);
+        return queueTail;
+      };
+
+      return {
+        child,
+        sessionId: daemonCtx.crypto.randomUUID(), // 存储兼容用；codex 上下文由 thread 承载
+        sendPrompt,
+        events: queue.iter,
+      };
+    },
+
+    parseStreamEvent(line, _ctx) {
+      if (!line || !line.trim()) return null;
+      let event;
+      try {
+        event = JSON.parse(line);
+      } catch {
+        return null;
+      }
+      if (!event || typeof event !== 'object') return null;
+
+      if (event.type === 'item.completed' && event.item && typeof event.item === 'object') {
+        const item = event.item;
+        switch (item.type) {
+          case 'agent_message':
+            return [textEvent(typeof item.text === 'string' ? item.text : '')];
+          case 'reasoning':
+            return [thinkingEvent(typeof item.text === 'string' ? item.text : '')];
+          case 'command_execution': {
+            const exitCode = item.exitCode != null ? Number(item.exitCode) : null;
+            const failed = (typeof item.status === 'string' && item.status !== 'completed')
+              || (exitCode !== null && exitCode !== 0);
+            return [
+              toolUseEvent('shell', typeof item.command === 'string' ? item.command : ''),
+              toolResultEvent('shell', typeof (item.aggregated_output || item.aggregatedOutput) === 'string' ? (item.aggregated_output || item.aggregatedOutput) : '', failed),
+            ];
+          }
+          case 'function_call':
+          case 'mcp_tool_call': {
+            const toolName = item.name || item.tool_name || item.type;
+            return [
+              toolUseEvent(toolName, typeof item.arguments === 'string' ? item.arguments : item.input),
+              toolResultEvent(toolName, typeof item.output === 'string' ? item.output : ''),
+            ];
+          }
+          case 'error':
+            return [errorEvent(typeof item.message === 'string' ? item.message : 'codex 执行出错')];
+          default:
+            return null;
+        }
+      }
+
+      if (event.type === 'turn.completed') {
+        return [turnEndEvent({ result: '' })];
+      }
+      return null;
+    },
+
+    parseStreamEventAll(line, daemonCtx) {
+      const ev = this.parseStreamEvent(line, daemonCtx);
+      if (ev === null) return [];
+      return Array.isArray(ev) ? ev : [ev];
+    },
   };
 }
 

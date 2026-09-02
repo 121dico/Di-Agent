@@ -16,6 +16,7 @@ import (
 	"github.com/agent-hub/backend/internal/catalog"
 	"github.com/agent-hub/backend/internal/ghpages"
 	"github.com/agent-hub/backend/internal/handler"
+	reportinfra "github.com/agent-hub/backend/internal/infrastructure/report"
 	wsinfra "github.com/agent-hub/backend/internal/infrastructure/ws"
 	"github.com/agent-hub/backend/internal/middleware"
 	"github.com/agent-hub/backend/internal/port"
@@ -68,6 +69,9 @@ func main() {
 	msgRepo := repository.NewMessageRepo(db, attachmentRepo, artifactRepo)
 	friendRepo := repository.NewFriendRepo(db)
 	agentRepo := repository.NewAgentRepo(db)
+	agentRuntimeRepo := repository.NewAgentRuntimeRepo(db)
+	reportRepo := repository.NewReportRepo(db)
+	personalReportRepo := repository.NewPersonalReportRepo(db)
 	platformSkillRepo := repository.NewPlatformSkillRepo(db)
 	agentPromptTemplateRepo := repository.NewAgentPromptTemplateRepo(db)
 	taskRepo := repository.NewTaskRepo(db)
@@ -154,6 +158,11 @@ func main() {
 	machineTracker := service.NewMachineTracker(agentRepo, logger)
 	tokenIssuer := service.NewTokenIssuer(cfg.JWT.Secret)
 	agentSvc := service.NewAgentService(agentRepo, machineTracker)
+	agentRuntimeSvc := service.NewAgentRuntimeService(agentRuntimeRepo)
+	reportConnector := reportinfra.NewHTTPConnector(&http.Client{Timeout: 45 * time.Second}, nil)
+	reportRunner := service.NewReportRunner(reportRepo, reportRepo, reportConnector, reportRepo)
+	reportSvc := service.NewReportService(reportRepo, userRepo, reportRunner)
+	personalReportSvc := service.NewPersonalReportService(personalReportRepo)
 	agentSvc.SetToolRegistry(toolRegistry)
 	agentSvc.SetToolsetStore(toolDefRepo)
 	platformSkillSvc := service.NewPlatformSkillService(platformSkillRepo)
@@ -269,6 +278,10 @@ func main() {
 	pptPreviewHandler := handler.NewPptPreviewHandler(cfg.Upload.Dir)
 	wsHandler := handler.NewWebSocketHandler(authSvc, hub, groupSvc, msgSvc, logger, cfg.CORS.AllowedOrigins)
 	agentHandler := handler.NewAgentHandler(agentSvc, hub)
+	agentRuntimeHandler := handler.NewAgentRuntimeHandler(agentRuntimeSvc)
+	reportHandler := handler.NewReportHandler(reportSvc)
+	personalReportHandler := handler.NewPersonalReportHandler(personalReportSvc)
+	agentHandler.SetIPTracker(machineTracker)
 	platformSkillHandler := handler.NewPlatformSkillHandler(platformSkillSvc)
 	agentPromptTemplateHandler := handler.NewAgentPromptTemplateHandler(agentPromptTemplateSvc)
 	userTemplateHandler := handler.NewUserTemplateHandler(userTemplateSvc)
@@ -277,6 +290,8 @@ func main() {
 	toolCategoryHandler := handler.NewToolCategoryHandler(toolCategoryRepo)
 	catalogHandler := catalog.NewHandler(catalogSvc)
 	daemonHandler := handler.NewDaemonHandler(agentSvc, orchSvc, cfg.Daemon.Token, logger, cfg.CORS.AllowedOrigins, daemonHub, hub, streamingBuffer, convRepo)
+	daemonHandler.SetIPTracker(machineTracker)
+	daemonHandler.SetTaskBoardSyncer(taskSvc)
 	// 不再注册 SetDaemonTaskDispatcher：CreateDaemonTask 的每个合法 caller
 	// (createAgentReply / Dispatcher.dispatchCore / agent_browse / agent_skill_open)
 	// 都会自己调 SendToMachine(task.dispatch) 并按需携带 message_id。
@@ -342,6 +357,7 @@ func main() {
 	// All API, daemon, MCP routes
 	router.Setup(r, router.Deps{
 		AuthHandler:                authHandler,
+		TLSPort:                    cfg.Server.TLSPort,
 		ConvHandler:                convHandler,
 		MsgHandler:                 msgHandler,
 		FriendHandler:              friendHandler,
@@ -350,6 +366,9 @@ func main() {
 		UploadHandler:              uploadHandler,
 		PptPreviewHandler:          pptPreviewHandler,
 		AgentHandler:               agentHandler,
+		AgentRuntimeHandler:        agentRuntimeHandler,
+		ReportHandler:              reportHandler,
+		PersonalReportHandler:      personalReportHandler,
 		PlatformSkillHandler:       platformSkillHandler,
 		AgentPromptTemplateHandler: agentPromptTemplateHandler,
 		UserTemplateHandler:        userTemplateHandler,
@@ -378,6 +397,8 @@ func main() {
 	go hub.Run(ctx)
 	go daemonHub.Run(ctx)
 	go machineTracker.Run(ctx)
+	reportScheduler := service.NewReportScheduler(reportSvc, reportRunner, logger)
+	reportScheduler.Start(ctx)
 	// watchdog 晚于正式 Agent 任务超时，避免慢启动 CLI 被提前误判。
 	// 兜底处理 daemon 崩溃 / WS 断开导致 streaming message 卡住的情况（R8 / D6）。
 	// PR5：注入 hub + convRepo 让 watchdog 标记 stale 后广播 message.complete，
@@ -412,6 +433,27 @@ func main() {
 		}
 	}()
 
+	// 可选 HTTPS 监听（同一 handler）：自签名证书即可让浏览器进入安全上下文，
+	// 解锁 navigator.clipboard 等现代 API（局域网 HTTP 下全站复制按钮会静默失败）。
+	// daemon / curl / install.sh 继续走上面的 HTTP 端口，互不影响。
+	var tlsSrv *http.Server
+	if cfg.TLSEnabled() {
+		tlsAddr := fmt.Sprintf(":%d", cfg.Server.TLSPort)
+		tlsSrv = &http.Server{
+			Addr:         tlsAddr,
+			Handler:      r,
+			ReadTimeout:  10 * time.Second,
+			WriteTimeout: 180 * time.Second,
+			IdleTimeout:  60 * time.Second,
+		}
+		go func() {
+			logger.Info("server starting (https)", "addr", tlsAddr, "cert", cfg.Server.TLSCert)
+			if err := tlsSrv.ListenAndServeTLS(cfg.Server.TLSCert, cfg.Server.TLSKey); err != nil && err != http.ErrServerClosed {
+				logger.Error("https server failed", "error", err)
+			}
+		}()
+	}
+
 	// 优雅关闭
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -432,6 +474,11 @@ func main() {
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("server shutdown failed", "error", err)
+	}
+	if tlsSrv != nil {
+		if err := tlsSrv.Shutdown(shutdownCtx); err != nil {
+			logger.Error("https server shutdown failed", "error", err)
+		}
 	}
 
 	logger.Info("server stopped")
@@ -543,6 +590,12 @@ func registerAllToolSpecs(registry *service.ToolRegistry) {
 
 	// Platform infrastructure tools（所有 Agent 默认可用，不可禁用）
 	mustRegister(ctx, registry, tool_specs.RenderCard())
+
+	// Governed report data tools. The daemon exposes these as built-in report
+	// hooks so Agents can discover fields, execute real queries and save results.
+	mustRegister(ctx, registry, tool_specs.DiscoverReportData())
+	mustRegister(ctx, registry, tool_specs.QueryReportData())
+	mustRegister(ctx, registry, tool_specs.SavePersonalReport())
 }
 
 func mustRegister(ctx context.Context, registry *service.ToolRegistry, spec port.MCPToolSpec) {

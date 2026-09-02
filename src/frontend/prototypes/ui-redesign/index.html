@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>Di Agent UI Prototype — THROWAWAY</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-variant="A">
+    <!-- THROWAWAY PROTOTYPE: three variants of the approved shell/chat pilot, switchable via ?variant=. -->
+    <div class="prototype-note" aria-label="原型说明">
+      <span>THROWAWAY PROTOTYPE</span>
+      <b>全部内容均为演示数据</b>
+    </div>
+
+    <main class="stage">
+      <section class="app-frame" aria-label="Di Agent 原型工作台">
+        <div class="rail-slot">
+          <nav class="rail" aria-label="全局导航">
+            <div class="rail-top">
+              <button class="brand-button rail-item" type="button" aria-label="Di Agent 首页">
+                <span class="brand-mark" aria-hidden="true"><i></i></span>
+                <span class="rail-label brand-word">Di Agent</span>
+              </button>
+
+              <button class="rail-item command-trigger" type="button" data-command-trigger>
+                <i data-icon="search"></i>
+                <span class="rail-label">搜索与命令</span>
+                <kbd class="rail-shortcut">⌘K</kbd>
+              </button>
+
+              <div class="rail-divider"></div>
+
+              <a class="rail-item active" href="#messages" aria-current="page">
+                <i data-icon="message"></i>
+                <span class="rail-label">消息</span>
+                <span class="rail-count">3</span>
+              </a>
+              <a class="rail-item" href="#contacts">
+                <i data-icon="users"></i>
+                <span class="rail-label">联系人</span>
+              </a>
+              <a class="rail-item" href="#agents">
+                <i data-icon="bot"></i>
+                <span class="rail-label">Agent</span>
+                <span class="status-dot online" aria-label="2 个 Agent 在线"></span>
+              </a>
+              <a class="rail-item" href="#skills">
+                <i data-icon="sparkles"></i>
+                <span class="rail-label">Skills</span>
+              </a>
+              <a class="rail-item" href="#knowledge">
+                <i data-icon="book"></i>
+                <span class="rail-label">知识库</span>
+              </a>
+              <a class="rail-item" href="#tasks">
+                <i data-icon="check-square"></i>
+                <span class="rail-label">Tasks</span>
+                <span class="rail-count subtle">1</span>
+              </a>
+              <a class="rail-item" href="#reports">
+                <i data-icon="chart"></i>
+                <span class="rail-label">报表</span>
+              </a>
+            </div>
+
+            <div class="rail-bottom">
+              <div class="connection-state rail-item" role="status">
+                <span class="status-dot online"></span>
+                <span class="rail-label">服务已连接</span>
+              </div>
+              <button class="rail-item" type="button">
+                <i data-icon="settings"></i>
+                <span class="rail-label">设置</span>
+              </button>
+              <button class="rail-item profile-row" type="button">
+                <span class="avatar avatar-small">12</span>
+                <span class="rail-label profile-copy"><b>121</b><small>超级管理员</small></span>
+              </button>
+            </div>
+          </nav>
+        </div>
+
+        <aside class="conversation-panel" aria-label="会话列表">
+          <header class="conversation-heading">
+            <div>
+              <span class="eyebrow">WORKSPACE</span>
+              <h1>消息</h1>
+            </div>
+            <button class="icon-button dark" type="button" aria-label="新建对话" title="新建对话">
+              <i data-icon="plus"></i>
+            </button>
+          </header>
+
+          <label class="search-field">
+            <i data-icon="search"></i>
+            <input id="conversation-search" type="search" placeholder="搜索会话" autocomplete="off" />
+            <kbd>⌘K</kbd>
+          </label>
+
+          <div class="conversation-scroll">
+            <section class="conversation-group" data-group="favorite">
+              <button class="group-title" type="button" aria-expanded="true">
+                <span>收藏</span><i data-icon="chevron-down"></i>
+              </button>
+              <div class="group-body">
+                <button class="conversation-row" type="button" data-title="数据分析 Agent" data-subtitle="正在整理价敏报表字段">
+                  <span class="avatar agent-a">数</span>
+                  <span class="conversation-copy">
+                    <span class="conversation-line"><b>数据分析 Agent</b><time>刚刚</time></span>
+                    <span class="conversation-preview"><i class="live-pip"></i> 正在整理价敏报表字段</span>
+                  </span>
+                  <span class="row-actions"><i data-icon="more"></i></span>
+                </button>
+              </div>
+            </section>
+
+            <section class="conversation-group" data-group="running">
+              <button class="group-title" type="button" aria-expanded="true">
+                <span>进行中</span><span class="section-count">1</span><i data-icon="chevron-down"></i>
+              </button>
+              <div class="group-body">
+                <button class="conversation-row active" type="button" data-title="前端重构 Agent" data-subtitle="正在构建可交互视觉原型">
+                  <span class="avatar agent-b">前</span>
+                  <span class="conversation-copy">
+                    <span class="conversation-line"><b>前端重构 Agent</b><time>15:42</time></span>
+                    <span class="conversation-preview"><i class="live-pip"></i> 正在构建可交互视觉原型</span>
+                  </span>
+                  <span class="unread-dot" aria-label="有新消息"></span>
+                  <span class="row-actions"><i data-icon="more"></i></span>
+                </button>
+              </div>
+            </section>
+
+            <section class="conversation-group" data-group="projects">
+              <button class="group-title" type="button" aria-expanded="true">
+                <span>项目 · Di Agent</span><span class="section-count">3</span><i data-icon="chevron-down"></i>
+              </button>
+              <div class="group-body">
+                <button class="conversation-row" type="button" data-title="后端开发 Agent" data-subtitle="接口签名校验已完成">
+                  <span class="avatar agent-c">后</span>
+                  <span class="conversation-copy">
+                    <span class="conversation-line"><b>后端开发 Agent</b><time>14:18</time></span>
+                    <span class="conversation-preview">接口签名校验已完成</span>
+                  </span>
+                  <span class="row-actions"><i data-icon="more"></i></span>
+                </button>
+                <button class="conversation-row" type="button" data-title="产品设计 Agent" data-subtitle="任务详情结构已更新">
+                  <span class="avatar agent-d">产</span>
+                  <span class="conversation-copy">
+                    <span class="conversation-line"><b>产品设计 Agent</b><time>昨天</time></span>
+                    <span class="conversation-preview">任务详情结构已更新</span>
+                  </span>
+                  <span class="row-actions"><i data-icon="more"></i></span>
+                </button>
+                <button class="conversation-row" type="button" data-title="测试 Agent" data-subtitle="21 项交互测试通过">
+                  <span class="avatar agent-e">测</span>
+                  <span class="conversation-copy">
+                    <span class="conversation-line"><b>测试 Agent</b><time>昨天</time></span>
+                    <span class="conversation-preview">21 项交互测试通过</span>
+                  </span>
+                  <span class="row-actions"><i data-icon="more"></i></span>
+                </button>
+              </div>
+            </section>
+
+            <section class="conversation-group" data-group="recent">
+              <button class="group-title" type="button" aria-expanded="true">
+                <span>最近</span><i data-icon="chevron-down"></i>
+              </button>
+              <div class="group-body">
+                <button class="conversation-row" type="button" data-title="知识库助手" data-subtitle="已索引 46 个文档">
+                  <span class="avatar agent-f">知</span>
+                  <span class="conversation-copy">
+                    <span class="conversation-line"><b>知识库助手</b><time>周一</time></span>
+                    <span class="conversation-preview">已索引 46 个文档</span>
+                  </span>
+                  <span class="row-actions"><i data-icon="more"></i></span>
+                </button>
+              </div>
+            </section>
+          </div>
+        </aside>
+
+        <section class="workspace" aria-label="当前对话工作区">
+          <div class="workspace-grid" id="workspace-grid">
+            <section class="chat-canvas">
+              <header class="chat-header">
+                <div class="chat-identity">
+                  <span class="avatar agent-b">前</span>
+                  <div>
+                    <div class="title-line">
+                      <h2 id="chat-title">前端重构 Agent</h2>
+                      <span class="agent-status"><i class="live-pip"></i> 执行中</span>
+                    </div>
+                    <p id="chat-subtitle">正在构建可交互视觉原型</p>
+                  </div>
+                </div>
+                <div class="header-actions" aria-label="对话操作">
+                  <button class="icon-button" type="button" aria-label="搜索消息" title="搜索消息"><i data-icon="search"></i></button>
+                  <button class="icon-button" type="button" aria-label="查看产物" title="查看产物"><i data-icon="paperclip"></i></button>
+                  <button class="icon-button inspector-trigger" type="button" aria-label="打开 Task 详情" title="Task 详情"><i data-icon="panel-right"></i></button>
+                  <button class="icon-button" type="button" aria-label="更多操作" title="更多操作"><i data-icon="more"></i></button>
+                </div>
+              </header>
+
+              <div class="transcript" id="transcript" aria-live="polite">
+                <div class="transcript-measure">
+                  <div class="date-divider"><span>今天 15:38</span></div>
+
+                  <article class="message-group user-message">
+                    <div class="user-bubble">
+                      按照我们确认的 Codex 工作台结构和 Apple 材质，把聊天、任务进程和右侧详情做成一个可以真实交互的原型。
+                    </div>
+                    <div class="message-meta">你 · 15:38</div>
+                  </article>
+
+                  <article class="message-group agent-message">
+                    <header class="agent-message-heading">
+                      <span class="avatar avatar-tiny agent-b">前</span>
+                      <b>前端重构 Agent</b>
+                      <span>15:38</span>
+                    </header>
+                    <div class="agent-document">
+                      <p>已经开始。我会保持生产代码不变，在独立入口验证三个视觉方案，并重点检查：</p>
+                      <ul>
+                        <li>全局侧栏展开时主内容是否完全稳定；</li>
+                        <li>聊天信息流与工具明细能否保持清晰层级；</li>
+                        <li>任务窗口拖拽、缩放和详情联动是否自然；</li>
+                        <li>1440、1280、1024px 下是否存在遮挡。</li>
+                      </ul>
+
+                      <details class="activity-disclosure">
+                        <summary>
+                          <span class="activity-state running"><i data-icon="terminal"></i></span>
+                          <span class="activity-copy"><b>执行记录</b><small>4 个步骤 · 当前正在生成界面</small></span>
+                          <span class="activity-duration">02:14</span>
+                          <i data-icon="chevron-down"></i>
+                        </summary>
+                        <div class="activity-detail">
+                          <div class="activity-row done"><i data-icon="check"></i><span><b>读取设计规范</b><small>已完成</small></span></div>
+                          <div class="activity-row done"><i data-icon="check"></i><span><b>搭建工作台结构</b><small>已完成</small></span></div>
+                          <div class="activity-row current"><span class="spinner"></span><span><b>生成可交互界面</b><small>正在写入独立原型</small></span></div>
+                          <div class="activity-row"><span class="pending-ring"></span><span><b>多尺寸截图验证</b><small>等待执行</small></span></div>
+                        </div>
+                      </details>
+
+                      <div class="artifact-summary">
+                        <span class="artifact-icon"><i data-icon="file-code"></i></span>
+                        <span><b>ui-redesign prototype</b><small>独立前端原型 · 不影响生产代码</small></span>
+                        <button type="button">查看</button>
+                      </div>
+                    </div>
+                    <div class="response-actions">
+                      <button type="button"><i data-icon="copy"></i> 复制</button>
+                      <button type="button"><i data-icon="refresh"></i> 重试</button>
+                    </div>
+                  </article>
+                </div>
+              </div>
+
+              <div class="composer-wrap">
+                <form class="composer" id="composer-form">
+                  <div class="context-row">
+                    <span class="context-chip"><i data-icon="folder"></i> Di-Agent <button type="button" aria-label="移除上下文">×</button></span>
+                    <span class="prototype-data-tag">演示数据</span>
+                  </div>
+                  <textarea id="composer-input" rows="1" placeholder="给 Agent 发送消息…" aria-label="消息内容"></textarea>
+                  <div class="composer-actions">
+                    <div>
+                      <button class="icon-button quiet" type="button" aria-label="添加附件" title="添加附件"><i data-icon="paperclip"></i></button>
+                      <button class="text-tool" type="button"><i data-icon="at-sign"></i> 上下文</button>
+                    </div>
+                    <div>
+                      <button class="model-button" type="button">GPT-5.6 Sol <i data-icon="chevron-down"></i></button>
+                      <button class="send-button" id="send-button" type="submit" aria-label="发送消息"><i data-icon="arrow-up"></i></button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </section>
+
+            <aside class="inspector" id="inspector" aria-label="Task 详情">
+              <header class="inspector-header">
+                <div>
+                  <span class="eyebrow">TASK DETAIL</span>
+                  <h2>重构 Di Agent Web UI</h2>
+                  <p>前端重构 Agent · 来源：当前私聊</p>
+                </div>
+                <button class="icon-button inspector-close" type="button" aria-label="关闭详情"><i data-icon="x"></i></button>
+              </header>
+              <div class="inspector-status">
+                <span class="status-label running"><i class="live-pip"></i> 执行中</span>
+                <span>已用时 18 分钟</span>
+              </div>
+              <div class="inspector-tabs" role="tablist" aria-label="Task 详情分类">
+                <button type="button" role="tab" data-tab="overview">概览</button>
+                <button class="active" type="button" role="tab" data-tab="progress">进程</button>
+                <button type="button" role="tab" data-tab="artifacts">产物</button>
+                <button type="button" role="tab" data-tab="activity">活动</button>
+              </div>
+              <div class="inspector-body">
+                <section class="tab-panel" data-panel="overview" hidden>
+                  <h3>任务摘要</h3>
+                  <p>按照已批准的设计系统，制作可交互原型并完成三种 Web 尺寸验证。</p>
+                  <dl class="summary-grid"><div><dt>负责人</dt><dd>前端重构 Agent</dd></div><div><dt>优先级</dt><dd>高</dd></div><div><dt>开始时间</dt><dd>15:24</dd></div><div><dt>来源</dt><dd>Agent 私聊</dd></div></dl>
+                </section>
+                <section class="tab-panel" data-panel="progress">
+                  <ol class="phase-list">
+                    <li class="complete"><span class="phase-icon"><i data-icon="check"></i></span><div><b>理解</b><small>已读取需求和现有页面</small></div></li>
+                    <li class="complete"><span class="phase-icon"><i data-icon="check"></i></span><div><b>规划</b><small>设计令牌与结构已批准</small></div></li>
+                    <li class="current"><span class="phase-icon"><span class="spinner"></span></span><div><b>执行</b><small>正在构建交互原型</small><button class="inline-disclosure" type="button">查看 4 个子步骤 <i data-icon="chevron-right"></i></button></div></li>
+                    <li><span class="phase-icon"><span class="pending-ring"></span></span><div><b>验证</b><small>等待多尺寸截图</small></div></li>
+                    <li><span class="phase-icon"><span class="pending-ring"></span></span><div><b>完成</b><small>等待视觉验收</small></div></li>
+                  </ol>
+                </section>
+                <section class="tab-panel" data-panel="artifacts" hidden>
+                  <h3>产物</h3>
+                  <button class="file-row" type="button"><i data-icon="file-code"></i><span><b>ui-redesign prototype</b><small>HTML · CSS · JavaScript</small></span><i data-icon="chevron-right"></i></button>
+                  <button class="file-row" type="button"><i data-icon="file"></i><span><b>设计规范</b><small>5 份 Markdown 文档</small></span><i data-icon="chevron-right"></i></button>
+                </section>
+                <section class="tab-panel" data-panel="activity" hidden>
+                  <h3>活动信息流</h3>
+                  <details class="activity-log"><summary>15:38 · 开始生成原型 <i data-icon="chevron-down"></i></summary><p>读取已批准的结构与令牌，创建隔离的三方案预览。</p></details>
+                  <details class="activity-log"><summary>15:31 · Gate 5 批准 <i data-icon="chevron-down"></i></summary><p>交互、状态、动效和响应式规范已锁定。</p></details>
+                </section>
+              </div>
+            </aside>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <button class="task-capsule" id="task-capsule" type="button" aria-expanded="false">
+      <span class="task-capsule-icon"><span class="spinner light"></span></span>
+      <span><b>1 个任务执行中</b><small>执行 · 生成交互原型</small></span>
+      <i data-icon="chevron-up"></i>
+    </button>
+
+    <section class="task-window" id="task-window" aria-label="任务进程" hidden>
+      <header class="task-window-header" id="task-drag-handle">
+        <div><span class="eyebrow">TASK PROGRESS</span><h2>任务进程</h2></div>
+        <div class="task-window-actions">
+          <button class="icon-button task-detail-trigger" type="button" aria-label="打开详情"><i data-icon="panel-right"></i></button>
+          <button class="icon-button task-window-close" type="button" aria-label="收起任务进程"><i data-icon="minus"></i></button>
+        </div>
+      </header>
+      <div class="task-window-body">
+        <button class="active-task-card task-detail-trigger" type="button">
+          <span class="card-top"><span class="status-label running"><i class="live-pip"></i> 执行中</span><time>18:24</time></span>
+          <b>重构 Di Agent Web UI</b>
+          <small>当前：生成可交互视觉原型</small>
+          <span class="mini-steps"><i class="done"></i><i class="done"></i><i class="current"></i><i></i><i></i></span>
+        </button>
+        <div class="task-section-title"><span>最近完成</span><button type="button">查看全部</button></div>
+        <button class="recent-task task-detail-trigger" type="button"><i data-icon="check-circle"></i><span><b>整理设计参考矩阵</b><small>12 分钟前 · 5 步完成</small></span><i data-icon="chevron-right"></i></button>
+        <button class="recent-task task-detail-trigger" type="button"><i data-icon="check-circle"></i><span><b>修复任务面板拖拽</b><small>昨天 · 4 步完成</small></span><i data-icon="chevron-right"></i></button>
+        <button class="recent-task task-detail-trigger" type="button"><i data-icon="check-circle"></i><span><b>同步 Agent 私聊</b><small>昨天 · 6 步完成</small></span><i data-icon="chevron-right"></i></button>
+      </div>
+      <button class="resize-corner" type="button" aria-label="调整任务窗口大小" title="拖拽调整大小"></button>
+    </section>
+
+    <div class="command-layer" id="command-layer" hidden>
+      <button class="command-scrim" type="button" aria-label="关闭命令面板"></button>
+      <section class="command-palette" role="dialog" aria-modal="true" aria-label="搜索与命令">
+        <label><i data-icon="search"></i><input type="search" placeholder="搜索会话、任务或输入命令…" /></label>
+        <div class="command-group"><span>当前工作区</span><button class="active" type="button"><i data-icon="message"></i><b>搜索会话</b><kbd>↵</kbd></button><button type="button"><i data-icon="plus"></i><b>新建对话</b><kbd>⌘N</kbd></button><button type="button"><i data-icon="check-square"></i><b>打开当前 Task</b><kbd>T</kbd></button></div>
+        <div class="command-group"><span>全局</span><button type="button"><i data-icon="bot"></i><b>前往 Agent</b></button><button type="button"><i data-icon="chart"></i><b>前往报表</b></button></div>
+        <footer><span><kbd>↑</kbd><kbd>↓</kbd> 导航</span><span><kbd>Esc</kbd> 关闭</span></footer>
+      </section>
+    </div>
+
+    <div class="prototype-switcher" role="group" aria-label="原型方案切换">
+      <button id="variant-prev" type="button" aria-label="上一个方案"><i data-icon="arrow-left"></i></button>
+      <div><span>原型方案</span><b id="variant-label">A — Balanced Workbench</b></div>
+      <button id="variant-next" type="button" aria-label="下一个方案"><i data-icon="arrow-right"></i></button>
+    </div>
+
+    <div class="toast" id="toast" role="status" hidden></div>
+    <script type="module" src="./prototype.js"></script>
+  </body>
+</html>

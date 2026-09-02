@@ -24,8 +24,27 @@ type DaemonHandler struct {
 	allowedOrigins  []string
 	daemonHub       *ws.DaemonHub
 	userHub         *ws.Hub
+	taskNotifier    TaskChangedNotifier
 	streamingBuffer *service.StreamingBuffer
 	convRepo        service.ConvRepoForDaemon
+	ipTracker       service.MachineIPTracker // 可选：记录 daemon 连接来源 IP
+	taskSync        TaskBoardSyncer          // 可选：完成任务同步任务看板
+}
+
+// TaskChangedNotifier 是任务持久化后通知前端刷新的最小 WS 接口。
+// *ws.Hub 在生产环境满足该接口；测试可从公开事件边界观察 conversation scope。
+type TaskChangedNotifier interface {
+	PushCustomEvent(conversationID string, memberIDs []string, eventType string, data interface{})
+}
+
+// TaskBoardSyncer 把已完成的 daemon 任务同步到任务看板（由 TaskService 实现）。
+type TaskBoardSyncer interface {
+	CreateFromDaemonTask(ctx context.Context, t *model.DaemonTask, result, taskErr string) error
+}
+
+// SetTaskBoardSyncer 注入任务看板同步器（可选，nil 安全）。
+func (h *DaemonHandler) SetTaskBoardSyncer(t TaskBoardSyncer) {
+	h.taskSync = t
 }
 
 // NewDaemonHandler 创建 daemon WebSocket 处理器
@@ -38,6 +57,7 @@ func NewDaemonHandler(agentSvc *service.AgentService, orchSvc *service.Orchestra
 		allowedOrigins:  allowedOrigins,
 		daemonHub:       daemonHub,
 		userHub:         userHub,
+		taskNotifier:    userHub,
 		streamingBuffer: streamingBuffer,
 		convRepo:        convRepo,
 	}
@@ -59,6 +79,11 @@ func (h *DaemonHandler) WithMachine(fn func(*gin.Context, *model.DaemonMachine))
 }
 
 // Handle 处理 daemon WebSocket 连接
+// SetIPTracker 注入 daemon 连接 IP 追踪器（可选，nil 安全）。
+func (h *DaemonHandler) SetIPTracker(t service.MachineIPTracker) {
+	h.ipTracker = t
+}
+
 func (h *DaemonHandler) Handle(c *gin.Context) {
 	token := c.Query("token")
 	if token == "" {
@@ -89,6 +114,11 @@ func (h *DaemonHandler) Handle(c *gin.Context) {
 	}
 	client := ws.NewDaemonClient(conn, machineID)
 	h.daemonHub.Register(client)
+
+	// 记录本次连接来源 IP，供机器列表判断"本机/远程"（浏览器请求 IP 比对）
+	if machine != nil && h.ipTracker != nil {
+		h.ipTracker.RecordIP(machine.ID, c.ClientIP())
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -187,11 +217,13 @@ func (h *DaemonHandler) CompleteTask(c *gin.Context, machine *model.DaemonMachin
 
 	taskCtx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
-	if err := h.agentSvc.CompleteDaemonTask(taskCtx, machine, c.Param("id"), req.Result, req.Error); err != nil {
+	task, err := h.agentSvc.CompleteDaemonTask(taskCtx, machine, c.Param("id"), req.Result, req.Error)
+	if err != nil {
 		h.logger.Error("complete daemon task failed", "machine", machine.ID, "task", c.Param("id"), "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 50043, "message": "提交 daemon 任务结果失败", "data": nil})
 		return
 	}
+	h.syncTaskToBoard(taskCtx, task, req.Result, req.Error)
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "success", "data": nil})
 }
 
@@ -328,12 +360,47 @@ func (h *DaemonHandler) handleTaskComplete(data json.RawMessage, machine *model.
 	if machine != nil {
 		taskCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := h.agentSvc.CompleteDaemonTask(taskCtx, machine, req.TaskID, req.Result, req.Error); err != nil {
+		task, err := h.agentSvc.CompleteDaemonTask(taskCtx, machine, req.TaskID, req.Result, req.Error)
+		if err != nil {
 			h.logger.Warn("persist task result failed", "task_id", req.TaskID, "error", err)
 		}
+		h.syncTaskToBoard(taskCtx, task, req.Result, req.Error)
 	}
 
 	// Orch worker results are now handled by goroutines using dispatchAndWait.
+}
+
+// syncTaskToBoard 统一 WebSocket 与 HTTP polling 两条 daemon 完成路径。
+// 任务结果落内存成功后才创建/修复看板卡片，最后再发送 conversation-scoped 事件。
+func (h *DaemonHandler) syncTaskToBoard(ctx context.Context, task *model.DaemonTask, result, taskErr string) {
+	if h.taskSync == nil || task == nil {
+		return
+	}
+	if err := h.taskSync.CreateFromDaemonTask(ctx, task, result, taskErr); err != nil {
+		h.logger.Warn("sync task to board failed", "task_id", task.ID, "error", err)
+		return
+	}
+	h.logger.Info("task synced to board", "task_id", task.ID, "conversation_id", task.ConversationID)
+	h.pushTaskChanged(ctx, task.ConversationID)
+}
+
+// pushTaskChanged 在看板写入成功后向会话成员发送刷新信号。
+// 通知是提交后的 best-effort 副作用；成员查询或 WS 不可用不影响已持久化结果。
+func (h *DaemonHandler) pushTaskChanged(ctx context.Context, conversationID string) {
+	if h.taskNotifier == nil || h.convRepo == nil || conversationID == "" {
+		return
+	}
+	memberIDs, err := h.convRepo.ListMemberIDs(ctx, conversationID)
+	if err != nil {
+		h.logger.Warn("task.changed list members failed", "conversation_id", conversationID, "error", err)
+		return
+	}
+	if len(memberIDs) == 0 {
+		return
+	}
+	h.taskNotifier.PushCustomEvent(conversationID, memberIDs, "task.changed", map[string]interface{}{
+		"conversation_id": conversationID,
+	})
 }
 
 // handleTaskProgress 处理 daemon 的流式增量上报。

@@ -28,14 +28,14 @@ type AgentPromptTemplateRepo interface {
 // of one catalog.Item for the agent_prompt_template domain. Declared locally so
 // the service package doesn't need to import internal/catalog.
 type AgentPromptTemplateCatalogItem struct {
-	ID          string
-	UserID      string
-	Name        string
-	Category    string
-	Description string
+	ID           string
+	UserID       string
+	Name         string
+	Category     string
+	Description  string
 	SystemPrompt string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 // AgentPromptTemplateCatalogStore is the subset of catalog.Service consumed by

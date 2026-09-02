@@ -570,7 +570,7 @@ func TestStreamingReducer_ObjectInputBatchUnmarshalSucceeds(t *testing.T) {
 // TestStreamingReducer_StringShapeInputUnwrappedCorrectly 验证 daemon content_block_delta
 // 路径下 string-shape input 被正确解码（不带外层引号/转义）。
 //
-// daemon events.js toolUseEvent('', partial_json) 让 input 字段成为 JS string，
+// daemon events.js toolUseEvent(”, partial_json) 让 input 字段成为 JS string，
 // JSON.stringify 后变成带引号的 JSON string。reducer 必须把 RawMessage 解包成
 // 原始 partial_json，而不是直接 string() 转换保留字面引号和反斜杠。
 // 否则 tool_use.Text 会累积成 `"{\"cmd\":\"ls\"}"`（双转义）而非 `{"cmd":"ls"}`。

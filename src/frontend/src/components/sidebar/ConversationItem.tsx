@@ -36,7 +36,7 @@ const AVATAR_COLORS: readonly string[] = [
   '#52c41a',
   '#faad14',
   '#eb2f96',
-  '#722ed1',
+  '#4f7c92',
   '#13c2c2',
 ];
 
@@ -66,11 +66,6 @@ function formatTime(dateStr: string): string {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${month}-${day}`;
-}
-
-function truncate(text: string, maxLen: number): string {
-  if (text.length <= maxLen) return text;
-  return `${text.slice(0, maxLen)}...`;
 }
 
 export const ConversationItem: React.FC<ConversationItemProps> = ({
@@ -172,6 +167,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
       onClick={onSelect}
       role="button"
       tabIndex={0}
+      aria-current={active ? 'page' : undefined}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
@@ -194,7 +190,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
         ) : isGroup ? (
           <Avatar
             style={{
-              backgroundColor: conversation.avatar ? 'transparent' : '#722ed1',
+              backgroundColor: conversation.avatar ? 'transparent' : '#1d1d1f',
               flexShrink: 0,
               borderRadius: conversation.avatar ? '50%' : 10,
             }}
@@ -229,8 +225,8 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
           </span>
         </div>
         <div className={styles.subtitleRow}>
-          <span className={styles.subtitle}>
-            {lastMessage ? truncate(lastMessage, 24) : ''}
+          <span className={styles.subtitle} title={lastMessage || undefined}>
+            {lastMessage || ''}
           </span>
         </div>
       </div>

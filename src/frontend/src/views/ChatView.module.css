@@ -1,101 +1,27 @@
-.empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  position: relative;
-  overflow: hidden;
-  background-color: var(--color-bg-chat);
-  background-image:
-    radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.8), transparent 40%),
-    radial-gradient(circle at 80% 90%, rgba(47, 143, 107, 0.14), transparent 45%),
-    radial-gradient(circle, rgba(0, 0, 0, 0.02) 1px, transparent 1px);
-  background-size: auto, auto, 26px 26px;
-  animation: fadeIn 0.45s ease;
+.workbench { min-width: 0; flex: 1; display: flex; overflow: hidden; height: 100%; background: var(--wb-app); }
+.conversationPanel { width: 288px; min-width: 248px; max-width: 320px; display: flex; flex-direction: column; flex: 0 0 288px; overflow: hidden; border-right: 1px solid var(--wb-border-subtle); background: var(--wb-surface-subtle); }
+.conversationHeader { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 10px 0 16px; border-bottom: 1px solid var(--wb-border-subtle); }
+.conversationHeader strong { color: var(--wb-text-primary); font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
+.conversationTools { display: flex; align-items: center; }
+.refreshError { margin-right: 4px; color: var(--wb-error); font-size: 10px; white-space: nowrap; }
+.conversationTools :global(.ant-btn) { width: 32px; height: 32px; padding: 0; border-radius: var(--radius-3); color: var(--wb-text-secondary); }
+.conversationTools :global(.ant-btn:hover) { color: var(--wb-text-primary) !important; background: var(--wb-surface-hover) !important; }
+.chatWorkspace { position: relative; min-width: 0; flex: 1; display: flex; flex-direction: row; overflow: hidden; background: var(--wb-surface); }
+.chatPane { min-width: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.empty { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 9px; color: var(--color-text-tertiary); }
+.icon { width: 42px; height: 42px; display: grid; place-items: center; margin-bottom: 3px; border: 1px solid var(--wb-border-subtle); border-radius: var(--radius-4); color: var(--wb-text-secondary); }
+.icon svg { width: 18px; height: 18px; stroke-width: 1.7; }
+.title { font-size: 16px; font-weight: 630; color: var(--color-text); }
+.subtitle { font-size: 12px; }
+.emptyAction { height: 34px; display: inline-flex; align-items: center; gap: 7px; margin-top: 5px; padding: 0 12px; border: 1px solid var(--wb-action); border-radius: var(--radius-3); color: #fff; background: var(--wb-action); cursor: pointer; font-size: 12px; font-weight: 600; }
+.emptyAction:hover { background: var(--wb-action-hover); }
+.emptyAction:active { transform: translateY(1px); }
+.emptyAction:focus-visible { outline: 2px solid rgba(10, 102, 255, .72); outline-offset: 2px; }
+
+@media (max-width: 1120px) {
+  .conversationPanel { width: 260px; flex-basis: 260px; }
 }
 
-.empty::before,
-.empty::after {
-  content: '';
-  position: absolute;
-  border-radius: 999px;
-  opacity: 0.45;
-  filter: blur(12px);
-}
-
-.empty::before {
-  width: 280px;
-  height: 280px;
-  background: rgba(255, 196, 87, 0.35);
-  top: -120px;
-  right: 12%;
-}
-
-.empty::after {
-  width: 220px;
-  height: 220px;
-  background: rgba(47, 143, 107, 0.28);
-  bottom: -120px;
-  left: 10%;
-}
-
-.icon {
-  font-size: 66px;
-  opacity: 0.45;
-  line-height: 1;
-  user-select: none;
-  animation: float 4s ease-in-out infinite;
-}
-
-.title {
-  font-size: 24px;
-  font-weight: 700;
-  font-family: var(--font-family-display);
-  color: var(--color-text);
-  letter-spacing: -0.3px;
-}
-
-.subtitle {
-  font-size: 14px;
-  color: var(--color-text-secondary);
-  margin-top: -8px;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-6px);
-  }
-}
-
-/* ── 暗色模式 ── */
-:global(html.dark) .empty {
-  background-image:
-    radial-gradient(circle at 20% 20%, rgba(52, 211, 153, 0.08), transparent 40%),
-    radial-gradient(circle at 80% 90%, rgba(52, 211, 153, 0.1), transparent 45%),
-    radial-gradient(circle, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-}
-
-:global(html.dark) .empty::before {
-  background: rgba(251, 191, 36, 0.15);
-}
-
-:global(html.dark) .empty::after {
-  background: rgba(52, 211, 153, 0.15);
+@media (max-width: 720px) {
+  .reportWorkspaceOpen .conversationPanel { display: none; }
 }

@@ -1,0 +1,173 @@
+.dock {
+  position: fixed;
+  top: var(--task-panel-y, 58px);
+  left: var(--task-panel-x, calc(var(--ui-viewport-width) - 142px));
+  z-index: var(--z-task);
+  width: 128px;
+  display: flex;
+  flex-direction: column;
+  animation: taskSurfaceEnter var(--motion-overlay) var(--ease-out) both;
+  transition: top var(--motion-snap) var(--ease-out), left var(--motion-snap) var(--ease-out), filter var(--motion-control) var(--ease-standard);
+}
+.dockDragging { filter: drop-shadow(0 18px 28px rgba(29, 29, 31, .16)); transition: none; }
+
+.fab {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px 0 6px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-4);
+  color: var(--color-text);
+  background: var(--glass-bg);
+  box-shadow: var(--shadow-overlay);
+  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  transition: color var(--motion-control) var(--ease-standard), background-color var(--motion-control) var(--ease-standard), box-shadow var(--motion-control) var(--ease-standard);
+}
+.dockDragging .fab { cursor: grabbing; }
+.fab:hover { background: rgba(255, 255, 255, .96); box-shadow: var(--shadow-floating); }
+.fabIcon { width: 22px; height: 22px; display: grid; place-items: center; border-radius: var(--radius-2); color: var(--wb-text-primary); background: var(--wb-surface-hover); }
+.fabText { font-size: 11px; font-weight: 620; }
+.fabCount, .sectionCount { min-width: 18px; height: 18px; display: grid; place-items: center; padding: 0 5px; border-radius: 9px; color: var(--color-text-secondary); background: var(--color-bg-tertiary); font-size: 9px; }
+
+.panel {
+  position: fixed;
+  top: var(--task-panel-y, 58px);
+  left: var(--task-panel-x, calc(var(--ui-viewport-width) - 334px));
+  z-index: var(--z-task);
+  width: var(--task-panel-width, 320px);
+  height: var(--task-panel-height, 520px);
+  max-width: var(--ui-viewport-width);
+  max-height: var(--ui-viewport-height);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-6);
+  color: var(--color-text);
+  background: var(--glass-bg-strong);
+  box-shadow: var(--shadow-floating);
+  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter);
+  animation: taskSurfaceEnter var(--motion-panel) var(--ease-out) both;
+  transition: top var(--motion-snap) var(--ease-out), left var(--motion-snap) var(--ease-out), box-shadow var(--motion-control) var(--ease-standard);
+}
+.panelDragging, .panelResizing { transition: none; }
+.panelDragging { box-shadow: 0 24px 64px rgba(29, 29, 31, .2), 0 5px 16px rgba(29, 29, 31, .09); }
+.ambientOrb, .cardGlow { display: none; }
+.snapPreview { position: absolute; z-index: 3; display: block; border-radius: 2px; background: rgba(10, 102, 255, .72); pointer-events: none; }
+.snapLeft, .snapRight { top: 20px; bottom: 20px; width: 2px; }
+.snapTop, .snapBottom { right: 20px; left: 20px; height: 2px; }
+.snapLeft { left: 3px; }
+.snapRight { right: 3px; }
+.snapTop { top: 3px; }
+.snapBottom { bottom: 3px; }
+.panelHeader { min-height: 52px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px 0 12px; border-bottom: 1px solid var(--color-border-light); cursor: grab; touch-action: none; user-select: none; }
+.panelHeaderDragging { cursor: grabbing; }
+.panelHeading { display: flex; align-items: center; gap: 9px; }
+.panelTitleIcon { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 7px; color: var(--color-primary); background: var(--color-primary-bg); }
+.panelTitle, .panelSubtitle { display: block; }
+.panelTitle { font-size: 13px; font-weight: 650; }
+.panelSubtitle { margin-top: 1px; color: var(--color-text-tertiary); font-size: 9px; }
+.panelCollapse { width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 7px; color: var(--color-text-secondary); background: transparent; cursor: pointer; }
+.panelContent { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; overflow: hidden; padding: 8px; }
+.taskSection { min-height: 0; display: flex; flex: 0 0 auto; flex-direction: column; }
+.historySection { flex: 1 1 auto; overflow: hidden; }
+.sectionHeader { min-height: 32px; display: flex; align-items: center; justify-content: space-between; padding: 0 4px; }
+.sectionTitle { display: flex; align-items: center; gap: 6px; color: var(--color-text-secondary); font-size: 10px; font-weight: 650; }
+.cardListActive, .cardListHistory { min-height: 0; display: flex; flex-direction: column; gap: 5px; overflow-y: auto; }
+.cardListActive { max-height: 44vh; flex: 0 1 auto; }
+.cardListHistory { flex: 1; }
+
+.taskCard { width: 100%; display: flex; flex: 0 0 auto; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--color-border-light); border-radius: 9px; color: inherit; background: rgba(255, 255, 255, .66); cursor: pointer; text-align: left; transition: color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard); }
+.taskCard:hover { border-color: var(--color-border); background: rgba(255, 255, 255, .9); }
+.cardActive { border-left: 2px solid var(--wb-focus); }
+.cardFailed { border-left: 2px solid var(--color-danger); }
+.cardCanceled { opacity: .76; }
+.cardComplete { border-left: 2px solid var(--color-success); }
+.cardTopline, .currentLine, .openHint, .detailStepHeading, .stepSummaryLine { display: flex; align-items: center; }
+.cardTopline { min-width: 0; gap: 6px; }
+.agentMark { width: 20px; height: 20px; display: grid; place-items: center; flex: 0 0 20px; border-radius: 6px; color: var(--color-primary); background: var(--color-primary-bg); }
+.agentName { flex: 0 0 auto; font-size: 10px; font-weight: 650; }
+.conversationName { min-width: 0; flex: 1; overflow: hidden; color: var(--color-text-tertiary); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.statusPill { flex: 0 0 auto; color: var(--color-text-tertiary); font-size: 9px; font-weight: 620; }
+.taskTitle { display: -webkit-box; overflow: hidden; font-size: 12px; font-weight: 640; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.currentLine { min-width: 0; gap: 6px; color: var(--color-text-secondary); font-size: 9px; }
+.currentLine > :first-child { color: var(--color-primary); }
+.cardTime { margin-left: auto; color: var(--color-text-tertiary); font-variant-numeric: tabular-nums; }
+.stepPreview { display: flex; flex-direction: column; gap: 3px; padding-left: 2px; }
+.previewStep { min-width: 0; display: flex; align-items: center; gap: 6px; color: var(--color-text-tertiary); font-size: 9px; }
+.previewIcon { width: 12px; display: grid; place-items: center; color: var(--color-success); font-size: 9px; }
+.previewLabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.steprunning .previewIcon { color: var(--wb-link); }
+.stepfailed .previewIcon { color: var(--color-danger); }
+.stepcanceled .previewIcon, .steppending .previewIcon { color: var(--color-text-tertiary); }
+.pendingDot { width: 6px; height: 6px; border: 1px solid currentColor; border-radius: 50%; }
+.openHint { justify-content: flex-end; gap: 4px; color: var(--color-text-tertiary); font-size: 9px; }
+.emptyState, .emptyStateCompact { display: flex; align-items: center; justify-content: center; border: 1px dashed var(--color-border); border-radius: 9px; color: var(--color-text-tertiary); font-size: 9px; text-align: center; }
+.emptyState { min-height: 78px; flex-direction: column; gap: 4px; }
+.emptyState strong { color: var(--color-text-secondary); font-size: 11px; }
+.emptyIcon { color: var(--color-success); font-size: 15px; }
+.emptyStateCompact { min-height: 48px; padding: 10px; }
+
+.resizeHandle { position: absolute; right: 2px; bottom: 2px; width: 22px; height: 22px; border: 0; border-radius: 7px; opacity: .55; background: linear-gradient(135deg, transparent 0 54%, var(--color-text-tertiary) 55% 59%, transparent 60% 70%, var(--color-text-tertiary) 71% 75%, transparent 76%); cursor: nwse-resize; touch-action: none; }
+.resizeHandleActive, .resizeHandle:hover { opacity: 1; }
+
+.stepDisclosure { min-width: 0; }
+.stepSummary { display: flex; min-width: 0; flex-direction: column; gap: 4px; cursor: pointer; list-style: none; }
+.stepSummary::-webkit-details-marker { display: none; }
+.detailStepHeading { justify-content: space-between; gap: 8px; color: var(--color-text); font-size: 11px; font-weight: 630; }
+.detailStepState { color: var(--color-text-tertiary); font-size: 9px; }
+.stepSummaryLine { justify-content: space-between; gap: 8px; color: var(--color-text-secondary); font-size: 10px; }
+.stepSummaryLine > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stepChevron { flex: 0 0 auto; color: var(--color-text-tertiary); font-size: 8px; transition: transform var(--motion-control) var(--ease-out); }
+.stepDisclosure[open] .stepChevron { transform: rotate(90deg); }
+.detailText { margin-top: 6px; padding: 8px; overflow-wrap: anywhere; white-space: pre-wrap; color: var(--color-text-secondary); background: var(--color-bg-tertiary); font-size: 10px; line-height: 1.55; }
+
+.fab:focus-visible, .taskCard:focus-visible, .panelCollapse:focus-visible, .resizeHandle:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+.liveRegion {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.taskCard:focus-visible { border-color: rgba(10, 102, 255, .38); outline-color: rgba(10, 102, 255, .72); }
+.taskCard:active { background: var(--wb-surface-hover); }
+.panelCollapse:hover { color: var(--wb-text-primary); background: var(--wb-surface-hover); }
+
+.fab svg, .panel svg, .taskCard svg { width: 14px; height: 14px; stroke-width: 1.8; }
+.spin { animation: taskIconSpin 900ms linear infinite; }
+@keyframes taskIconSpin { to { transform: rotate(360deg); } }
+
+@keyframes taskSurfaceEnter {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 1100px) {
+  .panel {
+    max-width: calc(var(--ui-viewport-width) - 16px);
+    max-height: calc(var(--ui-viewport-height) - 16px);
+  }
+  .dock { top: var(--task-panel-y, 50px); left: var(--task-panel-x, calc(var(--ui-viewport-width) - 136px)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock, .panel { animation: none; transition: none; }
+  .stepChevron { transition: none; }
+  .spin { animation: none; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .fab, .panel { background: var(--wb-surface); backdrop-filter: none; -webkit-backdrop-filter: none; }
+}

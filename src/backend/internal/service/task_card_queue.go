@@ -19,10 +19,10 @@ import (
 //   - TTL 清理（防泄漏，超过 ttl 未 drain 的 entry 清掉）
 //   - 线程安全（sync.Mutex）
 type TaskCardQueue struct {
-	mu         sync.Mutex
-	cards      map[string][]map[string]any // task_id → cards
-	pushTimes  map[string]time.Time        // task_id → 最近一次 push 时间
-	ttl        time.Duration               // entry 过期阈值
+	mu        sync.Mutex
+	cards     map[string][]map[string]any // task_id → cards
+	pushTimes map[string]time.Time        // task_id → 最近一次 push 时间
+	ttl       time.Duration               // entry 过期阈值
 }
 
 // NewTaskCardQueue 创建默认 TTL = 1 小时的队列。

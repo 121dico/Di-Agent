@@ -67,6 +67,12 @@ const CONFIG = {
   // —— 技能 / Agent 管理 ——
   openPathTool: '__agenthub_open_path__',
   openPathTimeoutMs: 5000,
+  skillInstall: {
+    toolName: '__agenthub_install_skill__',
+    gitTimeoutMs: 60000,
+    maxFiles: 500,
+    maxBytes: 20 * 1024 * 1024,
+  },
   startQueueIntervalMs: 3000,
   minDescriptionChars: 6,
   sessionsFile: path.join(os.homedir(), '.agenthub', 'sessions.json'),
@@ -104,6 +110,7 @@ const START_QUEUE_INTERVAL_MS = CONFIG.startQueueIntervalMs;
 const OPEN_PATH_TIMEOUT_MS = CONFIG.openPathTimeoutMs;
 const MIN_DESCRIPTION_CHARS = CONFIG.minDescriptionChars;
 const OPEN_PATH_TOOL = CONFIG.openPathTool;
+const INSTALL_SKILL_TOOL = CONFIG.skillInstall.toolName;
 
 // ---------------------------------------------------------------------------
 // TaskContext + OutputCollector 注册表
@@ -1250,6 +1257,7 @@ function getCandidates() {
   return cliTools.allCliTools().map((spec) => ({
     name: spec.name,
     cli_tool: spec.cliTool,
+    variant: spec.variant || 'cli',
     capabilities: spec.defaultCapabilities,
   }));
 }
@@ -1430,7 +1438,14 @@ function scanAgents() {
       if (spec && typeof spec.onResolvedCommand === 'function') {
         spec.onResolvedCommand(command);
       }
-      const version = commandVersion(command);
+      let version = commandVersion(command);
+      // desktop 底座（如 zcode）没有可执行 CLI：通过 App 安装路径判定存在性。
+      if (version === null
+        && spec && spec.variant === 'desktop'
+        && typeof spec.desktopAppInstalled === 'function'
+        && spec.desktopAppInstalled()) {
+        version = 'desktop';
+      }
       if (version === null) return null;
       // 登录态检测委托给 spec.isAuthenticated（仅 codex 实现 isCodexAuthenticated）。
       if (spec && typeof spec.isAuthenticated === 'function' && !spec.isAuthenticated(command)) return null;
@@ -1438,6 +1453,7 @@ function scanAgents() {
       return {
         name: candidate.name,
         cli_tool: candidate.cli_tool,
+        variant: (spec && spec.variant) || 'cli',
         version,
         capabilities: skills.length > 0 ? skills : candidate.capabilities,
       };
@@ -1545,6 +1561,149 @@ function skillRoots(cliTool) {
   const cwd = process.cwd();
   const home = os.homedir();
   return spec.skillRoots(cwd, home);
+}
+
+function parseGitHubSkillSource(prompt) {
+  let payload;
+  try {
+    payload = JSON.parse(prompt);
+  } catch {
+    throw new Error('Invalid GitHub Skill payload');
+  }
+  const sourceURL = String(payload.source_url || '').trim();
+  let parsed;
+  try {
+    parsed = new URL(sourceURL);
+  } catch {
+    throw new Error('Invalid GitHub Skill URL');
+  }
+  if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== 'github.com'
+    || parsed.username || parsed.password || parsed.port) {
+    throw new Error('Only public HTTPS GitHub repositories are supported');
+  }
+  const parts = parsed.pathname.replace(/^\/+|\/+$/g, '').split('/');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    throw new Error('GitHub Skill URL must point to one repository');
+  }
+  const repo = parts[1].replace(/\.git$/, '');
+  const ref = String(payload.ref || '').trim();
+  if (ref && (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/.test(ref) || ref.includes('..') || ref.includes('\\'))) {
+    throw new Error('Invalid GitHub ref');
+  }
+  const rawSubpath = String(payload.subpath || '').trim();
+  if (rawSubpath.includes('\\') || rawSubpath.split('/').includes('..') || path.posix.isAbsolute(rawSubpath)) {
+    throw new Error('Invalid Skill subpath');
+  }
+  const subpath = rawSubpath.replace(/^\/+|\/+$/g, '');
+  return {
+    sourceURL: `https://github.com/${parts[0]}/${repo}`,
+    ref,
+    subpath,
+    cliTool: String(payload.cli_tool || '').trim(),
+  };
+}
+
+function parseSkillManifest(skillFile) {
+  const content = fs.readFileSync(skillFile, 'utf8');
+  const match = content.match(/^---\s*\r?\n([\s\S]*?)\r?\n---(?:\s*\r?\n|$)/);
+  if (!match) throw new Error('SKILL.md must start with YAML frontmatter');
+  const values = {};
+  for (const line of match[1].split(/\r?\n/)) {
+    const field = line.match(/^([a-zA-Z0-9_-]+):\s*(.*?)\s*$/);
+    if (!field) continue;
+    values[field[1]] = field[2].replace(/^(['"])(.*)\1$/, '$2').trim();
+  }
+  const name = values.name || '';
+  const description = values.description || '';
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) || name.length > 64) {
+    throw new Error('Skill name must be 1-64 lowercase letters, numbers, or hyphens');
+  }
+  if (!description || description.length > 1024) {
+    throw new Error('Skill description is required and must be at most 1024 characters');
+  }
+  return { name, description };
+}
+
+function validateSkillTree(sourceDir) {
+  let fileCount = 0;
+  let totalBytes = 0;
+  const walk = (current) => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const entryPath = path.join(current, entry.name);
+      const stat = fs.lstatSync(entryPath);
+      if (stat.isSymbolicLink()) throw new Error('Skill packages cannot contain symbolic links');
+      if (entry.isDirectory()) {
+        if (entry.name !== '.git') walk(entryPath);
+      } else if (entry.isFile()) {
+        fileCount += 1;
+        totalBytes += stat.size;
+        if (fileCount > CONFIG.skillInstall.maxFiles || totalBytes > CONFIG.skillInstall.maxBytes) {
+          throw new Error('Skill package exceeds local deployment limits');
+        }
+      }
+    }
+  };
+  walk(sourceDir);
+}
+
+function installSkillFromDirectory(sourceDir, installRoot) {
+  const resolvedSource = path.resolve(sourceDir);
+  const skillFile = path.join(resolvedSource, 'SKILL.md');
+  if (!fs.existsSync(skillFile) || !fs.statSync(skillFile).isFile()) {
+    throw new Error('Skill directory must contain SKILL.md');
+  }
+  const manifest = parseSkillManifest(skillFile);
+  validateSkillTree(resolvedSource);
+  fs.mkdirSync(installRoot, { recursive: true });
+  const target = path.join(installRoot, manifest.name);
+  if (fs.existsSync(target)) throw new Error(`Skill already exists: ${manifest.name}`);
+  const staging = path.join(installRoot, `.agenthub-install-${crypto.randomUUID()}`);
+  try {
+    fs.cpSync(resolvedSource, staging, {
+      recursive: true,
+      errorOnExist: true,
+      filter: (source) => path.basename(source) !== '.git',
+    });
+    fs.renameSync(staging, target);
+  } catch (error) {
+    fs.rmSync(staging, { recursive: true, force: true });
+    throw error;
+  }
+  return { name: manifest.name, installed_path: target };
+}
+
+async function installGitHubSkill(prompt) {
+  const source = parseGitHubSkillSource(prompt);
+  const spec = cliTools.getCliTool(source.cliTool);
+  if (!spec || typeof spec.installSkillRoot !== 'function') {
+    throw new Error(`Skill installation is not supported for ${source.cliTool || 'this Agent'}`);
+  }
+  const cloneRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agenthub-skill-clone-'));
+  try {
+    const checkout = path.join(cloneRoot, 'repo');
+    const args = ['clone', '--depth', '1', '--single-branch'];
+    if (source.ref) args.push('--branch', source.ref);
+    args.push(`${source.sourceURL}.git`, checkout);
+    execFileSync('git', args, {
+      timeout: CONFIG.skillInstall.gitTimeoutMs,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    });
+    const skillDir = source.subpath ? path.resolve(checkout, ...source.subpath.split('/')) : checkout;
+    const checkoutPrefix = `${path.resolve(checkout)}${path.sep}`;
+    if (skillDir !== path.resolve(checkout) && !skillDir.startsWith(checkoutPrefix)) {
+      throw new Error('Skill subpath escapes the repository');
+    }
+    const result = installSkillFromDirectory(skillDir, spec.installSkillRoot(os.homedir()));
+    if (daemonConn.serverURL && daemonConn.apiKey) {
+      try { await register(daemonConn.serverURL, daemonConn.apiKey); } catch (error) {
+        logFlow('warn', 'skill.install_refresh_failed', { error: errorMessage(error) });
+      }
+    }
+    return JSON.stringify(result);
+  } finally {
+    fs.rmSync(cloneRoot, { recursive: true, force: true });
+  }
 }
 
 function parseSkillFile(fallbackName, sourcePath, content) {
@@ -1930,7 +2089,7 @@ function commandForTask(task, taskCtx) {
   return { command, args: [userPrompt] };
 }
 
-async function executeTask(task, taskCtx) {
+async function executeTask(task, taskCtx, onEvent) {
   if (task.cli_tool === OPEN_PATH_TOOL) {
     logFlow('info', 'task.open_path_start', { task_id: task.id });
     return openSkillLocation(task.prompt);
@@ -1940,6 +2099,10 @@ async function executeTask(task, taskCtx) {
     logFlow('info', 'task.browse_files_start', { task_id: task.id });
     return browseFiles(task.prompt);
   }
+  if (task.cli_tool === INSTALL_SKILL_TOOL) {
+    logFlow('info', 'task.install_skill_start', { task_id: task.id });
+    return installGitHubSkill(task.prompt);
+  }
   const spec = commandForTask(task, taskCtx);
   const taskMeta = {
     task_id: task.id,
@@ -1947,6 +2110,26 @@ async function executeTask(task, taskCtx) {
     agent_id: task.agent_id,
     conversation_id: task.conversation_id,
   };
+  // 桌面端等不支持自动执行的底座：spec.buildCommand 返回 error 标记，
+  // 此处拦截并作为任务结果回传（用户在聊天中直接看到原因，而非晦涩的 spawn 失败）。
+  if (spec && spec.error) {
+    logFlow('warn', 'task.unsupported_base', { ...taskMeta, error: spec.error });
+    return spec.error;
+  }
+
+  // one-shot 流式：CLI 以 NDJSON 事件流输出时（codex exec --json 等），逐行
+  // 解析为 AgentEvent 并推给 onEvent（StreamBuffer → task.progress → 前端）。
+  // 仅当 cli spec 实现了 parseStreamEventAll 且上层提供了 onEvent 时启用。
+  const streamCliSpec = cliTools.getCliTool(task.cli_tool);
+  const streamLineCb = (typeof onEvent === 'function'
+    && streamCliSpec && typeof streamCliSpec.parseStreamEventAll === 'function')
+    ? (line) => {
+        const events = streamCliSpec.parseStreamEventAll(line, initCliToolsCtx);
+        for (const ev of events) {
+          try { onEvent(ev); } catch { /* 回调异常不阻断进程 */ }
+        }
+      }
+    : null;
   // 在 spawn 之前确保 workdir 是 git 仓库——agent 跑 git diff 生成 diff 卡片时
   // 非 git 仓库会 fatal（exit 128），导致前面的文件修改全部丢失。daemon 自动 init +
   // baseline commit 作为兜底，失败不阻塞 task。
@@ -1977,7 +2160,7 @@ async function executeTask(task, taskCtx) {
         spec.sessionId,
         spec.cwd,
         spec.env,
-        { ...taskMeta, mode: 'resume' },
+        { ...taskMeta, mode: 'resume', onStdoutLine: streamLineCb || undefined },
       ));
     } catch (_err) {
       logFlow('warn', 'task.session_resume_failed', {
@@ -1995,7 +2178,7 @@ async function executeTask(task, taskCtx) {
           spec.sessionId,
           spec.cwd,
           spec.env,
-          { ...taskMeta, mode: 'session_id_retry' },
+          { ...taskMeta, mode: 'session_id_retry', onStdoutLine: streamLineCb || undefined },
         ));
       } catch (_err2) {
         const freshId = `agenthub-${String(task.id || crypto.randomUUID()).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
@@ -2012,12 +2195,12 @@ async function executeTask(task, taskCtx) {
           freshId,
           spec.cwd,
           spec.env,
-          { ...taskMeta, mode: 'fresh_session' },
+          { ...taskMeta, mode: 'fresh_session', onStdoutLine: streamLineCb || undefined },
         ));
       }
     }
   } else {
-    ({ stdout, stderr } = await runProcess(spec.command, spec.args, spec.stdin, undefined, spec.cwd, spec.env, { ...taskMeta, mode: 'one_shot' }));
+    ({ stdout, stderr } = await runProcess(spec.command, spec.args, spec.stdin, undefined, spec.cwd, spec.env, { ...taskMeta, mode: 'one_shot', onStdoutLine: streamLineCb || undefined }));
   }
 
   if (spec.outputFile && fs.existsSync(spec.outputFile)) {
@@ -2057,9 +2240,9 @@ async function executeTask(task, taskCtx) {
   return text || '(Agent CLI 没有返回内容)';
 }
 
-async function executeTaskOnce(task, taskCtx) {
+async function executeTaskOnce(task, taskCtx, onEvent) {
   const taskID = task && task.id;
-  if (!taskID) return executeTask(task, taskCtx);
+  if (!taskID) return executeTask(task, taskCtx, onEvent);
   if (activeTaskIDs.has(taskID) || completedTaskIDs.has(taskID)) {
     logFlow('warn', 'task.dispatch_duplicate_ignored', {
       task_id: taskID,
@@ -2071,7 +2254,7 @@ async function executeTaskOnce(task, taskCtx) {
   }
   activeTaskIDs.add(taskID);
   try {
-    const result = await executeTask(task, taskCtx);
+    const result = await executeTask(task, taskCtx, onEvent);
     completedTaskIDs.add(taskID);
     if (completedTaskIDs.size > 1000) {
       completedTaskIDs.delete(completedTaskIDs.values().next().value);
@@ -2369,8 +2552,21 @@ function runProcess(command, args, stdin, sessionId, cwd, extraEnv, meta = {}) {
 
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
+    // 可选的增量行回调（one-shot 流式：codex exec --json 等逐行解析事件）。
+    // 行缓冲：跨 chunk 的半行留到下一轮，进程结束时 flush 残行。
+    let lineBuf = '';
+    const onStdoutLine = typeof meta.onStdoutLine === 'function' ? meta.onStdoutLine : null;
     child.stdout.on('data', (chunk) => {
       stdout += chunk;
+      if (!onStdoutLine) return;
+      lineBuf += chunk;
+      const lines = lineBuf.split('\n');
+      lineBuf = lines.pop();
+      for (const line of lines) {
+        if (line.trim()) {
+          try { onStdoutLine(line); } catch { /* 回调异常不阻断进程 */ }
+        }
+      }
     });
     child.stderr.on('data', (chunk) => {
       stderr += chunk;
@@ -2388,6 +2584,10 @@ function runProcess(command, args, stdin, sessionId, cwd, extraEnv, meta = {}) {
     });
     child.on('close', (code) => {
       clearTimeout(timer);
+      if (onStdoutLine && lineBuf && lineBuf.trim()) {
+        try { onStdoutLine(lineBuf); } catch { /* ignore */ }
+        lineBuf = '';
+      }
       logFlow(code === 0 ? 'info' : 'warn', 'process.exit', {
         ...meta,
         command: spec.command,
@@ -2962,8 +3162,9 @@ async function handleTaskDispatch(ws, data) {
 
   try {
     let result;
+    const persistentSpec = cliTools.getCliTool(task.cli_tool);
     if (
-      task.cli_tool === 'claude' &&
+      persistentSpec && typeof persistentSpec.spawnPersistent === 'function' &&
       task.agent_id &&
       task.conversation_id &&
       process.env.AGENTHUB_DAEMON_DISABLE_STREAM_SLOT !== '1'
@@ -2984,7 +3185,7 @@ async function handleTaskDispatch(ws, data) {
         conversation_id: task.conversation_id,
         mode: 'legacy_spawn',
       });
-      result = await executeTaskOnce(task, taskCtx);
+      result = await executeTaskOnce(task, taskCtx, onEvent);
       if (result === null) return true;
     }
     const artifacts = parseArtifacts(result);
@@ -3386,6 +3587,131 @@ const MCP_TOOLS = [
       const skill = skills.find((item) => item.name.toLowerCase() === name.toLowerCase());
       if (!skill) throw new Error(`skill not found for current agent: ${name}`);
       return skill;
+    },
+  },
+  // ── 受治理的报表数据 ──
+  {
+    name: 'discover_report_data',
+    description: '制作报表或分析数据前必须先调用。列出管理员已接入的数据源和 Agent 可调用字段及能力；不会暴露 endpoint、Hive DDL、签名或密钥。',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: (args, ctx) => ctx.callMcpApi('GET', '/mcp/report-data/contracts'),
+  },
+  {
+    name: 'query_report_data',
+    description: '依据 discover_report_data 返回的字段契约执行真实查询。只能使用已声明字段，不得猜测字段、直接拼 SQL 或编造结果；每页最多 100 行。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        source_id: { type: 'string', description: 'discover_report_data 返回的数据源 ID' },
+        fields: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 30,
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', description: '字段名' },
+              alias: { type: 'string', description: '结果别名' },
+              aggregation: { type: 'string', enum: ['AVG', 'MIN', 'MAX', 'SUM', 'COUNT', 'COUNT_DISTINCT', 'COUNT DISTINCT'] },
+            },
+            required: ['name'],
+            additionalProperties: false,
+          },
+        },
+        filters: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              operator: {
+                type: 'string',
+                enum: ['EQ', 'NEQ', 'IN', 'NOT_IN', 'GEQ', 'LEQ', 'GQ', 'LQ', 'LIKE', 'IS_NULL', 'BETWEEN', 'NOT_BETWEEN', 'NOT_NULL', 'PREFIX', 'SUFFIX'],
+              },
+              value: {},
+            },
+            required: ['name', 'operator'],
+            additionalProperties: false,
+          },
+        },
+        group_by: { type: 'array', items: { type: 'string' } },
+        order_by: { type: 'string', description: '排序字段，可追加 ASC 或 DESC，例如 dt DESC' },
+        page: { type: 'integer', minimum: 1 },
+        page_size: { type: 'integer', minimum: 1, maximum: 100 },
+      },
+      required: ['source_id', 'fields'],
+      additionalProperties: false,
+    },
+    run: async (args, ctx) => {
+      const res = await ctx.callMcpApi('POST', '/mcp/report-data/query', { body: args });
+      const result = res && res.data ? res.data : res;
+      if (result && result.query_id) {
+        if (!ctx.reportQueryProofs) ctx.reportQueryProofs = new Map();
+        ctx.reportQueryProofs.set(result.query_id, {
+          source_id: result.source_id,
+          source_name: result.source_name,
+          source_partition: result.source_partition,
+          duration_ms: result.duration_ms,
+          query: args,
+        });
+      }
+      return res;
+    },
+  },
+  {
+    name: 'save_personal_report',
+    description: '仅在本轮 query_report_data 成功后调用。把真实查询得到的指标、图表、表格和分析保存为当前用户个人报表，并自动在对话中显示可点击卡片。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: '报表标题' },
+        description: { type: 'string', description: '一句话摘要' },
+        data_source_id: { type: 'string', description: '查询使用的数据源 ID' },
+        query_id: { type: 'string', description: '本轮 query_report_data 返回的 query_id' },
+        document: {
+          type: 'object',
+          description: '结构化报表文档，sections 可包含 metric、chart、table、insight、text，data 必须来自真实查询结果。',
+        },
+        style_preset: { type: 'string', enum: ['business', 'journal', 'soft', 'glass', 'balanced'] },
+        style_prompt: { type: 'string' },
+      },
+      required: ['title', 'data_source_id', 'query_id', 'document'],
+      additionalProperties: false,
+    },
+    run: async (args, ctx) => {
+      const proof = ctx.reportQueryProofs && ctx.reportQueryProofs.get(args.query_id);
+      if (!proof) throw new Error('必须先在本轮调用 query_report_data，并使用其真实 query_id 保存报表');
+      if (proof.source_id !== args.data_source_id) throw new Error('data_source_id 与真实查询来源不一致');
+      const body = {
+        conversation_id: ctx.conversationId || undefined,
+        data_source_id: proof.source_id,
+        title: args.title,
+        description: args.description || '',
+        status: 'saved',
+        style_preset: args.style_preset || 'balanced',
+        style_prompt: args.style_prompt || '',
+        query: proof.query,
+        document: args.document,
+        provenance: {
+          source_name: proof.source_name,
+          source_partition: proof.source_partition,
+          query_id: args.query_id,
+          duration_ms: proof.duration_ms,
+          queried_at: new Date().toISOString(),
+        },
+      };
+      const res = await ctx.callMcpApi('POST', '/mcp/personal-reports', { body });
+      const report = res && res.data ? res.data : res;
+      if (!report || !report.id) throw new Error('个人报表保存响应缺少 report id');
+      await ctx.emitCard({
+        type: 'personal_report',
+        id: `personal-report-${report.id}`,
+        report_id: report.id,
+        title: report.title || args.title,
+        summary: report.description || args.description || '真实数据个人报表已生成',
+        source_partition: proof.source_partition || undefined,
+      });
+      return report;
     },
   },
   {
@@ -3986,6 +4312,7 @@ const DEFAULT_AGENT_TOOLS = [
 ];
 const NO_AGENT_TOOLS = [];
 const MANAGEMENT_TOOL_NAMES = ['create_agent', 'update_agent', 'delete_agent'];
+const REPORT_TOOL_NAMES = ['discover_report_data', 'query_report_data', 'save_personal_report'];
 
 // TOOLSET_TEMPLATES is populated from the backend API at startup (see fetch below).
 const TOOLSET_TEMPLATES = {};
@@ -4068,6 +4395,12 @@ async function resolveAllowedTools(ctx) {
     }
     tools = [...toolSet];
   }
+  // Report tools are governed platform hooks: the backend exposes only
+  // administrator-approved non-sensitive fields and validates every query.
+  // Append them at runtime so existing Agents work without being recreated.
+  const toolSet = new Set(tools);
+  for (const reportTool of REPORT_TOOL_NAMES) toolSet.add(reportTool);
+  tools = [...toolSet];
   ctx.allowedTools = tools;
   return ctx.allowedTools;
 }
@@ -4271,6 +4604,10 @@ module.exports = {
   ensureOpenCodeMcpConfig,
   daemonConn,
   onWebSocket,
+  installSkillFromDirectory,
+  MCP_TOOLS,
+  parseGitHubSkillSource,
+  resolveAllowedTools,
   resolveAgentTimeoutMs,
   runtimeAgentKey,
   runningAgents,

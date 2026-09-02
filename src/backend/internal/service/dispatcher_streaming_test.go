@@ -27,9 +27,9 @@ import (
 type fakeStreamingNotifier struct {
 	mu          sync.Mutex
 	customCalls []struct {
-		convID     string
-		eventType  string
-		memberIDs  []string
+		convID    string
+		eventType string
+		memberIDs []string
 	}
 }
 
@@ -311,11 +311,11 @@ func TestDispatcher_StreamingFailure_TaskFailed(t *testing.T) {
 	promiseCh := make(chan *ws.TaskResult, 1)
 	promiseCh <- &ws.TaskResult{TaskID: "task-f2", Error: "daemon crashed"}
 	fakeHub := &fakeDaemonDispatcher{
-		isConnected:       func(_ string) bool { return true },
+		isConnected:         func(_ string) bool { return true },
 		registerTaskPromise: func(_ string) chan *ws.TaskResult { return promiseCh },
-		sendToMachine:     func(_ string, _ ws.WSMessage) error { return nil },
-		awaitTaskResult:   func(_ string) chan *ws.TaskResult { return promiseCh },
-		removeTaskPromise: func(_ string) {},
+		sendToMachine:       func(_ string, _ ws.WSMessage) error { return nil },
+		awaitTaskResult:     func(_ string) chan *ws.TaskResult { return promiseCh },
+		removeTaskPromise:   func(_ string) {},
 	}
 
 	msgRepo := &fakeMsgRepo{}
@@ -360,11 +360,11 @@ func TestDispatcher_StreamingFailure_WaitFails(t *testing.T) {
 
 	// AwaitTaskResult 返回 nil → waitDaemonTask 返回 "daemon not connected for task %s"
 	fakeHub := &fakeDaemonDispatcher{
-		isConnected:       func(_ string) bool { return true },
+		isConnected:         func(_ string) bool { return true },
 		registerTaskPromise: func(_ string) chan *ws.TaskResult { return make(chan *ws.TaskResult, 1) },
-		sendToMachine:     func(_ string, _ ws.WSMessage) error { return nil },
-		awaitTaskResult:   func(_ string) chan *ws.TaskResult { return nil },
-		removeTaskPromise: func(_ string) {},
+		sendToMachine:       func(_ string, _ ws.WSMessage) error { return nil },
+		awaitTaskResult:     func(_ string) chan *ws.TaskResult { return nil },
+		removeTaskPromise:   func(_ string) {},
 	}
 
 	msgRepo := &fakeMsgRepo{}
@@ -409,11 +409,11 @@ func TestDispatcher_StreamingFailure_DispatchFails(t *testing.T) {
 	sendErr := errors.New("ws connection closed")
 
 	fakeHub := &fakeDaemonDispatcher{
-		isConnected:       func(_ string) bool { return true },
+		isConnected:         func(_ string) bool { return true },
 		registerTaskPromise: func(_ string) chan *ws.TaskResult { return make(chan *ws.TaskResult, 1) },
-		sendToMachine:     func(_ string, _ ws.WSMessage) error { return sendErr },
-		awaitTaskResult:   func(_ string) chan *ws.TaskResult { return nil },
-		removeTaskPromise: func(_ string) {},
+		sendToMachine:       func(_ string, _ ws.WSMessage) error { return sendErr },
+		awaitTaskResult:     func(_ string) chan *ws.TaskResult { return nil },
+		removeTaskPromise:   func(_ string) {},
 	}
 
 	msgRepo := &fakeMsgRepo{}

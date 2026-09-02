@@ -1,142 +1,203 @@
 .container {
+  min-height: 100%;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  background: linear-gradient(145deg, #dbeafe 0%, #e8f3ff 25%, #f0f2f5 50%, #ede9fe 75%, #fae8ff 100%);
+  overflow: auto;
+  border-radius: var(--radius-5);
+  color: var(--wb-text-primary);
+  background: var(--wb-canvas);
+}
+
+:global(body.ah-maximized) .container { border-radius: 0; }
+
+.shell {
+  min-height: 680px;
+  display: grid;
+  grid-template-columns: minmax(430px, 1.12fr) minmax(410px, .88fr);
+  flex: 1;
+}
+
+.brandPanel {
   position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(34px, 5vw, 72px);
   overflow: hidden;
-  border-radius: 12px;
+  border-right: 1px solid var(--wb-border-subtle);
+  background: #f2f2ef;
+  animation: brandIn 520ms var(--ease-out) both;
 }
 
-/* 最大化时去掉外框圆角 */
-:global(body.ah-maximized) .container {
-  border-radius: 0;
-}
-
-.container::before {
+.brandPanel::after {
   content: '';
   position: absolute;
-  top: -25%;
-  right: -15%;
-  width: 600px;
-  height: 600px;
+  right: -150px;
+  bottom: 118px;
+  width: 310px;
+  height: 310px;
+  border: 1px solid rgba(29, 29, 31, .07);
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(22, 119, 255, 0.08) 0%, transparent 70%);
+  box-shadow: 0 0 0 54px rgba(29, 29, 31, .018), 0 0 0 108px rgba(29, 29, 31, .012);
   pointer-events: none;
 }
 
-.container::after {
-  content: '';
-  position: absolute;
-  bottom: -20%;
-  left: -10%;
-  width: 500px;
-  height: 500px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.06) 0%, transparent 70%);
-  pointer-events: none;
-}
-
-.card {
-  width: 90vw;
-  max-width: 420px;
-  padding: 48px 44px;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(20px);
-  border-radius: 20px;
-  box-shadow:
-    0 20px 60px rgba(0, 0, 0, 0.08),
-    0 0 0 1px rgba(255, 255, 255, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+.brandHeader {
   position: relative;
   z-index: 1;
-  animation: cardIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes cardIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.logo {
-  text-align: center;
-  margin-bottom: 40px;
-}
-
-.logoIcon {
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 16px;
-  background: linear-gradient(135deg, #1677ff, #7c3aed);
-  border-radius: 16px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 28px;
+  gap: 12px;
+}
+
+.brandMark {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-3);
   color: #fff;
-  box-shadow: 0 8px 24px rgba(22, 119, 255, 0.3);
+  background: var(--wb-action);
+  font-family: var(--font-family-display);
+  font-size: 16px;
+  font-weight: 720;
+  letter-spacing: -.04em;
 }
 
-.logo h1 {
-  font-size: 32px;
-  font-weight: 800;
-  background: linear-gradient(135deg, #1677ff, #7c3aed);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  letter-spacing: -0.8px;
+.brandName {
+  font-family: var(--font-family-display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -.025em;
 }
 
-.logo p {
-  margin-top: 8px;
-  color: var(--color-text-secondary);
-  font-size: 15px;
-  letter-spacing: 1px;
-  font-weight: 400;
+.brandStory {
+  position: relative;
+  z-index: 1;
+  width: min(620px, 100%);
+  margin: auto 0;
+  padding: 64px 0 48px;
 }
 
-@media (max-width: 480px) {
-  .card {
-    padding: 32px 20px;
-    border-radius: 16px;
-  }
-
-  .logo h1 {
-    font-size: 26px;
-  }
-
-  .logoIcon {
-    width: 48px;
-    height: 48px;
-    font-size: 24px;
-  }
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 22px;
+  color: var(--wb-text-tertiary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .15em;
 }
 
-/* ── 暗色模式 ── */
-:global(html.dark) .container {
-  background: linear-gradient(145deg, #0f172a 0%, #1a2332 25%, #1b2432 50%, #1a2744 75%, #1b1b2f 100%);
+.eyebrow i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--wb-success);
+  box-shadow: 0 0 0 4px rgba(22, 124, 70, .09);
 }
 
-:global(html.dark) .container::before {
-  background: radial-gradient(circle, rgba(56, 189, 248, 0.08) 0%, transparent 70%);
+.brandStory h1 {
+  max-width: 640px;
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: clamp(42px, 5vw, 68px);
+  font-weight: 690;
+  letter-spacing: -.058em;
+  line-height: 1.02;
 }
 
-:global(html.dark) .container::after {
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.06) 0%, transparent 70%);
+.brandDescription {
+  max-width: 520px;
+  margin: 26px 0 0;
+  color: var(--wb-text-secondary);
+  font-size: clamp(14px, 1.3vw, 17px);
+  line-height: 1.8;
 }
 
-:global(html.dark) .card {
-  background: rgba(31, 41, 55, 0.92);
-  box-shadow:
-    0 20px 60px rgba(0, 0, 0, 0.3),
-    0 0 0 1px rgba(255, 255, 255, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+.capabilityList {
+  position: relative;
+  z-index: 1;
+  width: min(640px, 100%);
+  border-top: 1px solid var(--wb-border-default);
+}
+
+.capabilityItem {
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: 28px 22px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--wb-border-subtle);
+  transition: padding var(--motion-control) var(--ease-standard), color var(--motion-control) var(--ease-standard);
+}
+
+.capabilityItem:hover { padding-left: 9px; color: #000; }
+.capabilityIndex { color: var(--wb-text-tertiary); font-size: 9px; font-weight: 650; letter-spacing: .08em; }
+.capabilityItem > svg { color: var(--wb-text-secondary); }
+.capabilityItem > svg:last-child { color: var(--wb-text-tertiary); }
+.capabilityItem div { min-width: 0; }
+.capabilityItem strong { display: block; font-size: 12px; font-weight: 680; }
+.capabilityItem p { margin: 4px 0 0; overflow: hidden; color: var(--wb-text-tertiary); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+
+.brandFooter {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 28px;
+  color: var(--wb-text-tertiary);
+  font-size: 8px;
+  font-weight: 650;
+  letter-spacing: .13em;
+}
+
+.authPanel {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  place-items: center;
+  padding: clamp(36px, 6vw, 88px);
+  background: var(--wb-surface);
+  animation: authIn 580ms 70ms var(--ease-out) both;
+}
+
+.formShell { width: min(380px, 100%); align-self: center; }
+.authFootnote { align-self: end; margin: 36px 0 0; color: var(--wb-text-tertiary); font-size: 9px; letter-spacing: .03em; }
+
+@keyframes brandIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes authIn { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
+
+@media (max-width: 900px) {
+  .shell { min-height: 720px; grid-template-columns: 1fr; }
+  .brandPanel { min-height: 260px; padding: 28px 34px 34px; border-right: 0; border-bottom: 1px solid var(--wb-border-subtle); }
+  .brandStory { width: 100%; margin: 42px 0 0; padding: 0; }
+  .brandStory h1 { font-size: clamp(34px, 7vw, 48px); }
+  .brandDescription { max-width: 600px; margin-top: 16px; }
+  .capabilityList, .brandFooter { display: none; }
+  .authPanel { min-height: 460px; padding: 52px 28px 28px; }
+}
+
+@media (max-width: 560px) {
+  .container { border-radius: 0; }
+  .shell { min-height: 100%; }
+  .brandPanel { min-height: 210px; padding: 24px 22px 28px; }
+  .brandStory { margin-top: 30px; }
+  .brandStory h1 { font-size: 32px; line-height: 1.08; }
+  .brandDescription { margin-top: 12px; font-size: 13px; line-height: 1.6; }
+  .eyebrow { display: none; }
+  .authPanel { min-height: 470px; padding: 42px 22px 24px; }
+  .authFootnote { margin-top: 28px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brandPanel, .authPanel { animation: none; }
+  .capabilityItem { transition: none; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .brandPanel { background: #f2f2ef; }
 }

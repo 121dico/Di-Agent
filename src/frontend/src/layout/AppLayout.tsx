@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Alert } from 'antd';
 import { message as antMessage } from '@/utils/message';
-import { LeftOutlined, RightOutlined } from '@ant-design/icons';
-import SettingsPanel from '@/components/settings/SettingsPanel';
 import GroupCreateModal from '@/components/groups/GroupCreateModal';
 import { createGroup } from '@/api/group';
 import { addConversationAgent } from '@/api/conversation';
@@ -15,6 +13,9 @@ import { useMessageStore } from '@/store/messageStore';
 import { useAppBootstrap } from '@/hooks/useAppBootstrap';
 import NewConversationModal from './NewConversationModal';
 import TitleBar from '@/components/common/TitleBar';
+import { TaskProgressWidget } from '@/components/chat/TaskProgressWidget';
+import { GlobalRail } from '@/components/shell/GlobalRail';
+import { CommandPalette } from '@/components/shell/CommandPalette';
 import styles from './AppLayout.module.css';
 
 /**
@@ -28,6 +29,7 @@ const AppLayout: React.FC = () => {
   useAppBootstrap();
 
   const navigate = useNavigate();
+  const location = useLocation();
   const { create } = useConversation();
   const fetchConversations = useConversationStore((s) => s.fetchConversations);
   const setActive = useConversationStore((s) => s.setActive);
@@ -38,17 +40,20 @@ const AppLayout: React.FC = () => {
   }, [status]);
   const showDisconnectAlert = status === 'disconnected' && wasConnectedRef.current;
   const { user, logout: handleLogout } = useAuth();
+  const isAdmin = user?.is_admin ?? false;
 
   const [groupModalOpen, setGroupModalOpen] = useState(false);
-  const [settingsCollapsed, setSettingsCollapsed] = useState(true);
   const [newConvModalOpen, setNewConvModalOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [taskInspectorOpen, setTaskInspectorOpen] = useState(false);
 
   const totalUnread = useMessageStore((s) =>
     Object.values(s.unreadCounts).reduce((sum, c) => sum + c, 0),
   );
 
   useEffect(() => {
-    document.title = totalUnread > 0 ? `(${totalUnread}) AgentHub` : 'AgentHub';
+    document.documentElement.classList.remove('dark');
+    document.title = totalUnread > 0 ? `(${totalUnread}) Di Agent` : 'Di Agent';
   }, [totalUnread]);
 
   useEffect(() => {
@@ -56,6 +61,7 @@ const AppLayout: React.FC = () => {
       const tag = (e.target as HTMLElement).tagName;
       const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable;
       if (e.key === 'Escape') {
+        if (commandOpen) { setCommandOpen(false); return; }
         if (newConvModalOpen) { setNewConvModalOpen(false); return; }
         if (groupModalOpen) { setGroupModalOpen(false); return; }
         return;
@@ -64,7 +70,7 @@ const AppLayout: React.FC = () => {
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key === 'k') {
         e.preventDefault();
-        document.querySelector<HTMLInputElement>('[data-conv-search] input')?.focus();
+        setCommandOpen(true);
         return;
       }
       if (mod && e.key === 'n') {
@@ -75,7 +81,7 @@ const AppLayout: React.FC = () => {
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [groupModalOpen, newConvModalOpen]);
+  }, [commandOpen, groupModalOpen, newConvModalOpen]);
 
   const handleGroupCreate = async (name: string, memberIds: string[]) => {
     try {
@@ -108,34 +114,30 @@ const AppLayout: React.FC = () => {
           />
         )}
 
-        <div
-          className={`${styles.settingsPanel} ${settingsCollapsed ? styles.settingsPanelCollapsed : ''}`}
-        >
-          <SettingsPanel
-            username={user?.username ?? ''}
-            onLogout={handleLogout}
-            wsStatus={status}
-            onCreate={() => setNewConvModalOpen(true)}
-            collapsed={settingsCollapsed}
-          />
-        </div>
+        <GlobalRail
+          username={user?.username ?? ''}
+          wsStatus={status}
+          unreadCount={totalUnread}
+          onCreate={() => setNewConvModalOpen(true)}
+          onOpenCommand={() => setCommandOpen(true)}
+          onLogout={handleLogout}
+        />
 
-        <button
-          className={`${styles.toggleBtn} ${
-            settingsCollapsed ? styles.toggleBtnCollapsed : styles.toggleBtnExpanded
-          }`}
-          onClick={() => setSettingsCollapsed((c) => !c)}
-          aria-label={settingsCollapsed ? '展开侧栏' : '折叠侧栏'}
-        >
-          {settingsCollapsed ? <RightOutlined /> : <LeftOutlined />}
-        </button>
-
-        {/* 右侧：React Router Outlet 渲染当前路由对应的视图。
-            各视图自带 chatPanel 容器，这里只需 flex:1 占满剩余空间。 */}
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden', height: '100%' }}>
-          <Outlet />
+        <div className={`${styles.outletFrame} ${taskInspectorOpen ? styles.outletFrameInspectorOpen : ''}`}>
+          <div className={styles.routeSurface} key={location.pathname}>
+            <Outlet context={{ openNewConversation: () => setNewConvModalOpen(true) }} />
+          </div>
         </div>
       </div>
+
+      {isAdmin && <TaskProgressWidget onInspectorOpenChange={setTaskInspectorOpen} />}
+      <CommandPalette
+        open={commandOpen}
+        onClose={() => setCommandOpen(false)}
+        onCreate={() => setNewConvModalOpen(true)}
+        onNavigate={navigate}
+        isAdmin={isAdmin}
+      />
 
       <GroupCreateModal
         open={groupModalOpen}

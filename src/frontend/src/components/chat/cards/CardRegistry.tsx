@@ -1,4 +1,4 @@
-import type { CardSpec, CardType, InteractiveCard, PlanCard, ApprovalCard, ProgressCard, ProjectCard } from '@/types/card';
+import type { CardSpec, CardType, InteractiveCard, PlanCard, ApprovalCard, ProgressCard, ProjectCard, PersonalReportCard } from '@/types/card';
 
 /**
  * 卡片渲染器注册表——自描述 CardSpec 模式。
@@ -98,6 +98,7 @@ import { ProgressCard as ProgressCardComponent } from './ProgressCard';
 import { InfoCard as InfoCardComponent } from './InfoCard';
 import { DiffCard as DiffCardComponent } from './DiffCard';
 import { ProjectCard as ProjectCardComponent } from './ProjectCard';
+import { PersonalReportCard as PersonalReportCardComponent } from './PersonalReportCard';
 
 // card_type=plan —— 方案选择（多问题翻页，统一提交），交互式
 registerCard<PlanCard>('plan', {
@@ -172,4 +173,9 @@ registerCard('diff', {
 registerCard<ProjectCard>('project', {
   component: ProjectCardComponent,
   // 只读卡片：抽屉控制由卡片内部 useState 完成，不走 onAction
+});
+
+// card_type=personal_report —— owner-only report; click opens the report workspace.
+registerCard<PersonalReportCard>('personal_report', {
+  component: PersonalReportCardComponent,
 });

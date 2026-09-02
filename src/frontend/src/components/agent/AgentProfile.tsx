@@ -12,10 +12,10 @@ import {
   PlayCircleOutlined,
   ReloadOutlined,
   SaveOutlined,
-  ArrowUpOutlined,
   HistoryOutlined,
 } from '@ant-design/icons';
-import type { Agent } from '@/types/agent';
+import type { Agent, AgentRuntimeOverview } from '@/types/agent';
+import { getAgentRuntimeOverview } from '@/api/agent';
 import { useAgentStore } from '@/store/agentStore';
 import { itemToSkill } from '@/api/platformSkill';
 import { useCatalogDomain } from '@/hooks/useCatalogDomain';
@@ -43,6 +43,7 @@ import {
   fetchToolCatalog,
 } from './toolAssignments';
 import { StatusBadge, type StatusBadgeStatus } from '@/components/common/StatusBadge';
+import { buildRuntimeMetrics, getRuntimeStatusMeta } from './agentRuntimePresentation';
 import styles from './AgentProfile.module.css';
 
 interface AgentProfileProps {
@@ -50,52 +51,6 @@ interface AgentProfileProps {
   defaultTab?: string;
   onMessage?: (agent: Agent) => void;
 }
-
-interface OverviewMetric {
-  key: string;
-  label: string;
-  value: string;
-  trend: string;
-}
-
-interface ConversationItem {
-  id: string;
-  content: string;
-  user: string;
-  time: string;
-  status: 'completed' | 'running' | 'failed';
-}
-
-const MOCK_METRICS: OverviewMetric[] = [
-  { key: 'chats', label: '对话次数', value: '128', trend: '↑ 12 本周' },
-  { key: 'active', label: '活跃时长', value: '4.2h', trend: '↑ 0.8h 本周' },
-  { key: 'tool_calls', label: '工具调用', value: '1,042', trend: '↑ 8 本周' },
-  { key: 'tasks', label: '执行任务', value: '36', trend: '↑ 4 本周' },
-];
-
-const MOCK_CONVERSATIONS: ConversationItem[] = [
-  {
-    id: 'mock-1',
-    content: '帮我梳理下这个需求的 PRD，按用户故事拆分里程碑',
-    user: '王小明',
-    time: '06-19 20:11',
-    status: 'completed',
-  },
-  {
-    id: 'mock-2',
-    content: '对比一下 Claude Code 和 Cursor 在多文件重构上的差异',
-    user: '王小明',
-    time: '06-18 16:45',
-    status: 'completed',
-  },
-  {
-    id: 'mock-3',
-    content: '把这个功能的回归测试用例补齐',
-    user: '王小明',
-    time: '06-17 10:22',
-    status: 'running',
-  },
-];
 
 function agentStatusBadge(status: Agent['status']): StatusBadgeStatus {
   switch (status) {
@@ -130,18 +85,6 @@ function agentStatusBadgeLabel(status: Agent['status']): string {
   }
 }
 
-function conversationStatusMeta(status: ConversationItem['status']): { label: string; className: string } {
-  switch (status) {
-    case 'completed':
-      return { label: '已完成', className: 'completed' };
-    case 'running':
-      return { label: '进行中', className: 'running' };
-    case 'failed':
-    default:
-      return { label: '失败', className: 'failed' };
-  }
-}
-
 export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, defaultTab = 'overview', onMessage }) => {
   const updateAgent = useAgentStore((s) => s.updateAgent);
   const updateAgentToolsConfig = useAgentStore((s) => s.updateAgentToolsConfig);
@@ -163,6 +106,9 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, defaultTab = 
   const [toolManageOpen, setToolManageOpen] = useState(false);
   const [dbToolTemplates, setDbToolTemplates] = useState<UserTemplate[]>([]);
   const [catalogReady, setCatalogReady] = useState(false);
+  const [runtimeOverview, setRuntimeOverview] = useState<AgentRuntimeOverview | null>(null);
+  const [runtimeLoading, setRuntimeLoading] = useState(false);
+  const [runtimeError, setRuntimeError] = useState(false);
 
   const { items: rawSkills } = useCatalogDomain('platform_skill');
   const librarySkills = useMemo(() => rawSkills.map(itemToSkill), [rawSkills]);
@@ -195,6 +141,30 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, defaultTab = 
     setActiveTab(defaultTab);
     setEditing(false);
   }, [agent?.id, defaultTab]);
+
+  useEffect(() => {
+    if (!agent) {
+      setRuntimeOverview(null);
+      return;
+    }
+    let active = true;
+    setRuntimeLoading(true);
+    setRuntimeError(false);
+    getAgentRuntimeOverview(agent.id, 7)
+      .then((overview) => {
+        if (active) setRuntimeOverview(overview);
+      })
+      .catch(() => {
+        if (active) {
+          setRuntimeOverview(null);
+          setRuntimeError(true);
+        }
+      })
+      .finally(() => {
+        if (active) setRuntimeLoading(false);
+      });
+    return () => { active = false; };
+  }, [agent?.id]);
 
   useEffect(() => {
     fetchToolCatalog()
@@ -542,15 +512,19 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, defaultTab = 
                 <span className={styles.overviewCardHint}>近 7 天</span>
               </div>
               <div className={styles.metricGrid}>
-                {MOCK_METRICS.map((metric) => (
-                  <div className={styles.metricCard} key={metric.key}>
-                    <span className={styles.metricCardLabel}>{metric.label}</span>
-                    <span className={styles.metricCardValue}>{metric.value}</span>
-                    <span className={styles.metricCardTrend}>
-                      <ArrowUpOutlined /> {metric.trend.replace('↑ ', '')}
-                    </span>
-                  </div>
-                ))}
+                {runtimeLoading && !runtimeOverview ? (
+                  <div className={styles.runtimeState}>正在读取真实运行数据…</div>
+                ) : runtimeError || !runtimeOverview ? (
+                  <div className={styles.runtimeState}>运行数据暂时不可用</div>
+                ) : (
+                  buildRuntimeMetrics(runtimeOverview).map((metric) => (
+                    <div className={styles.metricCard} key={metric.key}>
+                      <span className={styles.metricCardLabel}>{metric.label}</span>
+                      <span className={styles.metricCardValue}>{metric.value}</span>
+                      <span className={styles.metricCardTrend}>近 {runtimeOverview.period_days} 天真实数据</span>
+                    </div>
+                  ))
+                )}
               </div>
             </section>
 
@@ -588,23 +562,31 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, defaultTab = 
                 <span className={styles.overviewCardHint}>来自当前 Agent</span>
               </div>
               <div className={styles.conversationList}>
-                {MOCK_CONVERSATIONS.map((conv) => {
-                  const status = conversationStatusMeta(conv.status);
-                  return (
-                    <div className={styles.conversationItem} key={conv.id}>
-                      <span className={styles.conversationIcon}>
-                        <MessageOutlined />
-                      </span>
-                      <div className={styles.conversationMeta}>
-                        <span className={styles.conversationContent}>{conv.content}</span>
-                        <span className={styles.conversationSub}>{conv.user} · {conv.time}</span>
+                {runtimeLoading && !runtimeOverview ? (
+                  <div className={styles.runtimeState}>正在读取最近运行记录…</div>
+                ) : runtimeError || !runtimeOverview ? (
+                  <div className={styles.runtimeState}>运行记录暂时不可用</div>
+                ) : runtimeOverview.recent_runs.length === 0 ? (
+                  <div className={styles.runtimeState}>近 7 天暂无运行记录</div>
+                ) : (
+                  runtimeOverview.recent_runs.map((run) => {
+                    const status = getRuntimeStatusMeta(run.status);
+                    return (
+                      <div className={styles.conversationItem} key={run.id}>
+                        <span className={styles.conversationIcon}>
+                          <MessageOutlined />
+                        </span>
+                        <div className={styles.conversationMeta}>
+                          <span className={styles.conversationContent}>{run.prompt || '未记录请求内容'}</span>
+                          <span className={styles.conversationSub}>{run.requester_name || '未知用户'} · {formatDateTime(run.created_at)}</span>
+                        </div>
+                        <span className={`${styles.conversationStatus} ${styles[`conversationStatus_${status.className}`]}`}>
+                          {status.label}
+                        </span>
                       </div>
-                      <span className={`${styles.conversationStatus} ${styles[`conversationStatus_${status.className}`]}`}>
-                        {status.label}
-                      </span>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </section>
 

@@ -14,10 +14,10 @@
 
 .thinkingBlock {
   position: relative;
-  border-left: 3px solid var(--color-primary, #1677ff);
-  background: var(--color-thinking-bg, rgba(22, 119, 255, 0.06));
-  border-radius: 6px;
-  padding: 8px 12px;
+  border: 1px solid var(--wb-border-subtle);
+  background: var(--wb-surface-subtle);
+  border-radius: var(--radius-3);
+  padding: 7px 10px;
   margin: 6px 0;
   font-size: 13px;
   color: var(--color-text-secondary, rgba(0, 0, 0, 0.55));
@@ -27,8 +27,8 @@
 
 /* streaming 时背景微微变深 + 强调色边框 */
 .thinkingStreaming {
-  background: var(--color-thinking-bg-active, rgba(22, 119, 255, 0.1));
-  border-left-color: var(--color-primary, #1677ff);
+  background: var(--wb-surface-selected);
+  border-color: rgba(10, 102, 255, .2);
 }
 
 .thinkingHeader {
@@ -45,7 +45,7 @@
 }
 
 .thinkingHeader:hover {
-  color: var(--color-primary, #1677ff);
+  color: var(--wb-text-primary);
 }
 
 .thinkingIcon {
@@ -54,13 +54,13 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  color: var(--color-primary, #1677ff);
+  color: var(--wb-link);
   font-size: 14px;
   flex-shrink: 0;
 }
 
 .thinkingLabel {
-  font-style: italic;
+  font-style: normal;
   letter-spacing: 0.2px;
   white-space: nowrap;
 }
@@ -68,7 +68,7 @@
 .thinkingPreview {
   flex: 1;
   color: var(--color-text-tertiary, rgba(0, 0, 0, 0.35));
-  font-style: italic;
+  font-style: normal;
   font-size: 12px;
   font-weight: 400;
   overflow: hidden;
@@ -103,7 +103,7 @@
 }
 
 .thinkingBody {
-  font-style: italic;
+  font-style: normal;
   font-size: 12.5px;
   line-height: 1.7;
   white-space: pre-wrap;
@@ -118,14 +118,14 @@
   bottom: 0;
   width: 100%;
   height: 2px;
-  background: rgba(22, 119, 255, 0.08);
+  background: rgba(10, 102, 255, 0.08);
   overflow: hidden;
 }
 
 .thinkingProgressBar {
   width: 30%;
   height: 100%;
-  background: var(--color-primary, #1677ff);
+  background: var(--wb-focus);
   animation: thinkingProgressLoop 1.4s ease-in-out infinite;
 }
 
@@ -136,9 +136,10 @@
 }
 
 .toolCallBlock {
-  background: var(--color-tool-bg, rgba(0, 0, 0, 0.04));
-  border-radius: 4px;
-  padding: 6px 10px;
+  background: var(--wb-surface-subtle);
+  border: 1px solid var(--wb-border-subtle);
+  border-radius: var(--radius-3);
+  padding: 7px 10px;
   margin: 4px 0;
   font-size: 13px;
 }
@@ -156,9 +157,9 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: var(--color-primary, #1677ff);
-  color: #fff;
-  border-radius: 3px;
+  background: var(--wb-surface-selected);
+  color: var(--wb-link);
+  border-radius: var(--radius-2);
   padding: 1px 6px;
   font-size: 12px;
   font-weight: 600;
@@ -175,17 +176,17 @@
 }
 
 .toolResultBlock {
-  border-radius: 4px;
-  padding: 6px 10px;
+  border-radius: var(--radius-3);
+  padding: 7px 10px;
   margin: 4px 0;
   font-size: 13px;
-  background: var(--color-result-bg, rgba(0, 0, 0, 0.03));
-  border-left: 3px solid var(--color-text-tertiary, rgba(0, 0, 0, 0.25));
+  background: var(--wb-surface-subtle);
+  border: 1px solid var(--wb-border-subtle);
 }
 
 .toolResultBlock.error {
   background: var(--color-error-bg, rgba(255, 77, 79, 0.08));
-  border-left-color: var(--color-error, #ff4d4f);
+  border-color: rgba(194, 53, 42, .24);
 }
 
 .toolResultHeader {
@@ -213,7 +214,7 @@
   gap: 6px;
   background: var(--color-error-bg, rgba(255, 77, 79, 0.1));
   border: 1px solid var(--color-error, #ff4d4f);
-  border-radius: 4px;
+  border-radius: var(--radius-3);
   padding: 8px 12px;
   margin: 4px 0;
   color: var(--color-error-text, #cf1322);
@@ -246,4 +247,13 @@
 
 @keyframes cursorPulse {
   50% { opacity: 0.2; }
+}
+
+/* 行内代码：与 MarkdownRenderer 的 inlineCode 视觉对齐 */
+.inlineCode {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(100, 116, 139, 0.14);
+  font-family: Consolas, monospace;
+  font-size: 0.92em;
 }

@@ -8,6 +8,7 @@ import * as convApi from '@/api/conversation';
 import { ConversationItem } from './ConversationItem';
 import type { Conversation } from '@/types/conversation';
 import type { Message } from '@/types/message';
+import { isTaskConversation } from '@/views/taskBoardSelection';
 import listStyles from './ConversationList.module.css';
 
 const EMPTY_MESSAGES: Message[] = [];
@@ -25,18 +26,20 @@ export const TaskGroupList: React.FC = () => {
   const [archivedCount, setArchivedCount] = useState(0);
 
   const filtered = useMemo(() => {
-    const groups = conversations.filter((c) => c.type === 'group');
+    const taskConversations = conversations.filter(isTaskConversation);
     const n = query.trim().toLowerCase();
-    return n ? groups.filter((c) => (c.title ?? '').toLowerCase().includes(n)) : groups;
+    return n
+      ? taskConversations.filter((conversation) => (conversation.title ?? '').toLowerCase().includes(n))
+      : taskConversations;
   }, [conversations, query]);
 
   useEffect(() => {
     convApi.getArchivedConversations()
       .then((list) => {
         const items = list ?? [];
-        const groups = items.filter((c) => c.type === 'group');
-        setArchivedCount(groups.length);
-        setArchivedConvs(groups);
+        const taskConversations = items.filter(isTaskConversation);
+        setArchivedCount(taskConversations.length);
+        setArchivedConvs(taskConversations);
       })
       .catch(() => {});
   }, []);
@@ -61,7 +64,7 @@ export const TaskGroupList: React.FC = () => {
 
   const hasQuery = query.trim().length > 0;
   const noResults = filtered.length === 0;
-  const noResultsText = hasQuery ? '无匹配结果' : '暂无群聊';
+  const noResultsText = hasQuery ? '无匹配结果' : '暂无任务会话';
 
   // archived view...
   if (showArchived) {
@@ -70,14 +73,14 @@ export const TaskGroupList: React.FC = () => {
         <div className={listStyles.searchWrap}>
           <div className={listStyles.archiveHeader}>
             <button className={listStyles.archiveBack} type="button" onClick={() => setShowArchived(false)}>
-              <LeftOutlined /> 返回群聊
+              <LeftOutlined /> 返回任务会话
             </button>
-            <span className={listStyles.archiveHeaderTitle}>归档群聊</span>
+            <span className={listStyles.archiveHeaderTitle}>归档任务会话</span>
           </div>
         </div>
         <div className={listStyles.items}>
           {archivedConvs.length === 0 ? (
-            <div className={listStyles.noResults}>暂无归档群聊</div>
+            <div className={listStyles.noResults}>暂无归档任务会话</div>
           ) : (
             archivedConvs.map((conv) => (
               <ArchivedItem key={conv.id} conversation={conv} onUnarchive={() => handleUnarchive(conv.id)} />
@@ -93,7 +96,7 @@ export const TaskGroupList: React.FC = () => {
       <div className={listStyles.searchWrap}>
         <Input
           prefix={<SearchOutlined />}
-          placeholder="搜索群聊..."
+          placeholder="搜索任务会话..."
           allowClear
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -107,8 +110,8 @@ export const TaskGroupList: React.FC = () => {
               <FolderOutlined />
             </div>
             <div className={listStyles.archiveFolderInfo}>
-              <span className={listStyles.archiveFolderTitle}>归档群聊</span>
-              <span className={listStyles.archiveFolderCount}>{archivedCount} 个群聊</span>
+              <span className={listStyles.archiveFolderTitle}>归档任务会话</span>
+              <span className={listStyles.archiveFolderCount}>{archivedCount} 个会话</span>
             </div>
             <RightOutlined className={listStyles.archiveFolderArrow} />
           </button>

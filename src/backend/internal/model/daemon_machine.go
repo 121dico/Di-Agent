@@ -21,6 +21,9 @@ type DaemonMachine struct {
 	CapabilitiesRaw string `json:"-" db:"capabilities"`
 	// Capabilities 解析后的能力清单，JSON 序列化时输出给前端。
 	Capabilities []string `json:"capabilities,omitempty" db:"-"`
+	// IsLocal 由服务端计算：daemon 上报的主机名与服务器自身主机名一致 = 与
+	// 服务端同机（本机），否则为远端接入的别的电脑。不落库。
+	IsLocal *bool `json:"is_local" db:"-"`
 }
 
 // HasCapability 判断机器是否具备某项能力（如 "docker"）。

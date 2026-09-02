@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jmoiron/sqlx"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jmoiron/sqlx"
 )
 
 // initDatabase 连接数据库，若不存在则自动创建并运行迁移

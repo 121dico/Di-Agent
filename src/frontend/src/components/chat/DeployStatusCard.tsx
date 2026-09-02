@@ -1,6 +1,7 @@
 import React from 'react';
 import { QRCode, Tag, Button, Tooltip } from 'antd';
 import { message } from '@/utils/message';
+import { copyText } from '@/utils/clipboard';
 import {
   CopyOutlined,
   DownloadOutlined,
@@ -35,7 +36,7 @@ export const DeployStatusCard: React.FC<Props> = ({ deployment }) => {
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(previewUrl);
+      await copyText(previewUrl);
       message.success('链接已复制');
     } catch {
       message.error('复制失败');

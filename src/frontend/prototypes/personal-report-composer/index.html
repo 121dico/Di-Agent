@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>个人报表生成器原型 — THROWAWAY</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-variant="A" data-state="ready">
+    <!-- THROWAWAY UI PROTOTYPE: three variants of the personal report composer, switchable via ?variant=. -->
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="i-message" viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+      <symbol id="i-bot" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="12" rx="3"/><path d="M12 4v4M8 13h.01M16 13h.01M8 17h8"/></symbol>
+      <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="m12 3-1.4 3.6L7 8l3.6 1.4L12 13l1.4-3.6L17 8l-3.6-1.4zM5 15l-.8 2.2L2 18l2.2.8L5 21l.8-2.2L8 18l-2.2-.8zM19 14l-.8 2.2-2.2.8 2.2.8L19 20l.8-2.2L22 17l-2.2-.8z"/></symbol>
+      <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4H6.5A2.5 2.5 0 0 0 4 6.5z"/><path d="M4 6.5v13A2.5 2.5 0 0 0 6.5 22H20"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m7 16 4-5 3 3 5-7"/></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V21h-4v-.08a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3v-4h.08a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3h4v.08a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21v4h-.08a1.7 1.7 0 0 0-1.52 1z"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></symbol>
+      <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+      <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+      <symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></symbol>
+      <symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 4h18l-7 8v6l-4 2v-8z"/></symbol>
+      <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+      <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18 9a7 7 0 0 0-12-3L4 8M6 15a7 7 0 0 0 12 3l2-2"/></symbol>
+      <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+      <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    </svg>
+
+    <div class="prototype-banner" role="note">
+      <strong>THROWAWAY PROTOTYPE</strong>
+      <span>全部数字均为模拟数据 · 不调用真实 API</span>
+    </div>
+
+    <main class="app-frame">
+      <nav class="global-rail" aria-label="全局导航">
+        <button class="brand-button" type="button" aria-label="Di Agent">
+          <span class="brand-mark"><i></i></span>
+          <b>Di</b>
+        </button>
+        <div class="rail-group">
+          <button class="rail-button active" type="button" aria-label="消息"><svg><use href="#i-message"/></svg><span>消息</span></button>
+          <button class="rail-button" type="button" aria-label="联系人"><svg><use href="#i-users"/></svg><span>联系人</span></button>
+          <button class="rail-button" type="button" aria-label="Agent"><svg><use href="#i-bot"/></svg><span>Agent</span></button>
+          <button class="rail-button" type="button" aria-label="Skills"><svg><use href="#i-sparkle"/></svg><span>Skills</span></button>
+          <button class="rail-button" type="button" aria-label="知识库"><svg><use href="#i-book"/></svg><span>知识库</span></button>
+          <button class="rail-button" type="button" aria-label="任务"><svg><use href="#i-check"/></svg><span>任务</span></button>
+          <button class="rail-button" type="button" aria-label="报表"><svg><use href="#i-chart"/></svg><span>报表</span></button>
+        </div>
+        <div class="rail-bottom">
+          <button class="rail-button" type="button" aria-label="设置"><svg><use href="#i-settings"/></svg><span>设置</span></button>
+          <button class="profile-button" type="button" aria-label="账户 121"><span>12</span></button>
+        </div>
+      </nav>
+
+      <aside class="conversation-list" aria-label="会话列表">
+        <header>
+          <div><small>WORKSPACE</small><h1>消息</h1></div>
+          <button class="icon-button dark" type="button" aria-label="新建对话"><svg><use href="#i-plus"/></svg></button>
+        </header>
+        <label class="search-box">
+          <svg><use href="#i-search"/></svg>
+          <input type="search" placeholder="搜索会话" />
+          <kbd>⌘K</kbd>
+        </label>
+        <section class="conversation-section">
+          <div class="section-label"><span>进行中</span><b>1</b></div>
+          <button class="conversation-row active" type="button">
+            <span class="agent-avatar">数</span>
+            <span><b>数据分析 Agent</b><small><i></i>正在生成个人报表</small></span>
+            <time>刚刚</time>
+          </button>
+        </section>
+        <section class="conversation-section">
+          <div class="section-label"><span>项目 · Di Agent</span><b>3</b></div>
+          <button class="conversation-row" type="button"><span class="agent-avatar neutral">后</span><span><b>后端开发 Agent</b><small>数据契约已更新</small></span><time>14:18</time></button>
+          <button class="conversation-row" type="button"><span class="agent-avatar warm">产</span><span><b>产品设计 Agent</b><small>交互规范已确认</small></span><time>昨天</time></button>
+          <button class="conversation-row" type="button"><span class="agent-avatar blue">测</span><span><b>测试 Agent</b><small>21 项检查通过</small></span><time>周一</time></button>
+        </section>
+        <section class="conversation-section recent">
+          <div class="section-label"><span>最近</span></div>
+          <button class="conversation-row" type="button"><span class="agent-avatar soft">知</span><span><b>知识库助手</b><small>已索引 46 个文档</small></span><time>周一</time></button>
+        </section>
+      </aside>
+
+      <section class="chat-workspace">
+        <header class="chat-header">
+          <div class="chat-agent"><span class="agent-avatar">数</span><div><b>数据分析 Agent</b><small><i></i>已连接真实数据工具</small></div></div>
+          <div class="header-actions"><button class="icon-button" type="button" aria-label="搜索"><svg><use href="#i-search"/></svg></button><button class="icon-button" type="button" aria-label="更多"><svg><use href="#i-more"/></svg></button></div>
+        </header>
+        <div class="message-list">
+          <div class="date-separator"><span>今天 15:48</span></div>
+          <article class="message user-message">
+            <p>帮我看一下最近 30 天价敏用户、订单量和 GMV 的变化，按城市筛选，并生成一份简洁的经营分析报表。</p>
+          </article>
+          <article class="message agent-message">
+            <div class="message-source"><span class="agent-avatar mini">数</span><b>数据分析 Agent</b></div>
+            <p>已完成真实数据查询，并根据你的问题准备了个人报表。</p>
+            <div class="tool-result">
+              <div class="tool-result-head">
+                <span class="verified-icon"><svg><use href="#i-database"/></svg></span>
+                <div><b>真实数据已返回</b><small>price_sensitive · 2026-08-28 15:48</small></div>
+                <span class="success-badge">已验证</span>
+              </div>
+              <div class="tool-steps">
+                <span class="done">校验字段</span><i></i><span class="done">调用数据源</span><i></i><span class="done">返回结果</span>
+              </div>
+              <button class="open-report-button" type="button" data-open-report><svg><use href="#i-chart"/></svg>打开个人报表<svg><use href="#i-chevron"/></svg></button>
+            </div>
+          </article>
+        </div>
+        <form class="main-composer shared-prompt-form">
+          <textarea class="shared-prompt" rows="1" placeholder="继续询问数据或修改当前报表"></textarea>
+          <div class="composer-tools"><button type="button" class="icon-button" aria-label="添加附件"><svg><use href="#i-plus"/></svg></button><span>当前关联：8 月经营分析</span></div>
+          <button class="send-button" type="submit" aria-label="发送"><svg><use href="#i-send"/></svg></button>
+        </form>
+      </section>
+
+      <aside class="report-composer" aria-label="个人报表生成器">
+        <button class="resize-handle" type="button" aria-label="拖拽调整报表生成器宽度" title="拖拽调整宽度，双击恢复"></button>
+
+        <header class="composer-header">
+          <div class="composer-title">
+            <span class="report-symbol"><svg><use href="#i-chart"/></svg></span>
+            <div><small>PERSONAL REPORT</small><b>8 月经营分析</b></div>
+          </div>
+          <button class="data-status" type="button" data-provenance>
+            <i></i><span>真实数据</span><small>15:48 更新</small><svg><use href="#i-chevron"/></svg>
+          </button>
+          <div class="save-state" data-save-state><i></i><span>已保存</span></div>
+          <div class="composer-actions">
+            <button class="icon-button" type="button" data-version aria-label="保存为版本" title="保存为版本"><svg><use href="#i-history"/></svg></button>
+            <button class="icon-button" type="button" data-fullscreen aria-label="全屏" title="全屏"><svg><use href="#i-expand"/></svg></button>
+            <button class="icon-button" type="button" data-close-report aria-label="关闭" title="关闭"><svg><use href="#i-close"/></svg></button>
+          </div>
+        </header>
+
+        <div class="provenance-panel" hidden>
+          <header><div><svg><use href="#i-database"/></svg><b>真实查询依据</b></div><span>敏感信息已隐藏</span></header>
+          <dl><div><dt>数据源</dt><dd>价格敏感度数据</dd></div><div><dt>业务时间</dt><dd>2026-07-30 — 2026-08-28</dd></div><div><dt>筛选</dt><dd>北京市、上海市 · 已计算价敏用户</dd></div><div><dt>返回</dt><dd>30 个自然日 · 4 个聚合指标</dd></div><div><dt>查询标识</dt><dd>ClickHouse_93aa…e1e</dd></div></dl>
+        </div>
+
+        <section class="variant variant-a" aria-label="A 均衡工作台">
+          <div class="variant-a-toolbar">
+            <div class="mode-toggle" role="group" aria-label="生成模式"><button class="active" type="button" data-mode="quick">快速生成</button><button type="button" data-mode="refine">精细模式</button></div>
+            <div class="canvas-tools"><button type="button"><svg><use href="#i-filter"/></svg>北京、上海</button><button type="button"><svg><use href="#i-refresh"/></svg>刷新数据</button></div>
+          </div>
+          <section class="style-strip">
+            <div class="style-heading"><div><b>选择报表风格</b><small>风格只改变表达，不改变真实数据</small></div><button type="button" class="text-button">查看全部</button></div>
+            <div class="style-cards">
+              <button class="style-card active" type="button" data-style="business"><span class="style-preview business"><i></i><i></i><i></i></span><b>商务简约</b><small>清晰 · 克制</small></button>
+              <button class="style-card" type="button" data-style="journal"><span class="style-preview journal"><i></i><i></i><i></i></span><b>数据新闻</b><small>叙事 · 强结论</small></button>
+              <button class="style-card" type="button" data-style="soft"><span class="style-preview soft-style"><i></i><i></i><i></i></span><b>柔和现代</b><small>温和 · 易读</small></button>
+              <button class="style-card" type="button" data-style="glass"><span class="style-preview glass-style"><i></i><i></i><i></i></span><b>亮色玻璃</b><small>轻盈 · 精致</small></button>
+            </div>
+            <label class="style-prompt"><svg><use href="#i-sparkle"/></svg><input type="text" value="更像公司经营周报，突出趋势拐点，减少装饰" aria-label="自定义风格描述" /></label>
+          </section>
+          <div class="report-scroll">
+            <article class="report-canvas selected-report" data-report-canvas>
+              <header class="report-hero">
+                <div><span class="report-kicker">30-DAY BUSINESS PULSE</span><h2>价敏经营月度观察</h2><p>价敏用户覆盖保持稳定，订单规模在月末出现回升；上海的增长斜率高于北京。</p></div>
+                <div class="hero-score"><small>价敏覆盖率</small><strong>42.8<em>%</em></strong><span>较上周期 +2.4pp</span></div>
+              </header>
+              <section class="metric-row">
+                <article><span>价敏用户</span><strong>790.7<small>万</small></strong><em class="up">↑ 6.2%</em></article>
+                <article><span>订单量</span><strong>2,846<small>万单</small></strong><em class="up">↑ 8.7%</em></article>
+                <article><span>GMV</span><strong>18.6<small>亿元</small></strong><em class="up">↑ 5.1%</em></article>
+                <article><span>下单用户</span><strong>1,123<small>万</small></strong><em class="down">↓ 1.3%</em></article>
+              </section>
+              <section class="chart-section report-module selected-module">
+                <header><div><span>经营趋势</span><b>订单增长快于用户增长</b></div><div class="chart-legend"><button type="button" data-series="users"><i class="teal"></i>价敏用户</button><button type="button" data-series="orders"><i class="blue"></i>订单量</button><button type="button" data-series="gmv"><i class="amber"></i>GMV</button></div></header>
+                <div class="chart-wrap">
+                  <svg class="line-chart" viewBox="0 0 760 270" role="img" aria-label="7月30日至8月28日经营趋势模拟折线图">
+                    <g class="grid-lines"><path d="M54 30H742M54 84H742M54 138H742M54 192H742M54 246H742"/></g>
+                    <g class="axis-labels"><text x="54" y="266">07/30</text><text x="220" y="266">08/06</text><text x="390" y="266">08/13</text><text x="560" y="266">08/20</text><text x="710" y="266">08/28</text></g>
+                    <path class="area users-series" d="M54 210 C110 192 145 202 190 174 S280 160 320 146 S412 151 458 119 S540 106 586 100 S680 72 742 58 L742 246 L54 246Z"/>
+                    <path class="series-line users-series" d="M54 210 C110 192 145 202 190 174 S280 160 320 146 S412 151 458 119 S540 106 586 100 S680 72 742 58"/>
+                    <path class="series-line orders-series" d="M54 228 C106 218 150 186 194 193 S276 154 325 168 S420 126 462 136 S548 88 590 110 S684 52 742 69"/>
+                    <path class="series-line gmv-series" d="M54 198 C102 183 151 196 196 167 S280 185 326 137 S416 144 462 112 S548 129 590 82 S684 91 742 44"/>
+                    <g class="chart-marker"><line x1="590" y1="28" x2="590" y2="246"/><circle cx="590" cy="100" r="5"/><rect x="502" y="28" width="142" height="48" rx="8"/><text x="516" y="48">08/22 · 价敏用户</text><text x="516" y="66">812.4 万</text></g>
+                  </svg>
+                </div>
+              </section>
+              <section class="insight-grid">
+                <article class="insight-copy"><span>AGENT INSIGHT</span><h3>月末增长由高价敏用户带动</h3><p>8 月 22 日后，高价敏用户订单贡献连续六日提升。建议在上海优先验证低价活动触达，并观察客单价变化。</p><button type="button">让 Agent 深入分析<svg><use href="#i-chevron"/></svg></button></article>
+                <article class="donut-card"><header><span>价敏等级分布</span><small>790.7 万用户</small></header><div class="donut-layout"><div class="donut"><div><strong>61.7%</strong><small>中价敏</small></div></div><ul><li><i class="coral"></i><span>高价敏</span><b>20.2%</b></li><li><i class="amber"></i><span>中价敏</span><b>61.7%</b></li><li><i class="blue"></i><span>低价敏</span><b>18.1%</b></li></ul></div></article>
+              </section>
+              <footer class="report-source-line"><svg><use href="#i-database"/></svg><span>真实数据 · 30 个自然日 · 最近更新 2026-08-28 15:48</span><button type="button" data-provenance>查看依据</button></footer>
+            </article>
+          </div>
+        </section>
+
+        <section class="variant variant-b" aria-label="B 分析驾驶舱">
+          <div class="cockpit-layout">
+            <aside class="report-outline">
+              <header><span>REPORT OUTLINE</span><b>报表结构</b></header>
+              <button class="active" type="button"><i>01</i><span><b>经营概览</b><small>4 个核心指标</small></span></button>
+              <button type="button"><i>02</i><span><b>每日趋势</b><small>3 个数据系列</small></span></button>
+              <button type="button"><i>03</i><span><b>城市对比</b><small>北京、上海</small></span></button>
+              <button type="button"><i>04</i><span><b>价敏结构</b><small>3 个用户等级</small></span></button>
+              <div class="outline-foot"><span>自动保存</span><b>刚刚</b></div>
+            </aside>
+            <div class="cockpit-main">
+              <div class="cockpit-command">
+                <div class="mode-toggle"><button class="active" type="button" data-mode="quick">快速</button><button type="button" data-mode="refine">精细</button></div>
+                <div class="compact-styles"><button class="active" type="button" data-style="business">商务</button><button type="button" data-style="journal">新闻</button><button type="button" data-style="glass">玻璃</button></div>
+                <button class="filter-button" type="button"><svg><use href="#i-filter"/></svg>北京 + 上海</button>
+              </div>
+              <div class="dense-report">
+                <header><div><span>2026 AUGUST · OPERATING REVIEW</span><h2>价格敏感度经营驾驶舱</h2></div><div class="dense-status"><i></i><span>数据已验证</span><small>15:48</small></div></header>
+                <section class="dense-metrics"><article><span>价敏用户</span><strong>790.7 万</strong><small>同比 +6.2%</small></article><article><span>订单量</span><strong>2,846 万</strong><small>同比 +8.7%</small></article><article><span>GMV</span><strong>18.6 亿</strong><small>同比 +5.1%</small></article><article><span>下单用户</span><strong>1,123 万</strong><small>同比 −1.3%</small></article></section>
+                <section class="dense-grid">
+                  <article class="dense-trend report-module">
+                    <header><div><b>每日经营趋势</b><small>07/30 — 08/28</small></div><div class="chart-legend"><button type="button" data-series="users"><i class="teal"></i>用户</button><button type="button" data-series="orders"><i class="blue"></i>订单</button></div></header>
+                    <svg class="line-chart" viewBox="0 0 720 230"><g class="grid-lines"><path d="M45 22H700M45 70H700M45 118H700M45 166H700M45 214H700"/></g><path class="area users-series" d="M45 188 C102 172 142 184 188 149 S280 137 326 120 S416 132 462 94 S548 81 590 72 S660 56 700 38 L700 214 L45 214Z"/><path class="series-line users-series" d="M45 188 C102 172 142 184 188 149 S280 137 326 120 S416 132 462 94 S548 81 590 72 S660 56 700 38"/><path class="series-line orders-series" d="M45 201 C98 195 145 156 190 173 S280 126 328 145 S415 104 464 116 S550 62 590 86 S660 45 700 56"/></svg>
+                  </article>
+                  <article class="city-bars"><header><b>城市贡献</b><small>GMV 占比</small></header><div class="bar-list"><div><span>上海</span><i><b style="width:78%"></b></i><strong>52.4%</strong></div><div><span>北京</span><i><b style="width:64%"></b></i><strong>41.6%</strong></div><div><span>其他</span><i><b style="width:18%"></b></i><strong>6.0%</strong></div></div></article>
+                  <article class="dense-insight"><span>AGENT SIGNAL</span><h3>上海增长斜率连续两周高于北京</h3><p>建议把活动预算从均匀分配切换为按城市弹性动态配置。</p></article>
+                  <article class="dense-donut"><div class="mini-donut"></div><div><span>主力人群</span><strong>中价敏 61.7%</strong><small>高价敏用户占比提升 2.1pp</small></div></article>
+                </section>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="variant variant-c" aria-label="C 叙事工作室">
+          <div class="studio-top">
+            <div class="studio-progress"><span class="done"><i>1</i>真实数据</span><b></b><span class="done"><i>2</i>内容结构</span><b></b><span class="active"><i>3</i>视觉风格</span><b></b><span><i>4</i>完成</span></div>
+            <div class="mode-toggle"><button type="button" data-mode="quick">快速</button><button class="active" type="button" data-mode="refine">精细</button></div>
+          </div>
+          <div class="studio-layout">
+            <aside class="style-studio">
+              <header><span>STYLE STUDIO</span><h2>让报告更像你</h2><p>选择一个基础风格，再用一句话微调。</p></header>
+              <div class="studio-style-list">
+                <button class="active" type="button" data-style="business"><span class="style-swatch paper"></span><span><b>商务简约</b><small>理性、克制、适合经营汇报</small></span><i>✓</i></button>
+                <button type="button" data-style="journal"><span class="style-swatch ink"></span><span><b>数据新闻</b><small>结论先行、强调趋势转折</small></span><i>✓</i></button>
+                <button type="button" data-style="soft"><span class="style-swatch sand"></span><span><b>柔和现代</b><small>温和、亲近、易于阅读</small></span><i>✓</i></button>
+                <button type="button" data-style="glass"><span class="style-swatch crystal"></span><span><b>亮色玻璃</b><small>轻盈、精致、层级清楚</small></span><i>✓</i></button>
+              </div>
+              <label class="studio-prompt"><span>自定义描述</span><textarea rows="3">更像公司经营周报，突出趋势拐点，减少装饰</textarea></label>
+              <button class="studio-generate" type="button"><svg><use href="#i-sparkle"/></svg>应用风格并生成</button>
+            </aside>
+            <div class="story-preview">
+              <div class="preview-toolbar"><span><i></i>实时预览</span><div><button type="button">适合宽度</button><button type="button" data-fullscreen><svg><use href="#i-expand"/></svg></button></div></div>
+              <article class="story-page">
+                <span class="story-index">01 / 04</span>
+                <header><span>MONTHLY SIGNAL</span><h2>增长并不均匀，<br/>上海正在拉开差距。</h2><p>过去 30 天，价敏用户覆盖率提升 2.4 个百分点；订单增长主要集中在 8 月下旬。</p></header>
+                <div class="story-number"><span>价敏用户</span><strong>790.7<small>万</small></strong><em>↑ 6.2%</em></div>
+                <svg class="story-chart" viewBox="0 0 760 250"><g class="grid-lines"><path d="M35 35H730M35 92H730M35 149H730M35 206H730"/></g><path class="story-area" d="M35 190 C90 186 130 158 177 169 S260 128 306 142 S398 104 441 116 S530 77 574 91 S660 48 730 55 L730 215 L35 215Z"/><path class="story-line" d="M35 190 C90 186 130 158 177 169 S260 128 306 142 S398 104 441 116 S530 77 574 91 S660 48 730 55"/><g class="story-axis"><text x="35" y="238">07/30</text><text x="210" y="238">08/06</text><text x="385" y="238">08/13</text><text x="555" y="238">08/20</text><text x="690" y="238">08/28</text></g></svg>
+                <footer><span>真实数据 · 北京、上海</span><b>下一节：城市贡献 →</b></footer>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="state-layer loading-state" aria-live="polite">
+          <div class="state-card">
+            <span class="state-spinner"></span>
+            <b>正在调用真实数据接口</b>
+            <p>正在校验字段、应用城市筛选并聚合 30 个自然日。</p>
+            <div class="skeleton-lines"><i></i><i></i><i></i></div>
+          </div>
+        </section>
+        <section class="state-layer empty-state">
+          <div class="state-card"><span class="state-icon"><svg><use href="#i-search"/></svg></span><b>真实查询没有返回数据</b><p>当前城市和时间范围内没有满足条件的价敏用户。</p><div><button type="button">修改查询条件</button><button type="button" class="primary">重新查询</button></div></div>
+        </section>
+        <section class="state-layer partial-state">
+          <div class="partial-banner"><span>部分数据已返回</span><p>GMV 指标暂时不可用，其他图表仍使用真实数据展示。</p><button type="button">重试 GMV</button></div>
+        </section>
+        <section class="state-layer error-state">
+          <div class="state-card error"><span class="state-icon"><svg><use href="#i-database"/></svg></span><b>数据接口调用失败</b><p>已保留查询条件，没有生成任何推测数字。</p><code>REPORT_SOURCE_TIMEOUT · 查询标识 93aa…e1e</code><div><button type="button">修改条件</button><button type="button" class="primary">重试</button></div></div>
+        </section>
+
+        <form class="report-prompt shared-prompt-form">
+          <span class="prompt-agent">数</span>
+          <textarea class="shared-prompt" rows="1" placeholder="让 Agent 修改这份报表，例如：把趋势图改成按周汇总"></textarea>
+          <span class="prompt-context">整份报表</span>
+          <button class="send-button" type="submit" aria-label="发送修改指令"><svg><use href="#i-send"/></svg></button>
+        </form>
+      </aside>
+    </main>
+
+    <div class="toast" role="status" aria-live="polite"></div>
+
+    <div class="prototype-switcher" aria-label="原型版本切换">
+      <button type="button" data-prev aria-label="上一个版本"><svg><use href="#i-arrow-left"/></svg></button>
+      <div class="switcher-label"><small>PROTOTYPE VARIANT</small><b data-variant-label>A — 均衡工作台</b></div>
+      <button type="button" data-next aria-label="下一个版本"><svg><use href="#i-arrow-right"/></svg></button>
+      <span class="switcher-divider"></span>
+      <label>状态
+        <select data-state-select>
+          <option value="ready">正常</option>
+          <option value="loading">查询中</option>
+          <option value="empty">空数据</option>
+          <option value="partial">部分数据</option>
+          <option value="error">失败</option>
+        </select>
+      </label>
+    </div>
+
+    <script src="./prototype.js"></script>
+  </body>
+</html>

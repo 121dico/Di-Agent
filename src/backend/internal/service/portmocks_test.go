@@ -27,15 +27,15 @@ import (
 // 不依赖 *ws.DaemonHub 的具体实现细节。
 type fakeDaemonDispatcher struct {
 	// 每个方法的 closure：nil 时返回方法签名对应的零值。
-	isConnected       func(machineID string) bool
+	isConnected         func(machineID string) bool
 	registerTaskPromise func(taskID string) chan *ws.TaskResult
-	sendToMachine     func(machineID string, msg ws.WSMessage) error
-	awaitTaskResult   func(taskID string) chan *ws.TaskResult
-	removeTaskPromise func(taskID string)
+	sendToMachine       func(machineID string, msg ws.WSMessage) error
+	awaitTaskResult     func(taskID string) chan *ws.TaskResult
+	removeTaskPromise   func(taskID string)
 
 	// calls 记录调用计数与最后一次入参（用于断言）。
 	// 互斥保护，DispatchMany 等并发场景可安全使用。
-	mu   sync.Mutex
+	mu    sync.Mutex
 	calls fakeDaemonDispatcherCalls
 }
 
@@ -47,9 +47,9 @@ type fakeDaemonDispatcherCalls struct {
 	RegisterTaskPromise       int
 	LastRegisterTaskPromiseID string
 
-	SendToMachine       int
-	LastSendMachineID   string
-	LastSendMsg         ws.WSMessage
+	SendToMachine     int
+	LastSendMachineID string
+	LastSendMsg       ws.WSMessage
 
 	AwaitTaskResult       int
 	LastAwaitTaskResultID string

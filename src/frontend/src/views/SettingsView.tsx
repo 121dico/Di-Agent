@@ -21,7 +21,7 @@ type ThemeMode = 'light' | 'dark' | 'system';
 function getInitialTheme(): ThemeMode {
   const saved = localStorage.getItem('theme');
   if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
-  // 首次访问默认跟随系统，与 SettingsPanel.tsx 的初始化逻辑一致
+  // 首次访问默认跟随系统，保持设置页自身的主题初始化逻辑。
   return 'system';
 }
 

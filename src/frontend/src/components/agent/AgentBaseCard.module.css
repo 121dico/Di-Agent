@@ -12,7 +12,7 @@
 }
 
 .container:hover {
-  border-color: rgba(47, 143, 107, 0.28);
+  border-color: rgba(15, 118, 110, 0.28);
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
   transform: translateY(-1px);
 }
@@ -108,7 +108,7 @@
   border-color: var(--color-border);
 }
 :global(html.dark) .container:hover {
-  border-color: rgba(52, 211, 153, 0.4);
+  border-color: rgba(22, 140, 128, 0.4);
 }
 :global(html.dark) .version {
   background: var(--color-bg-tertiary);

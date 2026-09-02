@@ -32,7 +32,7 @@ type UserRepo interface {
 
 // AuthConfig 认证相关配置
 type AuthConfig struct {
-	JWTSecret   string
+	JWTSecret      string
 	JWTExpiryHours int
 }
 
@@ -128,7 +128,7 @@ func (s *AuthService) generateToken(user *model.User) (string, error) {
 // ValidateToken 验证 JWT 并返回用户 ID
 func (s *AuthService) ValidateToken(tokenStr string) (string, error) {
 	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
 		return []byte(s.config.JWTSecret), nil

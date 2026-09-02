@@ -12,6 +12,54 @@ import (
 // Agent 为 nil 时返回 current 不变。
 type AgentConfigInjector struct{}
 
+var reportTaskKeywords = []string{
+	"报表", "看板", "图表", "趋势", "指标", "查数据", "查询数据", "数据分析",
+	"价敏", "价格敏感", "订单量", "用户量", "gmv", "duid", "hive", "sql",
+	"report", "dashboard", "chart", "metric", "analytics", "query data", "data source",
+}
+
+const compactReportMCPContext = `[真实数据报表能力]
+平台已提供 discover_report_data、query_report_data、save_personal_report。用户要求查真实数据、做图表/看板/报表时必须使用这些 MCP 工具，不得用常识或示例数字代替真实查询。
+
+`
+
+const fullReportMCPManual = `[真实数据报表 MCP 强制说明书]
+本轮请求命中真实数据/报表意图。不要先向用户索要 CSV，不要先写查询结论，也不要根据字段名猜数据；第一步必须立即调用 discover_report_data。
+
+强制调用顺序：
+1. discover_report_data：获取 source_id、数据源用途、字段名和 capabilities。
+2. query_report_data：只使用 discover 返回且具备相应 capability 的字段执行真实查询。
+3. 如需多个指标或图表，可按同一 source_id 分多次真实查询；所有展示数字必须来自工具返回的 rows 或 pagination。
+4. 需要交付个人报表时，使用本轮成功查询返回的真实 query_id 调用 save_personal_report；保存成功后平台会生成当前用户可打开的报表卡片。
+
+字段能力规则：
+- select：字段可放进 fields。
+- filter：字段可放进 filters。
+- group：字段可放进 group_by。
+- aggregate：字段才可使用 AVG/MIN/MAX/SUM/COUNT/COUNT_DISTINCT。
+- sort：字段可放进 order_by。格式是 "字段名" 或 "字段名 ASC/DESC"，例如 "dt ASC"，不要把 "dt DESC" 当作字段名。
+
+query_report_data 通用格式：
+{"source_id":"<discover 返回的 source_id>","fields":[{"name":"dt"},{"name":"duid","alias":"user_count","aggregation":"COUNT_DISTINCT"}],"filters":[{"name":"price_sensitivity_level","operator":"IN","value":["HIGH","MEDIUM","LOW"]}],"group_by":["dt"],"order_by":"dt ASC","page":1,"page_size":100}
+
+价敏用户明细格式：
+{"source_id":"<discover 返回的 source_id>","fields":[{"name":"duid"},{"name":"price_sensitivity_level"},{"name":"price_sensitivity_score"},{"name":"user_city_name"}],"filters":[{"name":"price_sensitivity_level","operator":"IN","value":["HIGH","MEDIUM","LOW"]}],"order_by":"duid ASC","page":1,"page_size":100}
+
+参数约束：
+- aggregation 优先使用 COUNT_DISTINCT（上游真实枚举），不要自己拼 SQL 表达式。
+- filters.operator 仅使用 EQ、NEQ、IN、NOT_IN、GEQ、LEQ、GQ、LQ、LIKE、IS_NULL、BETWEEN、NOT_BETWEEN、NOT_NULL、PREFIX、SUFFIX。
+- page_size 最大 100；全量分析应使用聚合、过滤或分页，不要一次索取全部明细。
+- 工具返回的 rows 是本页真实结果，pagination.total 是符合条件的总记录数，source_partition 是数据分区，query_id 是真实查询凭证。
+
+失败处理：
+- 字段未声明/禁用：重新调用 discover_report_data，以最新字段名和 capabilities 修正参数，不得继续猜字段。
+- 认证未配置、上游失败或资源超限：缩小时间/城市/等级范围或改用更轻的聚合后重试；仍失败就如实说明具体错误。
+- 在任何失败情况下都不得编造数据、伪造 query_id 或保存假报表。
+
+完成标准：至少一次 query_report_data 成功并取得真实 rows/query_id；若用户要求“做报表”，还必须调用 save_personal_report 成功并把可打开结果交付给用户。
+
+`
+
 // Build 实现 ContextBuilder。
 func (b *AgentConfigInjector) Build(ctx context.Context, in ContextInput, current string) string {
 	if in.Agent == nil {
@@ -60,6 +108,15 @@ func BuildAgentConfigText(agent *model.Agent, contextStr string, taskText string
 		}
 	}
 
+	// Report data is a governed platform capability rather than free-form web
+	// research. Keep a compact reminder on every task, then inject the full MCP
+	// manual only when the actual user request carries report/data intent.
+	if hasReportTaskIntent(taskText) {
+		sb.WriteString(fullReportMCPManual)
+	} else {
+		sb.WriteString(compactReportMCPContext)
+	}
+
 	// [输出格式——重要]
 	sb.WriteString("[输出格式]\n")
 	sb.WriteString("回复正文用 Markdown 直接书写，会被前端实时渲染（标题、列表、表格、加粗、代码片段都会按 Markdown 渲染）。\n")
@@ -85,7 +142,6 @@ func BuildAgentConfigText(agent *model.Agent, contextStr string, taskText string
 	sb.WriteString("- info（信息展示）：fields（键值对对象）\n")
 	sb.WriteString("- diff（文件变更）：workDir（绝对路径）, files（相对路径数组）。改完代码必须上报\n")
 	sb.WriteString("- project（项目目录）：workDir（绝对路径）, summary?。写完文件必须上报\n\n")
-
 	// [卡片位置]
 	sb.WriteString("默认卡片渲染在 block 出现的位置。同一 block 可含多张卡，按数组顺序渲染。不需要卡片时不要输出 block（纯文字回答即可）。\n\n")
 
@@ -126,4 +182,17 @@ func BuildAgentConfigText(agent *model.Agent, contextStr string, taskText string
 
 	sb.WriteString(contextStr)
 	return sb.String()
+}
+
+func hasReportTaskIntent(taskText string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(taskText))
+	if normalized == "" {
+		return false
+	}
+	for _, keyword := range reportTaskKeywords {
+		if strings.Contains(normalized, keyword) {
+			return true
+		}
+	}
+	return false
 }

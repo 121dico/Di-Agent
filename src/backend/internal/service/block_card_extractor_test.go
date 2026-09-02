@@ -23,8 +23,8 @@ func TestSplitTextBlocksByCardFences(t *testing.T) {
 		expect []model.MessageBlock
 	}{
 		{
-			name: "empty input",
-			input: []model.MessageBlock{},
+			name:   "empty input",
+			input:  []model.MessageBlock{},
 			expect: []model.MessageBlock{},
 		},
 		{

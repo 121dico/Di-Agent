@@ -21,6 +21,7 @@ type MachineStatusRepo interface {
 type machineEntry struct {
 	lastHB   time.Time
 	dbOnline bool
+	connIP   string // 最近一次 daemon WebSocket 连接的来源 IP（判断"本机"用）
 }
 
 // MachineTracker 基于内存心跳的机器在线状态追踪器。
@@ -69,6 +70,38 @@ func (t *MachineTracker) Touch(machineID string) {
 			t.mu.Unlock()
 		}
 	}
+}
+
+// RecordIP 记录 machine 最近一次 daemon WebSocket 连接来源 IP。
+// 前端列表用它与浏览器请求 IP 比对，判断该机器是否就是用户正在使用的电脑。
+func (t *MachineTracker) RecordIP(machineID, ip string) {
+	if machineID == "" || ip == "" {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	entry, exists := t.machines[machineID]
+	if !exists {
+		entry = &machineEntry{lastHB: time.Now(), dbOnline: true}
+		t.machines[machineID] = entry
+	}
+	entry.connIP = ip
+}
+
+// LookupIP 返回 machine 最近一次 daemon 连接来源 IP；无记录返回空串。
+func (t *MachineTracker) LookupIP(machineID string) string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if entry, ok := t.machines[machineID]; ok {
+		return entry.connIP
+	}
+	return ""
+}
+
+// MachineIPTracker 供 handler 注入的 daemon 连接 IP 记录接口。
+type MachineIPTracker interface {
+	RecordIP(machineID, ip string)
+	LookupIP(machineID string) string
 }
 
 // MarkOnline 标记上线（daemon register 时调用，内存 + 同步 DB）。

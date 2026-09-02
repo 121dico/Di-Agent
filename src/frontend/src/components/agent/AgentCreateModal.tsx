@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Checkbox, Input, Modal, Select } from 'antd';
+import { Button, Checkbox, Input, Modal, Select, Tag } from 'antd';
 import { SettingOutlined } from '@ant-design/icons';
 import { message } from '@/utils/message';
 import type { AgentCandidate } from '@/types/agent';
@@ -17,6 +17,12 @@ import {
 } from './toolAssignments';
 import { AgentPromptTemplateField } from './AgentPromptTemplateField';
 import { CreateTemplateManagerModal } from './CreateTemplateManagerModal';
+import {
+  clearOptionalTools,
+  getSelectionState,
+  selectAllSkillIds,
+  selectAllTools,
+} from './agentCreateSelection';
 import styles from './AgentCreateModal.module.css';
 
 interface AgentCreateModalProps {
@@ -57,7 +63,7 @@ export const AgentCreateModal: React.FC<AgentCreateModalProps> = ({
   const options = useMemo(
     () => candidates.map((candidate) => ({
       value: candidate.id,
-      label: `${candidate.name} · ${candidate.cli_tool}`,
+      label: `${candidate.name} · ${candidate.cli_tool}${candidate.variant === 'desktop' ? '（Desktop）' : ''}`,
     })),
     [candidates],
   );
@@ -201,6 +207,12 @@ export const AgentCreateModal: React.FC<AgentCreateModalProps> = ({
   const hasCandidates = options.length > 0;
   const selectedToolCount = selectedTools.length;
   const selectedSkillCount = selectedSkillIds.size;
+  const toolSelectionState = getSelectionState(selectedToolCount, getToolCatalogSync().length);
+  const skillSelectionState = getSelectionState(selectedSkillCount, librarySkills.length);
+  const selectedCandidate = useMemo(
+    () => candidates.find((candidate) => candidate.id === candidateId) ?? null,
+    [candidates, candidateId],
+  );
 
   return (
     <Modal
@@ -214,14 +226,29 @@ export const AgentCreateModal: React.FC<AgentCreateModalProps> = ({
       <div className={styles.content}>
         <div className={styles.field}>
           <span className={styles.label}>底座</span>
-          <Select
-            className={styles.select}
-            placeholder={hasCandidates ? '选择底座' : '当前电脑暂无可用底座'}
-            options={options}
-            value={candidateId || undefined}
-            onChange={handleCandidateChange}
-            disabled={!hasCandidates}
-          />
+          <div className={styles.baseColumn}>
+            <Select
+              className={styles.select}
+              placeholder={hasCandidates ? '选择底座' : '当前电脑暂无可用底座'}
+              options={options}
+              value={candidateId || undefined}
+              onChange={handleCandidateChange}
+              disabled={!hasCandidates}
+            />
+            {selectedCandidate && (
+              <div className={styles.baseMeta}>
+                <Tag color={selectedCandidate.variant === 'desktop' ? 'purple' : 'green'}>
+                  {selectedCandidate.variant === 'desktop' ? 'Desktop 桌面端' : 'CLI 命令行'}
+                </Tag>
+                <span className={styles.baseMetaText}>
+                  {selectedCandidate.variant === 'desktop'
+                    ? '桌面端底座暂不支持自动执行任务，仅作标注与预留'
+                    : '可自动执行任务、流式输出与工具调用'}
+                  {selectedCandidate.version ? ` · ${selectedCandidate.version}` : ''}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
         <div className={styles.field}>
           <span className={styles.label}>Agent 名称</span>
@@ -246,7 +273,21 @@ export const AgentCreateModal: React.FC<AgentCreateModalProps> = ({
         <div className={styles.field}>
           <div className={styles.fieldHeader}>
             <span className={styles.label}>工具集</span>
-            <span className={styles.countLabel}>已选 {selectedToolCount}/{getToolCatalogSync().length}</span>
+            <div className={styles.selectionActions}>
+              <span className={styles.countLabel}>已选 {selectedToolCount}/{getToolCatalogSync().length}</span>
+              <Checkbox
+                checked={toolSelectionState.checked}
+                indeterminate={toolSelectionState.indeterminate}
+                onChange={(event) => {
+                  setToolset('custom');
+                  setSelectedTools(event.target.checked
+                    ? selectAllTools(getToolCatalogSync().map((tool) => tool.name))
+                    : clearOptionalTools());
+                }}
+              >
+                全选
+              </Checkbox>
+            </div>
           </div>
           <div className={styles.toolbar}>
             <Select
@@ -318,7 +359,20 @@ export const AgentCreateModal: React.FC<AgentCreateModalProps> = ({
         <div className={styles.field}>
           <div className={styles.fieldHeader}>
             <span className={styles.label}>平台 Skills</span>
-            <span className={styles.countLabel}>已选 {selectedSkillCount}</span>
+            <div className={styles.selectionActions}>
+              <span className={styles.countLabel}>已选 {selectedSkillCount}/{librarySkills.length}</span>
+              <Checkbox
+                checked={skillSelectionState.checked}
+                indeterminate={skillSelectionState.indeterminate}
+                disabled={librarySkills.length === 0}
+                onChange={(event) => {
+                  setSelectedSkillIds(event.target.checked ? selectAllSkillIds(librarySkills) : new Set());
+                  setSkillTemplate(event.target.checked ? 'custom' : 'none');
+                }}
+              >
+                全选
+              </Checkbox>
+            </div>
           </div>
           {librarySkills.length > 0 && (
             <>

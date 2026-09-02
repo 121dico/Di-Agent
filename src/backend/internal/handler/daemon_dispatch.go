@@ -45,7 +45,7 @@ func (h *DaemonHandler) failTask(machineID, taskID, reason string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	machine := &model.DaemonMachine{ID: machineID}
-	if err := h.agentSvc.CompleteDaemonTask(ctx, machine, taskID, "", reason); err != nil {
+	if _, err := h.agentSvc.CompleteDaemonTask(ctx, machine, taskID, "", reason); err != nil {
 		h.logger.Warn("mark daemon task failed", "machine", machineID, "task", taskID, "error", err)
 	}
 

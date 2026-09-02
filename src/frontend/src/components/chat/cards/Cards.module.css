@@ -1,9 +1,9 @@
 .card {
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 14px 16px;
+  border: 1px solid var(--wb-border-subtle);
+  border-radius: var(--radius-4);
+  padding: 13px 14px;
   margin: 8px 0;
-  background: var(--color-surface-muted, rgba(0, 0, 0, 0.02));
+  background: var(--wb-surface-subtle);
 }
 
 .cardHeader {
@@ -121,9 +121,9 @@
   font-size: 11px;
   font-weight: 400;
   padding: 0 6px;
-  border-radius: 999px;
-  background: rgba(22, 119, 255, 0.1);
-  color: #1677ff;
+  border-radius: var(--radius-2);
+  background: var(--wb-surface-selected);
+  color: var(--wb-link);
 }
 
 .optionTasks {
@@ -136,8 +136,8 @@
 .taskChip {
   font-size: 11px;
   padding: 1px 6px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.05);
+  border-radius: var(--radius-2);
+  background: var(--wb-surface-hover);
   color: var(--color-text-secondary);
 }
 

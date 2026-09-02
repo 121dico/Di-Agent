@@ -1,6 +1,8 @@
 /* 聊天内联产物卡片 */
 .container {
   display: flex;
+  min-width: 0;
+  max-width: 100%;
   flex-direction: column;
   gap: 10px;
   margin: 8px 0 2px;
@@ -8,16 +10,18 @@
 
 /* webpage 卡片 */
 .webCard {
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--wb-border-subtle);
+  border-radius: var(--radius-4);
   overflow: hidden;
   cursor: pointer;
-  transition: box-shadow var(--transition-fast), border-color var(--transition-fast);
+  transition: box-shadow var(--motion-control) var(--ease-standard), border-color var(--motion-control) var(--ease-standard);
 }
 
 .webCard:hover {
-  border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-border));
-  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
+  border-color: var(--wb-border-default);
+  box-shadow: var(--shadow-raised);
 }
 
 .webPreview {
@@ -33,12 +37,12 @@
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  background: var(--color-surface-muted);
+  background: var(--wb-surface-subtle);
 }
 
 .webIcon {
   font-size: 16px;
-  color: var(--color-primary);
+  color: var(--wb-link);
   flex-shrink: 0;
 }
 
@@ -71,21 +75,30 @@
   align-items: center;
   gap: 10px;
   padding: 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-surface-muted);
+  border: 1px solid var(--wb-border-subtle);
+  border-radius: var(--radius-4);
+  background: var(--wb-surface-subtle);
   cursor: pointer;
   transition: box-shadow var(--transition-fast), border-color var(--transition-fast);
 }
 
+@media (max-width: 1100px) {
+  .webPreview { height: 160px; }
+  .webMeta { padding-inline: 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .webCard, .documentCard { transition: none; }
+}
+
 .documentCard:hover {
-  border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-border));
-  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
+  border-color: var(--wb-border-default);
+  box-shadow: var(--shadow-raised);
 }
 
 .documentIcon {
   flex-shrink: 0;
-  color: var(--color-primary);
+  color: var(--wb-link);
   font-size: 18px;
 }
 

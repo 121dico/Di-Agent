@@ -202,7 +202,16 @@ export const MessageList: React.FC<MessageListProps> = React.memo(({
   const isEmpty = messages.length === 0 && optimisticMessages.length === 0;
 
   return (
-    <div className={styles.container} ref={containerRef} onScroll={handleScroll}>
+    <div
+      className={styles.container}
+      ref={containerRef}
+      onScroll={handleScroll}
+      role="log"
+      aria-live="polite"
+      aria-relevant="additions text"
+      aria-busy={loading}
+      aria-label="对话消息"
+    >
       {hasMore && (
         <div className={styles.loadMore}>
           {loading ? (
@@ -210,6 +219,7 @@ export const MessageList: React.FC<MessageListProps> = React.memo(({
           ) : (
             <button
               className={styles.loadMoreBtn}
+              type="button"
               onClick={loadMore}
             >
               加载更多
@@ -271,7 +281,7 @@ export const MessageList: React.FC<MessageListProps> = React.memo(({
         </>
       )}
       {showNewMsgBtn && unreadSinceScroll > 0 && (
-        <button className={styles.newMsgBtn} onClick={scrollToBottom}>
+        <button className={styles.newMsgBtn} type="button" onClick={scrollToBottom}>
           <Badge count={unreadSinceScroll > 1 ? unreadSinceScroll : 0} size="small">
             <ArrowDownOutlined />
           </Badge>

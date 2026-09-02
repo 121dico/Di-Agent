@@ -16,3 +16,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `bash scripts/dev.sh` | 启动开发环境（PostgreSQL + 后端 + 前端） |
 
 详细说明见 `scripts/README.md`。
+
+## Agent skills
+
+### Issue tracker
+
+工程任务使用 `121dico/Di-Agent` 的 GitHub Issues。详见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+使用默认五阶段 triage 标签。详见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+采用 multi-context 布局，由根目录 `CONTEXT-MAP.md` 索引 Backend、Frontend 和 Daemon 的领域文档。详见 `docs/agents/domain.md`。

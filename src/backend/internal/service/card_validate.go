@@ -15,12 +15,13 @@ import (
 // 四处不一致时：前端静默丢弃未注册 type 的卡（getCardSpec 返回 undefined），
 // 后端不校验时则把脏数据入库——所以新增类型必须四处同步改。
 var SupportedCardTypes = map[string]struct{}{
-	"plan":      {},
-	"approval":  {},
-	"progress":  {},
-	"info":      {},
-	"diff":      {},
-	"project":   {},
+	"plan":            {},
+	"approval":        {},
+	"progress":        {},
+	"info":            {},
+	"diff":            {},
+	"project":         {},
+	"personal_report": {},
 }
 
 // IsSupportedCardType 报告 t 是否为平台支持的 card_type。
@@ -106,6 +107,10 @@ func ValidateCard(card map[string]any) (map[string]any, error) {
 	case "project":
 		if _, ok := card["workDir"]; !ok {
 			return nil, fmt.Errorf("project card missing required field: workDir (card_id=%s)", idStr)
+		}
+	case "personal_report":
+		if _, ok := card["report_id"]; !ok {
+			return nil, fmt.Errorf("personal_report card missing required field: report_id (card_id=%s)", idStr)
 		}
 	}
 	return card, nil

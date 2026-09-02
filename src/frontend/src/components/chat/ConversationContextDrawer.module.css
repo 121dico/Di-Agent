@@ -138,7 +138,7 @@
 }
 
 .usageProgress.meterNormal :global(.ant-progress-bg) {
-  background: #2f8f6b !important;
+  background: #0f766e !important;
 }
 
 .usageProgress.meterWarning :global(.ant-progress-bg) {
@@ -287,7 +287,7 @@
 
 @media (max-width: 640px) {
   .drawer :global(.ant-drawer-content-wrapper) {
-    width: 100vw !important;
+    width: var(--ui-viewport-width) !important;
   }
 
   .sectionHeader {

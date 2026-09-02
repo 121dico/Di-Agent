@@ -1,10 +1,12 @@
 package router
 
 import (
+	"net"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/agent-hub/backend/internal/catalog"
@@ -24,6 +26,9 @@ type Deps struct {
 	UploadHandler              *handler.UploadHandler
 	PptPreviewHandler          *handler.PptPreviewHandler
 	AgentHandler               *handler.AgentHandler
+	AgentRuntimeHandler        *handler.AgentRuntimeHandler
+	ReportHandler              *handler.ReportHandler
+	PersonalReportHandler      *handler.PersonalReportHandler
 	PlatformSkillHandler       *handler.PlatformSkillHandler
 	AgentPromptTemplateHandler *handler.AgentPromptTemplateHandler
 	UserTemplateHandler        *handler.UserTemplateHandler
@@ -43,11 +48,46 @@ type Deps struct {
 	JWTSecret   string
 	DaemonToken string
 	UploadDir   string
+	// TLSPort > 0 表示启用了 HTTPS 侧监听；HTTP 收到浏览器导航请求时重定向过去。
+	TLSPort int
+}
+
+// makeHTTPSRedirectMiddleware 在启用 TLS 时，把 HTTP 上的浏览器导航
+// （Accept 含 text/html 的 GET）重定向到 HTTPS，让用户自然进入安全上下文。
+// daemon / curl / install.sh 等 API 与脚本流量（Accept: */* 或无 text/html）不受影响。
+func makeHTTPSRedirectMiddleware(tlsPort int) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if tlsPort <= 0 || c.Request.TLS != nil {
+			c.Next()
+			return
+		}
+		if c.Request.Method != http.MethodGet || !strings.Contains(c.GetHeader("Accept"), "text/html") {
+			c.Next()
+			return
+		}
+		host := c.Request.Host
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = net.JoinHostPort(h, strconv.Itoa(tlsPort))
+		} else {
+			host = net.JoinHostPort(host, strconv.Itoa(tlsPort))
+		}
+		c.Redirect(http.StatusFound, "https://"+host+c.Request.RequestURI)
+		c.Abort()
+	}
 }
 
 // Setup registers all HTTP routes on the given gin Engine.
 // SPA fallback and health checks are not registered here – main.go handles them directly.
 func Setup(r *gin.Engine, deps Deps) {
+	r.Use(makeHTTPSRedirectMiddleware(deps.TLSPort))
+
+	// Daemon installer downloads (no auth: launcher 脚本用 curl/Invoke-WebRequest 拉取，
+	// 内容为公开的 daemon 离线包与通用安装脚本，不含密钥——密钥内嵌在需鉴权的
+	// launcher 生成接口返回值里)。
+	downloadDir := "./downloads"
+	_ = os.MkdirAll(downloadDir, 0o755)
+	r.Static("/downloads", downloadDir)
+
 	// Auth routes (no auth)
 	authGroup := r.Group("/api/auth")
 	{
@@ -143,6 +183,7 @@ func Setup(r *gin.Engine, deps Deps) {
 
 		// Agents
 		apiGroup.GET("/agents", deps.AgentHandler.List)
+		apiGroup.GET("/agents/:id/runtime-overview", deps.AgentRuntimeHandler.Overview)
 		apiGroup.POST("/agents", deps.AgentHandler.Create)
 		apiGroup.PUT("/agents/:id", deps.AgentHandler.Update)
 		apiGroup.PUT("/agents/:id/tools-config", deps.AgentHandler.UpdateToolsConfig)
@@ -155,7 +196,43 @@ func Setup(r *gin.Engine, deps Deps) {
 		apiGroup.POST("/agents/:id/restart", deps.AgentHandler.RestartAgent)
 		apiGroup.POST("/agents/:id/stop", deps.AgentHandler.StopAgent)
 		apiGroup.POST("/agents/:id/skills/open-location", deps.AgentHandler.OpenSkillLocation)
+		apiGroup.POST("/agents/:id/skills/install", deps.AgentHandler.InstallGitHubSkill)
 		apiGroup.GET("/agents/:id/files/browse", deps.AgentHandler.BrowseFiles)
+
+		// Fixed enterprise reports
+		if deps.ReportHandler != nil {
+			reportRoutes := apiGroup.Group("/reports")
+			reportRoutes.Use(middleware.ValidateUUIDParam("id"), middleware.ValidateUUIDParam("runId"))
+			{
+				reportRoutes.GET("/sources", deps.ReportHandler.ListSources)
+				reportRoutes.POST("/sources", deps.ReportHandler.CreateSource)
+				reportRoutes.GET("/sources/:id/contract", deps.ReportHandler.GetSourceContract)
+				reportRoutes.PUT("/sources/:id/contract", deps.ReportHandler.SaveSourceContract)
+				reportRoutes.GET("/contracts", deps.ReportHandler.ListAgentContracts)
+				reportRoutes.GET("", deps.ReportHandler.ListDefinitions)
+				reportRoutes.POST("", deps.ReportHandler.CreateDefinition)
+				reportRoutes.PUT("/:id", deps.ReportHandler.UpdateDefinition)
+				reportRoutes.POST("/:id/run", deps.ReportHandler.Run)
+				reportRoutes.GET("/:id/data", deps.ReportHandler.QueryPage)
+				reportRoutes.GET("/:id/search", deps.ReportHandler.QuerySearch)
+				reportRoutes.GET("/:id/analytics", deps.ReportHandler.QueryAnalytics)
+				reportRoutes.GET("/:id/runs", deps.ReportHandler.ListRuns)
+				reportRoutes.GET("/:id/runs/:runId/download", deps.ReportHandler.DownloadCSV)
+			}
+		}
+
+		// Owner-only reports composed from Agent conversations.
+		if deps.PersonalReportHandler != nil {
+			personalReportRoutes := apiGroup.Group("/personal-reports")
+			personalReportRoutes.Use(middleware.ValidateUUIDParam("id"))
+			{
+				personalReportRoutes.GET("", deps.PersonalReportHandler.List)
+				personalReportRoutes.POST("", deps.PersonalReportHandler.Create)
+				personalReportRoutes.GET("/:id", deps.PersonalReportHandler.Get)
+				personalReportRoutes.PUT("/:id", deps.PersonalReportHandler.Update)
+				personalReportRoutes.DELETE("/:id", deps.PersonalReportHandler.Delete)
+			}
+		}
 
 		// Platform skills
 		apiGroup.GET("/platform-skills", deps.PlatformSkillHandler.List)
@@ -182,6 +259,7 @@ func Setup(r *gin.Engine, deps Deps) {
 		apiGroup.POST("/daemon/machines", deps.AgentHandler.CreateDaemonMachine)
 		apiGroup.DELETE("/daemon/machines/:id", deps.AgentHandler.DeleteDaemonMachine)
 		apiGroup.GET("/daemon/machines/:id/connect", deps.AgentHandler.GetMachineConnect)
+		apiGroup.GET("/daemon/machines/:id/launcher", deps.AgentHandler.GetMachineLauncher)
 		apiGroup.GET("/daemon/agent-candidates", deps.AgentHandler.ListAgentCandidates)
 		apiGroup.POST("/daemon/agent-candidates/:id/add", deps.AgentHandler.AddCandidateAgent)
 
@@ -328,6 +406,16 @@ func Setup(r *gin.Engine, deps Deps) {
 		// Platform skills (MCP)
 		mcpGroup.GET("/platform-skills", deps.PlatformSkillHandler.List)
 		mcpGroup.POST("/platform-skills/import-defaults", deps.PlatformSkillHandler.ImportDefaults)
+
+		// Report data tools (MCP). These expose only sanitized contracts and
+		// server-validated queries; physical source configuration stays admin-only.
+		if deps.ReportHandler != nil {
+			mcpGroup.GET("/report-data/contracts", deps.ReportHandler.ListAgentContracts)
+			mcpGroup.POST("/report-data/query", deps.ReportHandler.QueryAgentData)
+		}
+		if deps.PersonalReportHandler != nil {
+			mcpGroup.POST("/personal-reports", deps.PersonalReportHandler.Create)
+		}
 
 		// Tool registry (MCP) - daemon fetches tool definitions at startup
 		mcpGroup.GET("/tool-registry", deps.ToolDefHandler.ToolRegistry)

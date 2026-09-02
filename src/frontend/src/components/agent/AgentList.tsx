@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Avatar, Button, Dropdown, Spin } from 'antd';
+import { Avatar, Button, Dropdown, Spin, Tag } from 'antd';
 import type { MenuProps } from 'antd';
 import {
   DownOutlined,
@@ -182,6 +182,7 @@ export const AgentList: React.FC<AgentListProps> = ({
       machineID: machine.machine_id,
       status: machine.status,
       lastSeenAt: machine.last_seen_at,
+      isLocal: machine.is_local ?? false,
       isGlobal: false,
       agents: agentsByMachine.get(machine.id) ?? [],
     }));
@@ -193,6 +194,7 @@ export const AgentList: React.FC<AgentListProps> = ({
         machineID: '',
         status: 'offline' as DaemonMachine['status'],
         lastSeenAt: undefined,
+        isLocal: false,
         isGlobal: true,
         agents: globalAgents,
       });
@@ -263,6 +265,11 @@ export const AgentList: React.FC<AgentListProps> = ({
                           status={machineStatusBadge(group.status)}
                           label={machineStatusLabel(group.status)}
                         />
+                      )}
+                      {!group.isGlobal && (
+                        <Tag color={group.isLocal ? 'blue' : undefined}>
+                          {group.isLocal ? '本地' : '远程'}
+                        </Tag>
                       )}
                     </div>
                     <span className={styles.machineSub}>

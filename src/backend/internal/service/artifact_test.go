@@ -11,13 +11,13 @@ import (
 
 // fakeArtifactRepo 实现 ArtifactRepoForSvc + OrchArtifactRepo，用于隔离 service 鉴权与版本逻辑。
 type fakeArtifactRepo struct {
-	convIDByRoot   map[string]string
-	rootNotFound   bool
-	createErr      error
-	created        *model.Artifact
-	createVersIn   model.Artifact
-	createVersRoot string
-	createCalls    int
+	convIDByRoot     map[string]string
+	rootNotFound     bool
+	createErr        error
+	created          *model.Artifact
+	createVersIn     model.Artifact
+	createVersRoot   string
+	createCalls      int
 	versions         []model.Artifact
 	latest           *model.Artifact
 	latestErr        error

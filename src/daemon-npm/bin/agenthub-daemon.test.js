@@ -15,10 +15,110 @@ const {
   executeTaskOnce,
   ensureOpenCodeMcpConfig,
   onWebSocket,
+  installSkillFromDirectory,
+  MCP_TOOLS,
+  parseGitHubSkillSource,
+  resolveAllowedTools,
   resolveAgentTimeoutMs,
   runtimeAgentKey,
   runningAgents,
 } = require('./agenthub-daemon.js');
+
+test('governed report hooks are built in for existing agents', async () => {
+  const names = MCP_TOOLS.map((tool) => tool.name);
+  for (const name of ['discover_report_data', 'query_report_data', 'save_personal_report']) {
+    assert.equal(names.includes(name), true, `${name} should be registered`);
+  }
+  const allowed = await resolveAllowedTools({
+    agentId: 'agent-1',
+    allowedTools: null,
+    currentAgent: { id: 'agent-1', tools_config: '{"toolset":"none","allowed_tools":[]}' },
+  });
+  assert.deepEqual(
+    allowed.filter((name) => name.includes('report')),
+    ['discover_report_data', 'query_report_data', 'save_personal_report'],
+  );
+});
+
+test('personal report save requires a real query proof and emits a report card', async () => {
+  const queryTool = MCP_TOOLS.find((tool) => tool.name === 'query_report_data');
+  const saveTool = MCP_TOOLS.find((tool) => tool.name === 'save_personal_report');
+  const calls = [];
+  const cards = [];
+  const ctx = {
+    conversationId: 'conv-1',
+    callMcpApi: async (method, pathname, options = {}) => {
+      calls.push({ method, pathname, body: options.body });
+      if (pathname === '/mcp/report-data/query') {
+        return { data: { source_id: 'source-1', source_name: '价敏数据', query_id: 'query-1', source_partition: '2026-08-27', duration_ms: 12, rows: [{ users: 10 }] } };
+      }
+      if (pathname === '/mcp/personal-reports') {
+        return { data: { id: 'report-1', title: options.body.title, description: options.body.description } };
+      }
+      throw new Error(`unexpected path ${pathname}`);
+    },
+    emitCard: async (card) => cards.push(card),
+  };
+
+  await assert.rejects(
+    () => saveTool.run({ title: '报表', data_source_id: 'source-1', query_id: 'missing', document: { sections: [] } }, ctx),
+    /必须先在本轮调用 query_report_data/,
+  );
+  await queryTool.run({ source_id: 'source-1', fields: [{ name: 'duid', aggregation: 'COUNT DISTINCT' }] }, ctx);
+  const saved = await saveTool.run({
+    title: '价敏用户概览',
+    description: '真实查询生成',
+    data_source_id: 'source-1',
+    query_id: 'query-1',
+    document: { sections: [{ id: 'users', type: 'metric', data: { value: 10 } }] },
+  }, ctx);
+
+  assert.equal(saved.id, 'report-1');
+  assert.equal(calls.at(-1).body.provenance.query_id, 'query-1');
+  assert.equal(calls.at(-1).body.conversation_id, 'conv-1');
+  assert.deepEqual(cards, [{
+    type: 'personal_report',
+    id: 'personal-report-report-1',
+    report_id: 'report-1',
+    title: '价敏用户概览',
+    summary: '真实查询生成',
+    source_partition: '2026-08-27',
+  }]);
+});
+
+test('GitHub Skill source accepts only a public HTTPS GitHub repository', () => {
+  assert.deepEqual(parseGitHubSkillSource(JSON.stringify({
+    source_url: 'https://github.com/mattpocock/skills',
+    ref: 'main',
+    subpath: 'skills/ask-matt',
+  })), {
+    sourceURL: 'https://github.com/mattpocock/skills',
+    ref: 'main',
+    subpath: 'skills/ask-matt',
+    cliTool: '',
+  });
+  assert.throws(() => parseGitHubSkillSource(JSON.stringify({ source_url: 'https://example.com/skill' })), /GitHub/);
+  assert.throws(() => parseGitHubSkillSource(JSON.stringify({ source_url: 'https://github.com/a/b', subpath: '../escape' })), /subpath/);
+});
+
+test('Skill deployment validates manifest, is atomic, and never overwrites', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agenthub-skill-install-'));
+  const sourceDir = path.join(tempDir, 'checkout', 'ask-matt');
+  const installRoot = path.join(tempDir, 'installed');
+  fs.mkdirSync(sourceDir, { recursive: true });
+  fs.writeFileSync(path.join(sourceDir, 'SKILL.md'), '---\nname: ask-matt\ndescription: Route engineering work\n---\n# Ask Matt\n');
+  fs.mkdirSync(path.join(sourceDir, 'scripts'));
+  fs.writeFileSync(path.join(sourceDir, 'scripts', 'setup.sh'), 'exit 99\n');
+  try {
+    const result = installSkillFromDirectory(sourceDir, installRoot);
+    assert.equal(result.name, 'ask-matt');
+    assert.equal(fs.existsSync(path.join(result.installed_path, 'SKILL.md')), true);
+    assert.equal(fs.existsSync(path.join(result.installed_path, 'scripts', 'setup.sh')), true);
+    assert.throws(() => installSkillFromDirectory(sourceDir, installRoot), /already exists/);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
 
 test('Agent task timeout defaults to 30 minutes and accepts a positive env override', () => {
   assert.equal(DEFAULT_AGENT_TIMEOUT_MS, 1800000);

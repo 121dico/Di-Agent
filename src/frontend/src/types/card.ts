@@ -24,7 +24,7 @@
 import type React from 'react';
 
 /** 卡片类型——与后端系统提示词 + CardRegistry 注册 key 协议契约一致。 */
-export type CardType = 'plan' | 'approval' | 'progress' | 'info' | 'diff' | 'project' | string;
+export type CardType = 'plan' | 'approval' | 'progress' | 'info' | 'diff' | 'project' | 'personal_report' | string;
 
 export interface BaseCard {
   type: CardType;
@@ -126,7 +126,15 @@ export interface ProjectCard extends BaseCard {
   summary?: string;
 }
 
-export type InteractiveCard = PlanCard | ApprovalCard | ProgressCard | InfoCard | DiffCard | ProjectCard;
+/** Owner-only personal report created from a real report data query. */
+export interface PersonalReportCard extends BaseCard {
+  type: 'personal_report';
+  report_id: string;
+  summary?: string;
+  source_partition?: string;
+}
+
+export type InteractiveCard = PlanCard | ApprovalCard | ProgressCard | InfoCard | DiffCard | ProjectCard | PersonalReportCard;
 
 // ---------------------------------------------------------------------------
 // CardSpec + CardProps —— 自描述注册单元

@@ -73,6 +73,10 @@ function createOpenClawCliSpec(ctx) {
       return roots;
     },
 
+    installSkillRoot(home) {
+      return ctx.pathJoin(home, '.openclaw', 'skills');
+    },
+
     // OpenClaw 无登录态特殊检测，不实现 isAuthenticated。
 
     // === Step 2 扩展（agent-adapter 重构） ===

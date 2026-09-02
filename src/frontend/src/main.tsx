@@ -6,7 +6,11 @@ import App from './App';
 import theme from './theme/antd';
 import { bindMessage } from './utils/message';
 import { bindModal } from './utils/modal';
+import { installChunkRecovery } from './utils/chunkRecovery';
+import { AppErrorFallback } from './components/shell/AppErrorFallback';
+import { installDisplayScale } from './utils/displayScale';
 import './styles/globals.css';
+import './styles/workbench-tokens.css';
 
 // 桌面端标记：尽早设置，让 CSS 能据此隐藏 html/body/#root 的实色背景，
 // 使 transparent 窗口 + CSS border-radius 正确裁切圆角
@@ -14,33 +18,27 @@ if (window.agentHubDesktop?.isDesktop) {
   document.documentElement.classList.add('ah-desktop');
 }
 
+installDisplayScale();
+
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
-  { hasError: boolean }
+  { error: unknown | null }
 > {
-  state = { hasError: false };
+  state = { error: null as unknown | null };
 
-  static getDerivedStateFromError() {
-    return { hasError: true };
+  static getDerivedStateFromError(error: unknown) {
+    return { error };
   }
 
   render() {
-    if (this.state.hasError) {
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 12 }}>
-          <h2 style={{ color: '#666' }}>页面出现错误</h2>
-          <button
-            onClick={() => { this.setState({ hasError: false }); window.location.reload(); }}
-            style={{ padding: '8px 24px', borderRadius: 6, border: 'none', background: '#1677ff', color: '#fff', cursor: 'pointer' }}
-          >
-            刷新页面
-          </button>
-        </div>
-      );
+    if (this.state.error) {
+      return <AppErrorFallback error={this.state.error} />;
     }
     return this.props.children;
   }
 }
+
+installChunkRecovery();
 
 const rootEl = document.getElementById('root');
 if (!rootEl) {

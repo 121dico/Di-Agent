@@ -63,6 +63,73 @@ func TestSPAFallbackHandlerServesBrowserHistoryRoute(t *testing.T) {
 	if !strings.Contains(w.Body.String(), `id="root"`) {
 		t.Fatalf("body missing root: %q", w.Body.String())
 	}
+	if got := w.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("Cache-Control = %q, want %q", got, "no-cache")
+	}
+}
+
+func TestSPAFallbackHandlerDoesNotServeIndexForMissingBuildAsset(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	distDir := t.TempDir()
+	indexPath := filepath.Join(distDir, "index.html")
+	if err := os.WriteFile(indexPath, []byte("<!doctype html><div id=\"root\"></div>"), 0o644); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+
+	router := gin.New()
+	registerSPARoutes(router, distDir)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/assets/SkillsView-stale.js", nil))
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+	if strings.Contains(w.Body.String(), `id="root"`) {
+		t.Fatal("missing build asset must not be served the SPA index")
+	}
+}
+
+func TestSPAFallbackHandlerCachesHashedBuildAssets(t *testing.T) {
+	distDir := t.TempDir()
+	indexPath := filepath.Join(distDir, "index.html")
+	assetPath := filepath.Join(distDir, "assets", "SkillsView-abc123.js")
+	if err := os.MkdirAll(filepath.Dir(assetPath), 0o755); err != nil {
+		t.Fatalf("mkdir assets: %v", err)
+	}
+	if err := os.WriteFile(indexPath, []byte("index"), 0o644); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+	if err := os.WriteFile(assetPath, []byte("export default {}"), 0o644); err != nil {
+		t.Fatalf("write asset: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/assets/SkillsView-abc123.js", nil)
+
+	spaFallbackHandler(distDir, indexPath)(c)
+
+	if got := w.Header().Get("Cache-Control"); got != "public, max-age=31536000, immutable" {
+		t.Fatalf("Cache-Control = %q, want immutable asset caching", got)
+	}
+}
+
+func TestSPAFallbackHandlerDoesNotCacheExplicitIndexDocument(t *testing.T) {
+	distDir := t.TempDir()
+	indexPath := filepath.Join(distDir, "index.html")
+	if err := os.WriteFile(indexPath, []byte("index"), 0o644); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/index.html", nil)
+
+	spaFallbackHandler(distDir, indexPath)(c)
+
+	if got := w.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("Cache-Control = %q, want %q", got, "no-cache")
+	}
 }
 
 func TestSPAFallbackHandlerNormalizesURLPathsWithinDist(t *testing.T) {

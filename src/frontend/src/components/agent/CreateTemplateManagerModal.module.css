@@ -63,13 +63,13 @@
 }
 
 .templateCard:hover {
-  background: rgba(47, 143, 107, 0.04);
-  border-color: rgba(47, 143, 107, 0.12);
+  background: rgba(15, 118, 110, 0.04);
+  border-color: rgba(15, 118, 110, 0.12);
 }
 
 .templateCardActive {
-  background: rgba(47, 143, 107, 0.06);
-  border-color: rgba(47, 143, 107, 0.18);
+  background: rgba(15, 118, 110, 0.06);
+  border-color: rgba(15, 118, 110, 0.18);
   box-shadow: inset 3px 0 0 var(--color-primary);
 }
 
@@ -96,7 +96,7 @@
 }
 
 .templateCardActive .templateCardDesc {
-  background: rgba(47, 143, 107, 0.1);
+  background: rgba(15, 118, 110, 0.1);
   color: var(--color-primary);
 }
 
@@ -169,7 +169,7 @@
   font-size: 11px;
   font-weight: 700;
   color: var(--color-primary);
-  background: rgba(47, 143, 107, 0.08);
+  background: rgba(15, 118, 110, 0.08);
   padding: 1px 8px;
   border-radius: 10px;
 }
@@ -207,9 +207,9 @@
 }
 
 .filterPill:hover {
-  border-color: rgba(47, 143, 107, 0.25);
+  border-color: rgba(15, 118, 110, 0.25);
   color: var(--color-primary);
-  background: rgba(47, 143, 107, 0.03);
+  background: rgba(15, 118, 110, 0.03);
 }
 
 .filterPillActive {
@@ -258,18 +258,18 @@
 }
 
 .toolTag:hover {
-  border-color: rgba(47, 143, 107, 0.25);
+  border-color: rgba(15, 118, 110, 0.25);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .toolTagSelected {
-  border-color: rgba(47, 143, 107, 0.3);
-  background: rgba(47, 143, 107, 0.04);
+  border-color: rgba(15, 118, 110, 0.3);
+  background: rgba(15, 118, 110, 0.04);
 }
 
 .toolTagSelected:hover {
-  border-color: rgba(47, 143, 107, 0.4);
-  background: rgba(47, 143, 107, 0.06);
+  border-color: rgba(15, 118, 110, 0.4);
+  background: rgba(15, 118, 110, 0.06);
 }
 
 .toolTag input[type="checkbox"] {
@@ -299,7 +299,7 @@
 }
 
 :global(html.dark) .toolTagSelected {
-  background: rgba(47, 143, 107, 0.06);
+  background: rgba(15, 118, 110, 0.06);
 }
 
 /* ── Skill tags ── */
@@ -318,18 +318,18 @@
 }
 
 .skillTag:hover {
-  border-color: rgba(47, 143, 107, 0.25);
+  border-color: rgba(15, 118, 110, 0.25);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .skillTagSelected {
-  border-color: rgba(47, 143, 107, 0.3);
-  background: rgba(47, 143, 107, 0.04);
+  border-color: rgba(15, 118, 110, 0.3);
+  background: rgba(15, 118, 110, 0.04);
 }
 
 .skillTagSelected:hover {
-  border-color: rgba(47, 143, 107, 0.4);
-  background: rgba(47, 143, 107, 0.06);
+  border-color: rgba(15, 118, 110, 0.4);
+  background: rgba(15, 118, 110, 0.06);
 }
 
 .skillTagName {
@@ -353,7 +353,7 @@
 }
 
 :global(html.dark) .skillTagSelected {
-  background: rgba(47, 143, 107, 0.06);
+  background: rgba(15, 118, 110, 0.06);
 }
 
 /* ── Editor actions ── */

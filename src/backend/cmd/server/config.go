@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -17,6 +19,9 @@ type Config struct {
 	Server struct {
 		Port        int    `koanf:"port"`
 		ExternalURL string `koanf:"external_url"` // 局域网/公网可达地址；为空时仅生成本机 127.0.0.1 连接命令
+		TLSPort     int    `koanf:"tls_port"`     // HTTPS 监听端口；配置了 tls_cert/tls_key 时启用
+		TLSCert     string `koanf:"tls_cert"`     // 证书 PEM 路径（自签名即可，用于解锁浏览器安全上下文 API）
+		TLSKey      string `koanf:"tls_key"`      // 私钥 PEM 路径
 	} `koanf:"server"`
 	Database struct {
 		Host     string `koanf:"host"`
@@ -86,6 +91,11 @@ func loadConfig(path string) (*Config, error) {
 	if envPath := os.Getenv("AGENTHUB_CONFIG"); envPath != "" {
 		path = envPath
 	}
+	// Local credentials live beside config.yaml in a git-ignored file. Values
+	// already supplied by the process environment always take precedence.
+	if err := loadLocalEnvironment(filepath.Join(filepath.Dir(path), ".env.local")); err != nil {
+		return nil, fmt.Errorf("load local environment: %w", err)
+	}
 
 	k := koanf.New(".")
 	if err := k.Load(file.Provider(path), yaml.Parser()); err != nil {
@@ -97,10 +107,81 @@ func loadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("unmarshal config: %w", err)
 	}
 	cfg.applyRAGDefaults(k.Exists("rag.enabled"), k.Exists("rag.reranker_enabled"))
+	cfg.applyTLSDefaults()
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 	return &cfg, nil
+}
+
+func loadLocalEnvironment(path string) error {
+	file, err := os.Open(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		key, value, ok := strings.Cut(line, "=")
+		key = strings.TrimSpace(key)
+		if !ok || !validEnvironmentKey(key) {
+			return fmt.Errorf("invalid environment assignment for %q", key)
+		}
+		if _, exists := os.LookupEnv(key); exists {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		if len(value) >= 2 && ((value[0] == '\'' && value[len(value)-1] == '\'') || (value[0] == '"' && value[len(value)-1] == '"')) {
+			value = value[1 : len(value)-1]
+		}
+		if err := os.Setenv(key, value); err != nil {
+			return err
+		}
+	}
+	return scanner.Err()
+}
+
+func validEnvironmentKey(key string) bool {
+	if key == "" || !((key[0] >= 'A' && key[0] <= 'Z') || (key[0] >= 'a' && key[0] <= 'z') || key[0] == '_') {
+		return false
+	}
+	for i := 1; i < len(key); i++ {
+		char := key[i]
+		if !((char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || char == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+// applyTLSDefaults 补全 TLS 默认值：只配了证书没配端口时默认 8443。
+func (c *Config) applyTLSDefaults() {
+	if c.Server.TLSCert != "" && c.Server.TLSKey != "" && c.Server.TLSPort == 0 {
+		c.Server.TLSPort = 8443
+	}
+}
+
+// TLSEnabled 返回是否启用 HTTPS 侧监听（证书与私钥文件均存在）。
+func (c *Config) TLSEnabled() bool {
+	if c.Server.TLSCert == "" || c.Server.TLSKey == "" || c.Server.TLSPort <= 0 {
+		return false
+	}
+	if _, err := os.Stat(c.Server.TLSCert); err != nil {
+		return false
+	}
+	if _, err := os.Stat(c.Server.TLSKey); err != nil {
+		return false
+	}
+	return true
 }
 
 func (c *Config) applyRAGDefaults(hasEnabled bool, hasRerankerEnabled ...bool) {

@@ -75,8 +75,8 @@
 
 .templateCard:hover,
 .templateCardActive {
-  border-color: rgba(47, 143, 107, 0.32);
-  background: rgba(47, 143, 107, 0.04);
+  border-color: rgba(15, 118, 110, 0.32);
+  background: rgba(15, 118, 110, 0.04);
 }
 
 .templateCardActive {

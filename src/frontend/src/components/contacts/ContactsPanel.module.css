@@ -19,7 +19,7 @@
 
 .searchInput:focus,
 .searchInput:hover {
-  border-color: rgba(47, 143, 107, 0.35);
+  border-color: rgba(15, 118, 110, 0.35);
   box-shadow: var(--shadow-input-focus);
 }
 
@@ -110,7 +110,7 @@
 }
 
 .contactItem:hover {
-  border-color: rgba(22, 163, 101, 0.1);
+  border-color: rgba(15, 118, 110, 0.1);
   background: rgba(255, 255, 255, 0.72);
 }
 
@@ -175,7 +175,7 @@
 }
 
 .actionBtn:hover {
-  background: rgba(22, 163, 101, 0.08);
+  background: rgba(15, 118, 110, 0.08);
   color: var(--color-primary);
 }
 

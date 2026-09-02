@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Skeleton, Button, Input } from 'antd';
 import { message as antMessage } from '@/utils/message';
 import { MessageOutlined, TeamOutlined, SearchOutlined, FolderOutlined, RightOutlined, LeftOutlined } from '@ant-design/icons';
@@ -29,19 +29,25 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onNavigateCo
   const [showArchived, setShowArchived] = useState(false);
   const [archivedConvs, setArchivedConvs] = useState<Conversation[]>([]);
   const [archivedCount, setArchivedCount] = useState(0);
+  const [archiveLoadFailed, setArchiveLoadFailed] = useState(false);
 
-  // Fetch archived on mount — cache list to avoid second request on click
-  useEffect(() => {
-    convApi.getArchivedConversations()
+  const loadArchived = useCallback(() => {
+    setArchiveLoadFailed(false);
+    return convApi.getArchivedConversations()
       .then((list) => {
         const items = list ?? [];
         setArchivedCount(items.length);
         setArchivedConvs(items);
       })
-      .catch(() => {});
+      .catch(() => setArchiveLoadFailed(true));
   }, []);
 
-  const { pinnedConvs, agentConvs, groupConvs, singleConvs } = useMemo(() => {
+  // Fetch archived on mount — cache list to avoid second request on click
+  useEffect(() => {
+    void loadArchived();
+  }, [loadArchived]);
+
+  const { pinnedConvs, runningConvs, projectConvs, recentConvs } = useMemo(() => {
     const base = searchQuery
       ? conversations.filter((c) => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
       : conversations;
@@ -49,20 +55,20 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onNavigateCo
     const unpinned = base.filter((c) => !c.pinned);
     return {
       pinnedConvs: pinned,
-      agentConvs: unpinned.filter((c) => c.type === 'agent'),
-      groupConvs: unpinned.filter((c) => c.type === 'group'),
-      singleConvs: unpinned.filter((c) => c.type === 'single'),
+      runningConvs: unpinned.filter((c) => c.type === 'agent'),
+      projectConvs: unpinned.filter((c) => c.type === 'group'),
+      recentConvs: unpinned.filter((c) => c.type === 'single'),
     };
   }, [conversations, searchQuery]);
 
   if (loading && conversations.length === 0) {
     return (
       <div className={styles.list}>
-        <div style={{ padding: '8px 12px' }}>
+        <div className={styles.skeletonList} aria-label="正在加载对话" aria-busy="true">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} style={{ display: 'flex', gap: 10, padding: '10px 0', alignItems: 'center' }}>
+            <div key={i} className={styles.skeletonRow}>
               <Skeleton.Avatar active size={36} />
-              <div style={{ flex: 1 }}>
+              <div className={styles.skeletonCopy}>
                 <Skeleton active paragraph={{ rows: 1, width: '60%' }} title={false} />
               </div>
             </div>
@@ -79,7 +85,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onNavigateCo
           <div className={styles.emptyIcon}>
             <MessageOutlined />
           </div>
-          <div className={styles.emptyTitle}>欢迎使用 AgentHub</div>
+          <div className={styles.emptyTitle}>欢迎使用 Di Agent</div>
           <div className={styles.emptyDesc}>开始你的第一个对话吧</div>
           <div className={styles.emptyActions}>
             <Button
@@ -123,9 +129,12 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onNavigateCo
 
   const renderGroup = (convs: Conversation[], header: string) =>
     convs.length > 0 && (
-      <>
-        <div className={styles.sectionHeader}>{header}</div>
-        {convs.map((conv) => (
+      <details className={styles.conversationGroup} open>
+        <summary className={styles.sectionHeader}>
+          <span>{header}</span>
+          <span>{convs.length}</span>
+        </summary>
+        <div className={styles.groupItems}>{convs.map((conv) => (
           <ConversationItemWrapper
             key={conv.id}
             conversation={conv}
@@ -153,8 +162,8 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onNavigateCo
                 : undefined
             }
           />
-        ))}
-      </>
+        ))}</div>
+      </details>
     );
 
   // Archived view
@@ -192,14 +201,20 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onNavigateCo
       <div className={styles.searchWrap} data-conv-search>
         <Input
           prefix={<SearchOutlined />}
-          placeholder="搜索对话..."
+          placeholder="搜索对话"
           allowClear
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className={styles.searchInput}
+          aria-label="搜索对话"
         />
       </div>
       <div className={styles.items}>
+        {archiveLoadFailed && (
+          <button className={styles.inlineState} type="button" onClick={() => void loadArchived()}>
+            归档加载失败 · 点击重试
+          </button>
+        )}
         {archivedCount > 0 && (
           <button className={styles.archiveFolder} type="button" onClick={handleOpenArchived}>
             <div className={styles.archiveFolderIcon}>
@@ -212,10 +227,17 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onNavigateCo
             <RightOutlined className={styles.archiveFolderArrow} />
           </button>
         )}
-        {renderGroup(pinnedConvs, '置顶')}
-        {renderGroup(agentConvs, '智能体')}
-        {renderGroup(groupConvs, '群聊')}
-        {renderGroup(singleConvs, '单聊')}
+        {renderGroup(pinnedConvs, '收藏')}
+        {renderGroup(runningConvs, 'Agent 协作')}
+        {renderGroup(projectConvs, '项目')}
+        {renderGroup(recentConvs, '最近')}
+        {searchQuery && pinnedConvs.length + runningConvs.length + projectConvs.length + recentConvs.length === 0 && (
+          <div className={styles.searchEmpty} role="status">
+            <strong>没有匹配“{searchQuery}”的对话</strong>
+            <span>换个关键词，或清除当前搜索。</span>
+            <button type="button" onClick={() => setSearchQuery('')}>清除搜索</button>
+          </div>
+        )}
       </div>
     </div>
   );

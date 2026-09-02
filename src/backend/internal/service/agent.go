@@ -38,7 +38,7 @@ type AgentRepo interface {
 	MarkDaemonMachineConnected(ctx context.Context, id, machineID string) error
 	UpdateMachineCapabilities(ctx context.Context, id string, capabilities []string) error
 	FindMachineWithCapability(ctx context.Context, userID, capability string) (*model.DaemonMachine, error)
-	UpsertMachineAgentCandidate(ctx context.Context, machineID, name, cliTool, version, capabilitiesJSON string) error
+	UpsertMachineAgentCandidate(ctx context.Context, machineID, name, cliTool, variant, version, capabilitiesJSON string) error
 	ListAgentCandidates(ctx context.Context, userID string) ([]model.AgentCandidate, error)
 	AddCandidateAgent(ctx context.Context, userID, candidateID, displayName, expectedCLITool, systemPrompt, toolsConfig, customSkills string, enableManagementTools bool) (*model.Agent, error)
 	CreateCustom(ctx context.Context, userID, name, cliTool, systemPrompt, toolsConfig, avatar, capabilitiesJSON, customSkills string, enableManagementTools bool) (*model.Agent, error)
@@ -67,18 +67,32 @@ func (s *AgentService) ClaimDaemonTask(ctx context.Context, machine *model.Daemo
 }
 
 // CompleteDaemonTask 接收当前电脑执行 CLI 后的真实结果。
-func (s *AgentService) CompleteDaemonTask(ctx context.Context, machine *model.DaemonMachine, taskID, result, taskError string) error {
+func (s *AgentService) CompleteDaemonTask(ctx context.Context, machine *model.DaemonMachine, taskID, result, taskError string) (*model.DaemonTask, error) {
 	if machine == nil || machine.ID == "" || taskID == "" {
-		return ErrAgentInvalidInput
+		return nil, ErrAgentInvalidInput
+	}
+	task, err := s.repo.GetDaemonTask(ctx, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("load daemon task: %w", err)
 	}
 	ok, err := s.repo.CompleteDaemonTask(ctx, taskID, machine.ID, result, taskError)
 	if err != nil {
-		return fmt.Errorf("complete daemon task: %w", err)
+		return nil, fmt.Errorf("complete daemon task: %w", err)
 	}
 	if !ok {
-		return ErrAgentNotFound
+		// daemon 会在 WS 断线后重放已发送但未确认的 task.complete。若第一次已经
+		// 完成 daemon task、但后续看板同步失败，允许同内容重放继续走修复链路。
+		if task != nil && task.MachineID == machine.ID {
+			if task.Status == "completed" && taskError == "" && task.Result == result {
+				return task, nil
+			}
+			if task.Status == "failed" && taskError != "" && task.Error == taskError {
+				return task, nil
+			}
+		}
+		return nil, ErrAgentNotFound
 	}
-	return nil
+	return task, nil
 }
 
 var (
@@ -104,6 +118,7 @@ type AgentService struct {
 type DiscoveredAgent struct {
 	Name         string            `json:"name"`
 	CLITool      string            `json:"cli_tool"`
+	Variant      string            `json:"variant"` // cli | desktop（底座类型标注）
 	Version      string            `json:"version"`
 	Capabilities []DiscoveredSkill `json:"capabilities"`
 }
@@ -338,11 +353,16 @@ func (s *AgentService) RegisterMachineAgents(ctx context.Context, machine *model
 		if err != nil {
 			return fmt.Errorf("marshal capabilities: %w", err)
 		}
+		variant := strings.TrimSpace(agent.Variant)
+		if variant != "desktop" {
+			variant = "cli"
+		}
 		if err := s.repo.UpsertMachineAgentCandidate(
 			ctx,
 			machine.ID,
 			name,
 			cliTool,
+			variant,
 			agent.Version,
 			string(capabilities),
 		); err != nil {
@@ -650,35 +670,59 @@ func (s *AgentService) StopAgent(ctx context.Context, agentID, userID string) er
 }
 
 // GetMachineConnectCommand 获取电脑连接命令。需要重新生成 API Key（原始密钥只存储哈希）。
-func (s *AgentService) GetMachineConnectCommand(ctx context.Context, machineID, userID string) (string, *model.DaemonMachine, string, error) {
-	if machineID == "" || userID == "" {
-		return "", nil, "", ErrAgentInvalidInput
-	}
-	machine, err := s.repo.GetDaemonMachineByID(ctx, machineID)
+// 返回 npx 命令（command）与 curl|bash 一键安装命令（installCommand，脚本由服务器
+// /downloads/install.sh 托管，用于绕开 macOS Gatekeeper 对下载脚本的拦截）。
+func (s *AgentService) GetMachineConnectCommand(ctx context.Context, machineID, userID string) (string, string, *model.DaemonMachine, string, error) {
+	machine, apiKey, err := s.regenerateMachineAPIKey(ctx, machineID, userID)
 	if err != nil {
-		return "", nil, "", fmt.Errorf("get daemon machine: %w", err)
+		return "", "", nil, "", err
 	}
-	if machine == nil || machine.UserID != userID {
-		return "", nil, "", ErrAgentNotFound
-	}
-	// 生成新的 API Key 并更新哈希
-	apiKey, err := generateMachineAPIKey()
-	if err != nil {
-		return "", nil, "", fmt.Errorf("generate machine api key: %w", err)
-	}
-	if err := s.updateMachineAPIKey(ctx, machineID, hashMachineAPIKey(apiKey)); err != nil {
-		return "", nil, "", fmt.Errorf("update machine api key: %w", err)
-	}
-	// 更新 machine 对象以反映新 key（但 APIKeyHash 不返回给前端）
-	machine.APIKeyHash = ""
 	serverURL := s.serverURL
 	if serverURL == "" {
 		serverURL = "http://127.0.0.1:8080" // 未配置时生成可直接运行的本机命令。
 	}
 	// daemon 已发布到 npm（@hust-agenthub/daemon），固定到 0.3.0 以保证行为可重现。
-	npxCommand := fmt.Sprintf("npx @hust-agenthub/daemon@0.3.0 --server-url %s --api-key %s", serverURL, apiKey)
-	command := npxCommand
-	return command, machine, apiKey, nil
+	command := fmt.Sprintf("npx @hust-agenthub/daemon@0.3.0 --server-url %s --api-key %s", serverURL, apiKey)
+	installCommand := fmt.Sprintf("curl -fsSL %s/downloads/install.sh | bash -s -- --server-url %s --api-key %s",
+		serverURL, serverURL, apiKey)
+	return command, installCommand, machine, apiKey, nil
+}
+
+// GetMachineInstallInfo 返回一键启动器（launcher）所需的安装信息。
+// 与 GetMachineConnectCommand 一致：每次调用重新生成 API Key（原始密钥只存哈希）。
+func (s *AgentService) GetMachineInstallInfo(ctx context.Context, machineID, userID string) (serverURL, apiKey string, err error) {
+	if _, apiKey, err = s.regenerateMachineAPIKey(ctx, machineID, userID); err != nil {
+		return "", "", err
+	}
+	serverURL = s.serverURL
+	if serverURL == "" {
+		serverURL = "http://127.0.0.1:8080"
+	}
+	return serverURL, apiKey, nil
+}
+
+// regenerateMachineAPIKey 校验机器归属后重新生成 API Key 并更新哈希，
+// 返回清空密钥字段的 machine 与明文 key（供连接命令 / 启动器内嵌使用）。
+func (s *AgentService) regenerateMachineAPIKey(ctx context.Context, machineID, userID string) (*model.DaemonMachine, string, error) {
+	if machineID == "" || userID == "" {
+		return nil, "", ErrAgentInvalidInput
+	}
+	machine, err := s.repo.GetDaemonMachineByID(ctx, machineID)
+	if err != nil {
+		return nil, "", fmt.Errorf("get daemon machine: %w", err)
+	}
+	if machine == nil || machine.UserID != userID {
+		return nil, "", ErrAgentNotFound
+	}
+	apiKey, err := generateMachineAPIKey()
+	if err != nil {
+		return nil, "", fmt.Errorf("generate machine api key: %w", err)
+	}
+	if err := s.updateMachineAPIKey(ctx, machineID, hashMachineAPIKey(apiKey)); err != nil {
+		return nil, "", fmt.Errorf("update machine api key: %w", err)
+	}
+	machine.APIKeyHash = ""
+	return machine, apiKey, nil
 }
 
 // updateMachineAPIKey 更新电脑的 API Key 哈希。

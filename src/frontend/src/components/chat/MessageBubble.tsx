@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, type ReactNode } from 'react';
 import { Avatar, Typography, Spin, Button, Tooltip, Dropdown } from 'antd';
 import { message as antMessage } from '@/utils/message';
+import { copyText } from '@/utils/clipboard';
 import type { MenuProps } from 'antd';
 import { renderCards, getCardSpec } from './cards/CardRegistry';
 import type { InteractiveCard } from '@/types/card';
@@ -14,6 +15,7 @@ import {
   DownOutlined,
   ForwardOutlined,
   MessageOutlined,
+  MoreOutlined,
   PushpinOutlined,
   ReloadOutlined,
   RollbackOutlined,
@@ -442,7 +444,8 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
   replyCount = 0,
   onOpenThread,
 }) => {
-  const [expanded, setExpanded] = useState(false);
+  // 默认展开：内容不再自动折叠（代码块级折叠已由 CodeBlock 承担）
+  const [expanded, setExpanded] = useState(true);
   const isSystem = message.role === 'system';
   const isOptimisticSending = optimisticStatus === 'sending';
   const isOptimisticFailed = optimisticStatus === 'failed';
@@ -603,7 +606,7 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
   }, [parsedCards, message.conversation_id, message.id]);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(displayContent).then(() => {
+    copyText(displayContent).then(() => {
       antMessage.success('已复制');
     }).catch(() => {
       antMessage.error('复制失败');
@@ -713,7 +716,7 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
       >
         {showAvatar && (
           <Avatar
-            size={36}
+            size={30}
             className={styles.chatAvatar}
             src={avatarSrc}
           >
@@ -721,51 +724,51 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
           </Avatar>
         )}
         {!showAvatar && <div className={styles.avatarSpacer} />}
-        {!isSystem && onReply && (
-          <Tooltip title="回复">
-            <Button
-              type="text"
-              size="small"
-              icon={<MessageOutlined />}
-              className={styles.replyBtn}
-              onClick={() => onReply(message)}
-            />
-          </Tooltip>
-        )}
-        {!isSystem && onTogglePin && (
-          <Tooltip title={message.pinned ? '取消 Pin' : 'Pin 到上下文黑板'}>
-            <Button
-              type="text"
-              size="small"
-              icon={<PushpinOutlined />}
-              className={`${styles.replyBtn} ${styles.pinBtn} ${message.pinned ? styles.pinBtnActive : ''}`}
-              onClick={() => onTogglePin(message)}
-            />
-          </Tooltip>
-        )}
-        {canRecall && (
-          <Tooltip title="撤回">
-            <Button
-              type="text"
-              size="small"
-              icon={<RollbackOutlined />}
-              className={`${styles.replyBtn} ${styles.recallBtn}`}
-              onClick={() => onRecall!(message.id)}
-            />
-          </Tooltip>
-        )}
-        {!isSystem && onDelete && (
-          <Tooltip title="删除">
-            <Button
-              type="text"
-              size="small"
-              icon={<DeleteOutlined />}
-              className={`${styles.replyBtn} ${styles.deleteBtn}`}
-              onClick={() => onDelete(message.id)}
-            />
-          </Tooltip>
-        )}
         <div className={styles.content}>
+          <div className={styles.messageActions} aria-label="消息操作">
+            <Tooltip title="复制">
+              <Button
+                type="text"
+                size="small"
+                icon={<CopyOutlined />}
+                className={styles.messageActionButton}
+                onClick={handleCopy}
+              />
+            </Tooltip>
+            {onReply && (
+              <Tooltip title="回复">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<MessageOutlined />}
+                  className={styles.messageActionButton}
+                  onClick={() => onReply(message)}
+                />
+              </Tooltip>
+            )}
+            {onTogglePin && (
+              <Tooltip title={message.pinned ? '取消 Pin' : 'Pin 到上下文黑板'}>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<PushpinOutlined />}
+                  className={`${styles.messageActionButton} ${message.pinned ? styles.messageActionActive : ''}`}
+                  onClick={() => onTogglePin(message)}
+                />
+              </Tooltip>
+            )}
+            <Dropdown menu={{ items: contextMenuItems }} trigger={['click']} placement="bottomRight">
+              <Tooltip title="更多操作">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<MoreOutlined />}
+                  className={styles.messageActionButton}
+                  aria-label="更多消息操作"
+                />
+              </Tooltip>
+            </Dropdown>
+          </div>
           {showAvatar && (
             <div className={styles.meta}>
               <Text className={styles.agentLabel}>{displayName}</Text>
@@ -783,15 +786,22 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
             </div>
           )}
           <div
-            className={`${styles.inner} ${collapsed ? styles.innerCollapsed : ''} ${
+            className={[
+              styles.inner,
+              collapsed ? styles.innerCollapsed : '',
               isOptimisticFailed
                 ? styles.innerFailed
                 : isOptimisticSending
                   ? styles.innerSending
                   : isOwn
                     ? styles.innerUser
-                    : styles.innerAssistant
-            }`}
+                    : styles.innerAssistant,
+              // 流式生成中：贴着气泡边缘的动态流光（Claude 绿 / Codex 天蓝 / 其他蓝）
+              !isOwn && isStreaming && hasBlocks ? styles.glowStreaming : '',
+              !isOwn && isStreaming && hasBlocks
+                ? (agentMeta.cli_tool === 'claude' ? styles.glowClaude : styles.glowCodex)
+                : '',
+            ].join(' ')}
           >
             {message.reply_to_message && !message.reply_to_message.deleted_at && (
               <div
@@ -812,6 +822,9 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
                 </span>
                   {escapeHtml(truncatePreview(stripKnowledgeRefs(message.reply_to_message.content ?? '')))}
               </div>
+            )}
+            {cardArtifacts.length > 0 && (
+              <ArtifactCard artifacts={cardArtifacts} agentName={resolvedAgentName} />
             )}
             {displayAttachments.length > 0 && (
               <MessageAttachmentView attachments={displayAttachments} />
@@ -858,9 +871,6 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
                 })}
               </div>
             ) : null}
-            {cardArtifacts.length > 0 && (
-              <ArtifactCard artifacts={cardArtifacts} agentName={resolvedAgentName} />
-            )}
             {deployment && (
               <div className={styles.deployCard}>
                 <DeployStatusCard deployment={deployment} />

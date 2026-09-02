@@ -11,6 +11,7 @@ import { resetFriendStore } from '@/store/friendStore';
 import { resetKnowledgeStore } from '@/store/knowledgeStore';
 import { resetCatalogStore } from '@/store/catalogStore';
 import { useWsStore } from '@/store/wsStore';
+import { resetPersonalReportStore } from '@/store/personalReportStore';
 
 interface AuthState {
   user: User | null;
@@ -102,6 +103,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     resetFriendStore();
     resetKnowledgeStore();
     resetCatalogStore();
+    resetPersonalReportStore();
     useWsStore.getState().disconnect();
     set({ user: null, token: null, isAuthenticated: false });
   },
@@ -114,6 +116,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const user: User = JSON.parse(userJson);
         setToken(token);
         set({ user, token, isAuthenticated: true });
+        void userApi.getCurrentUser().then((freshUser) => {
+          localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(freshUser));
+          set({ user: freshUser });
+        }).catch(() => undefined);
       } catch {
         // 数据损坏则清除
         localStorage.removeItem(STORAGE_KEYS.TOKEN);

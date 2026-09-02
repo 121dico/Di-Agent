@@ -74,7 +74,7 @@
   border-radius: 50%;
 }
 
-.indexedDot { background: #16a365; }
+.indexedDot { background: #0f766e; }
 .processingDot { background: #d9a21b; }
 .skippedDot { background: #8b95a5; }
 .failedDot { background: #d14343; }

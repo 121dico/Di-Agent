@@ -1,13 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Input, Modal, Popconfirm, Tag } from 'antd';
+import React, { useEffect, useState } from 'react';
+import { Button, Input, Modal, Popconfirm, Tag, Tooltip } from 'antd';
 import { message } from '@/utils/message';
+import { copyText } from '@/utils/clipboard';
 import {
+  AppleOutlined,
   CheckCircleOutlined,
   CopyOutlined,
   DeleteOutlined,
   DesktopOutlined,
   PlusOutlined,
   ReloadOutlined,
+  WindowsOutlined,
 } from '@ant-design/icons';
 import { parseCapabilities } from './agentPresentation';
 import type {
@@ -18,7 +21,8 @@ import type {
   DaemonMachine,
 } from '@/types/agent';
 import { AgentCreateModal } from './AgentCreateModal';
-import { buildCommands, DAEMON_VERSION } from '@/utils/connectCommand';
+import { DAEMON_VERSION } from '@/utils/connectCommand';
+import { downloadMachineLauncher, getMachineConnectCommand } from '@/api/agent';
 import styles from './ConnectComputerModal.module.css';
 
 interface ConnectComputerModalProps {
@@ -52,6 +56,37 @@ function getErrorMessage(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
 
+interface CommandRowProps {
+  tag: string;
+  tagColor?: string;
+  hint: string;
+  command: string;
+  label: string;
+}
+
+// 命令展示行：点复制按钮写入剪贴板（HTTPS 安全上下文下原生 clipboard API 可用）。
+const CommandRow: React.FC<CommandRowProps> = ({ tag, tagColor, hint, command, label }) => {
+  const handleCopy = async () => {
+    try {
+      await copyText(command);
+      message.success(`${label} 命令已复制`);
+    } catch {
+      message.error('复制失败，请手动选中文本复制');
+    }
+  };
+
+  return (
+    <div className={styles.commandRow}>
+      <div className={styles.commandLabel}>
+        <Tag color={tagColor}>{tag}</Tag>
+        <span className={styles.commandHint}>{hint}</span>
+      </div>
+      <pre className={styles.command}>{command}</pre>
+      <Button icon={<CopyOutlined />} onClick={handleCopy} />
+    </div>
+  );
+};
+
 export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
   open,
   machines,
@@ -70,19 +105,13 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
   const [createCandidate, setCreateCandidate] = useState<AgentCandidate | null>(null);
   const [created, setCreated] = useState<CreateDaemonMachineResponse | null>(null);
   const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [launcherBusy, setLauncherBusy] = useState<string | null>(null);
   const safeMachines = machines ?? [];
   const safeCandidates = candidates ?? [];
   const hasConnectedMachine = safeMachines.some((machine) => machine.status === 'connected');
   const machinePanelTitle = hasConnectedMachine
     ? 'Connected computers'
     : 'Waiting for computer to connect...';
-  const commands = useMemo(() => {
-    if (!created) return null;
-    return buildCommands(
-      created.command,
-      created.daemon_npm_path,
-    );
-  }, [created]);
 
   const refreshQuietly = async () => {
     try {
@@ -128,11 +157,70 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
     }
   };
 
-  const copyCommand = async (command: string | null, label: string) => {
-    if (!command) return;
-    await navigator.clipboard.writeText(command);
-    message.success(`${label} 命令已复制`);
+  const handleDownloadLauncher = async (machineId: string, os: 'mac' | 'win') => {
+    const busyKey = `${machineId}:${os}`;
+    setLauncherBusy(busyKey);
+    try {
+      await downloadMachineLauncher(machineId, os);
+      message.success('启动器已下载，双击运行即可完成接入');
+    } catch (err) {
+      message.error(getErrorMessage(err, '下载启动器失败'));
+    } finally {
+      setLauncherBusy(null);
+    }
   };
+
+  // Mac 一键安装：复制 curl|bash 安装命令到剪贴板（绕开 Gatekeeper 对下载脚本的拦截）。
+  // 已有 installCommand 时直接用（创建连接后的面板）；否则先调 connect 接口获取。
+  // 无论复制成败，都会把下方 Install 命令框高亮选中作为 ⌘C 兜底。
+  const handleMacInstall = async (machineId: string, installCommand?: string) => {
+    const busyKey = `${machineId}:mac`;
+    setLauncherBusy(busyKey);
+    try {
+      let command = installCommand;
+      if (!command) {
+        const connect = await getMachineConnectCommand(machineId);
+        command = connect.install_command;
+      }
+      await copyText(command);
+      message.success('安装命令已复制：打开「终端」粘贴并回车即可', 5);
+    } catch (err) {
+      message.error(getErrorMessage(err, '复制安装命令失败'));
+    } finally {
+      setLauncherBusy(null);
+    }
+  };
+
+  const launcherRow = (machineId: string, installCommand?: string) => (
+    <div className={styles.commandRow}>
+      <div className={styles.commandLabel}>
+        <Tag color="green">一键安装</Tag>
+        <span className={styles.commandHint}>推荐 · 自动完成安装并注册开机自启</span>
+      </div>
+      <div className={styles.launcherButtons}>
+        <Button
+          icon={<AppleOutlined />}
+          loading={launcherBusy === `${machineId}:mac`}
+          type="primary"
+          onClick={() => handleMacInstall(machineId, installCommand)}
+        >
+          Mac · 复制安装命令
+        </Button>
+        <Button
+          icon={<WindowsOutlined />}
+          loading={launcherBusy === `${machineId}:win`}
+          type="primary"
+          onClick={() => handleDownloadLauncher(machineId, 'win')}
+        >
+          Windows · 下载安装器
+        </Button>
+      </div>
+      <div className={styles.launcherNote}>
+        Mac：点按钮复制安装命令 → 打开「终端」(Terminal) → 粘贴 (⌘V) → 回车，之后全自动；
+        Windows：双击下载的 AgentHub-Setup.bat 运行，若弹出蓝色 SmartScreen 提示：点「更多信息」→「仍要运行」。
+        安装是幂等的，重复运行只会更新密钥并重启服务。
+      </div>    </div>
+  );
 
   const handleCreateAgent = async (candidateId: string, displayName: string, systemPrompt: string, toolsConfig: string, customSkills: string) => {
     const candidate = safeCandidates.find((item) => item.id === candidateId);
@@ -204,34 +292,20 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
             <span>CONNECT COMMAND</span>
             <Tag color="blue" className={styles.versionTag}>Daemon v{DAEMON_VERSION}</Tag>
           </div>
-          {commands ? (
+          {created ? (
             <div className={styles.commandList}>
-              <div className={styles.commandRow}>
-                <div className={styles.commandLabel}>
-                  <Tag>NPX</Tag>
-                  <span className={styles.commandHint}>在线（npm 安装）</span>
-                </div>
-                <pre className={styles.command}>{commands.npx}</pre>
-                <Button
-                  icon={<CopyOutlined />}
-                  onClick={() => copyCommand(commands.npx, 'NPX')}
-                />
-              </div>
-              <div className={styles.commandRow}>
-                <div className={styles.commandLabel}>
-                  <Tag>Node</Tag>
-                  <span className={styles.commandHint}>本地（开发用，跳过 npm）</span>
-                </div>
-                <pre className={styles.command}>{commands.node}</pre>
-                <Button
-                  icon={<CopyOutlined />}
-                  onClick={() => copyCommand(commands.node, 'Node')}
-                />
-              </div>
+              {launcherRow(created.machine.id, created.install_command)}
+              <CommandRow
+                command={created.install_command}
+                hint="Mac 一键安装命令（终端粘贴运行）"
+                label="一键安装"
+                tag="Install"
+                tagColor="green"
+              />
             </div>
           ) : (
             <div className={styles.commandEmpty}>
-              点击“创建连接”生成启动命令。支持 NPX 或 Node 本地启动两种方式，已创建连接的 machine key 不会再次显示。
+              点击“创建连接”生成接入命令。支持 Mac 一键安装命令与 Windows 安装器两种方式，已创建连接的 machine key 不会再次显示。
             </div>
           )}
         </div>
@@ -263,10 +337,35 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
                       {machine.machine_id || '等待 daemon 上报主机名'}
                     </span>
                   </div>
+                  {machine.status !== 'connected' ? (
+                    <div className={styles.machineLauncherButtons}>
+                      <Tooltip title="Mac：复制一键安装命令">
+                        <Button
+                          icon={<AppleOutlined />}
+                          loading={launcherBusy === `${machine.id}:mac`}
+                          size="small"
+                          type="text"
+                          onClick={() => handleMacInstall(machine.id)}
+                        />
+                      </Tooltip>
+                      <Tooltip title="Windows：下载一键安装器">
+                        <Button
+                          icon={<WindowsOutlined />}
+                          loading={launcherBusy === `${machine.id}:win`}
+                          size="small"
+                          type="text"
+                          onClick={() => handleDownloadLauncher(machine.id, 'win')}
+                        />
+                      </Tooltip>
+                    </div>
+                  ) : null}
                   {machine.status === 'connected' ? (
                     <CheckCircleOutlined className={styles.connectedIcon} />
                   ) : null}
                   {getStatusTag(machine)}
+                  <Tag color={machine.is_local ? 'blue' : undefined}>
+                    {machine.is_local ? '本地' : '远程'}
+                  </Tag>
                   <Popconfirm
                     cancelText="取消"
                     okText="删除"

@@ -32,12 +32,12 @@ import (
 //   - ToolUseID       tool_use / tool_result 关联 ID
 //   - ToolUseIDAlt    兼容 daemon camelCase 'toolUseID'
 //   - Input           tool_use partial_json（老协议）。
-//                     JS daemon 在 content_block_start 时发 `input: {}`（空对象占位），
-//                     在 content_block_delta 时发 `input: "<partial_json>"`（string）。
-//                     用 json.RawMessage 兼容两种 shape，避免 unmarshal object into string
-//                     报错导致整批 events 被 daemon handler 丢弃。reducer 读取时按需转
-//                     string：`string(event.Input)`。
-//                     omitempty：nil/empty slice 省略；非空（含 `{}`）正常序列化为 JSON value。
+//     JS daemon 在 content_block_start 时发 `input: {}`（空对象占位），
+//     在 content_block_delta 时发 `input: "<partial_json>"`（string）。
+//     用 json.RawMessage 兼容两种 shape，避免 unmarshal object into string
+//     报错导致整批 events 被 daemon handler 丢弃。reducer 读取时按需转
+//     string：`string(event.Input)`。
+//     omitempty：nil/empty slice 省略；非空（含 `{}`）正常序列化为 JSON value。
 //   - Delta           tool.call.input.delta（新协议）
 //   - Output          tool_result.output
 //   - Message         error.message

@@ -100,7 +100,7 @@ func TestAgentEventMarshal_RawMessageSerializable(t *testing.T) {
 // TestAgentEventMarshal_NilInputOmitted 验证 nil/empty RawMessage 被 omitempty 省略。
 func TestAgentEventMarshal_NilInputOmitted(t *testing.T) {
 	ev := AgentEvent{
-		Type: AgentEventText,
+		Type:    AgentEventText,
 		Content: "hi",
 	}
 	out, err := json.Marshal(ev)

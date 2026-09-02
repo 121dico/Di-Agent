@@ -365,3 +365,33 @@ func TestFanoutFrameBuilder_TruncatesTaskTo2000(t *testing.T) {
 		t.Fatalf("task was not truncated to 2000, got longer run")
 	}
 }
+
+func TestBuildAgentConfigTextIncludesRealReportToolProtocol(t *testing.T) {
+	got := BuildAgentConfigText(&model.Agent{ID: "agent-1", Name: "分析师", CLITool: "codex"}, "", "做个价敏报表")
+	for _, want := range []string{
+		"[真实数据报表 MCP 强制说明书]",
+		"第一步必须立即调用 discover_report_data",
+		"query_report_data",
+		"save_personal_report",
+		"COUNT_DISTINCT",
+		`"order_by":"dt ASC"`,
+		`"source_id":"<discover 返回的 source_id>"`,
+		"capabilities",
+		"不要先向用户索要 CSV",
+		"不得编造数据",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected report tool protocol to contain %q", want)
+		}
+	}
+}
+
+func TestBuildAgentConfigTextKeepsFullReportManualOutOfUnrelatedTasks(t *testing.T) {
+	got := BuildAgentConfigText(&model.Agent{ID: "agent-1", Name: "助手", CLITool: "claude"}, "", "你好，介绍一下你自己")
+	if strings.Contains(got, "[真实数据报表 MCP 强制说明书]") {
+		t.Fatalf("unrelated task should not receive the full report manual")
+	}
+	if !strings.Contains(got, "[真实数据报表能力]") || !strings.Contains(got, "discover_report_data") {
+		t.Fatalf("unrelated task should retain the compact report capability reminder")
+	}
+}

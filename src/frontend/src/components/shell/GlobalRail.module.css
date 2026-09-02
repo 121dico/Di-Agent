@@ -1,0 +1,380 @@
+.rail {
+  position: relative;
+  z-index: var(--z-nav);
+  width: 56px;
+  flex: 0 0 56px;
+  height: 100%;
+  transition:
+    width var(--motion-navigation) var(--ease-out) 80ms,
+    flex-basis var(--motion-navigation) var(--ease-out) 80ms;
+}
+
+.rail:hover,
+.rail:focus-within {
+  width: 224px;
+  flex-basis: 224px;
+}
+
+.rail:hover {
+  transition-delay: var(--motion-navigation-intent);
+}
+
+.rail:focus-within {
+  transition-delay: 0ms;
+}
+
+.railSurface {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--wb-border-subtle);
+  background: var(--wb-surface-subtle);
+  transition:
+    border-color 160ms var(--ease-standard) 120ms,
+    background-color 160ms var(--ease-standard) 120ms;
+}
+
+.rail:hover .railSurface {
+  border-right-color: var(--wb-border-subtle);
+  background: var(--wb-surface-subtle);
+  transition-delay: 120ms;
+}
+
+.rail:focus-within .railSurface {
+  border-right-color: var(--wb-border-subtle);
+  background: var(--wb-surface-subtle);
+  transition-delay: 0ms;
+}
+
+.brandRow {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 11px;
+  flex: 0 0 auto;
+}
+
+.brandMark {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  border-radius: 10px;
+  color: #fff;
+  background: var(--wb-action);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.brandLabel,
+.navLabel,
+.commandButton span,
+.accountMeta {
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--ease-standard) 0ms;
+}
+
+.rail:hover :is(.brandLabel, .navLabel, .commandButton span, .accountMeta),
+.rail:focus-within :is(.brandLabel, .navLabel, .commandButton span, .accountMeta) {
+  opacity: 1;
+}
+.rail:hover :is(.brandLabel, .navLabel, .commandButton span, .accountMeta) {
+  transition-delay: calc(var(--motion-navigation-intent) + 180ms);
+}
+.rail:focus-within :is(.brandLabel, .navLabel, .commandButton span, .accountMeta) { transition-delay: 100ms; }
+
+.brandLabel {
+  color: var(--wb-text-primary);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.primaryActions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  padding: 4px 8px 12px;
+}
+
+.createButton,
+.commandButton,
+.navItem,
+.accountButton,
+.logoutButton {
+  border: 0;
+  background: transparent;
+  color: var(--wb-text-secondary);
+  cursor: pointer;
+}
+
+.createButton,
+.commandButton,
+.navItem {
+  position: relative;
+  width: 100%;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 11px;
+  border-radius: var(--radius-3);
+  text-align: left;
+}
+
+.createButton {
+  isolation: isolate;
+  justify-self: stretch;
+  justify-content: flex-start;
+  overflow: hidden;
+  color: #fff;
+  background: transparent;
+}
+
+.createButton::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  inset: 0 auto 0 0;
+  width: 38px;
+  border-radius: inherit;
+  background: var(--wb-action);
+  transition:
+    width var(--motion-navigation) var(--ease-out) 80ms,
+    background-color var(--motion-fast) var(--ease-standard);
+}
+
+.createButton:hover { color: #fff; background: transparent; }
+.createButton:hover::before { background: var(--wb-action-hover); }
+.commandButton:hover,
+.navItem:hover { color: var(--wb-text-primary); background: var(--wb-surface-hover); }
+
+.commandButton {
+  overflow: hidden;
+}
+
+.commandButton span {
+  max-width: 0;
+  overflow: hidden;
+  transition:
+    max-width var(--motion-control) var(--ease-standard) 0ms,
+    opacity var(--motion-fast) var(--ease-standard) 0ms;
+}
+
+.rail:hover .commandButton span,
+.rail:focus-within .commandButton span {
+  max-width: 112px;
+}
+
+.createButton span {
+  position: relative;
+  z-index: 1;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateX(-3px);
+  transition:
+    max-width 160ms var(--ease-standard) 0ms,
+    opacity 100ms var(--ease-standard) 0ms,
+    transform 100ms var(--ease-standard) 0ms;
+}
+
+.rail:hover .createButton::before,
+.rail:focus-within .createButton::before {
+  width: 100%;
+}
+
+.rail:hover .createButton::before {
+  transition-delay: var(--motion-navigation-intent), 0ms;
+}
+
+.rail:focus-within .createButton::before {
+  transition-delay: 0ms, 0ms;
+}
+
+.rail:hover .createButton span,
+.rail:focus-within .createButton span {
+  max-width: 112px;
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.rail:hover .createButton span {
+  transition-delay: calc(var(--motion-navigation-intent) + 180ms);
+}
+
+.rail:focus-within .createButton span {
+  transition-delay: 100ms;
+}
+
+.navIcon {
+  width: 18px;
+  display: inline-flex;
+  justify-content: center;
+  flex: 0 0 18px;
+}
+
+.createButton > svg,
+.commandButton > svg,
+.navIcon svg,
+.logoutButton svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.8;
+}
+
+.createButton > svg,
+.commandButton > svg {
+  flex: 0 0 16px;
+}
+
+.createButton > svg {
+  position: relative;
+  z-index: 1;
+}
+
+.commandButton kbd {
+  max-width: 0;
+  margin-left: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--color-text-tertiary);
+  font: inherit;
+  font-size: 10px;
+  opacity: 0;
+  transition:
+    max-width var(--motion-control) var(--ease-standard) 0ms,
+    margin-left var(--motion-control) var(--ease-standard) 0ms,
+    opacity var(--motion-fast) var(--ease-standard) 0ms;
+}
+
+.rail:hover .commandButton kbd,
+.rail:focus-within .commandButton kbd {
+  max-width: 32px;
+  margin-left: auto;
+  opacity: 1;
+}
+
+.rail:hover .commandButton kbd {
+  transition-delay: calc(var(--motion-navigation-intent) + 180ms);
+}
+
+.rail:focus-within .commandButton kbd {
+  transition-delay: 100ms;
+}
+
+.nav {
+  flex: 1;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-height: 0;
+  padding: 2px 8px;
+}
+
+.navItemActive { color: var(--wb-text-primary); background: var(--wb-surface-selected); }
+.navItemActive::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  width: 2px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--wb-focus);
+}
+
+.badge {
+  min-width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  margin-left: auto;
+  padding: 0 5px;
+  border-radius: 9px;
+  color: #fff;
+  background: var(--color-danger);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.footer {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border-top: 1px solid var(--wb-border-subtle);
+}
+
+.accountRow {
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.accountButton {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px;
+  text-align: left;
+}
+
+.accountMeta {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.accountMeta strong {
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 620;
+  text-overflow: ellipsis;
+}
+
+.accountMeta small {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+}
+
+.statusDot { width: 6px; height: 6px; border-radius: 50%; }
+.connected { background: var(--color-success); }
+.connecting { background: var(--color-warning); }
+.disconnected { background: var(--color-danger); }
+
+.logoutButton {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  border-radius: 7px;
+  opacity: 0;
+}
+
+.rail:hover .logoutButton,
+.rail:focus-within .logoutButton { opacity: 1; }
+.logoutButton:hover { color: var(--color-danger); background: var(--color-danger-bg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .rail,
+  .railSurface,
+  .brandLabel,
+  .navLabel,
+  .createButton span,
+  .createButton,
+  .commandButton span,
+  .accountMeta { transition-duration: 0ms; }
+}

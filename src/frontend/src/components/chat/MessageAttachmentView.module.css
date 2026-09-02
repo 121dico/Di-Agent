@@ -13,7 +13,8 @@
   overflow: hidden;
   max-width: 200px;
   max-height: 200px;
-  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--wb-border-subtle);
+  box-shadow: none;
 }
 
 .imageThumb {
@@ -27,8 +28,8 @@
 }
 
 .imageThumb:hover {
-  opacity: 0.9;
-  transform: scale(1.02);
+  opacity: .94;
+  transform: scale(1.01);
 }
 
 .pdfCard,
@@ -37,7 +38,7 @@
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  border-radius: 10px;
+  border-radius: var(--radius-3);
   background-color: var(--color-bg-white);
   border: 1px solid var(--color-border);
   text-decoration: none;
@@ -46,13 +47,13 @@
   width: 100%;
   max-width: none;
   box-sizing: border-box;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 
 .pdfCard:hover,
 .fileCard:hover {
-  border-color: #ffccc7;
-  box-shadow: 0 2px 8px rgba(207, 19, 34, 0.08);
+  border-color: var(--wb-border-default);
+  box-shadow: var(--shadow-raised);
 }
 
 .pdfIcon {
@@ -111,21 +112,21 @@
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  border-radius: 10px;
+  border-radius: var(--radius-3);
   background-color: var(--color-bg-white);
   border: 1px solid var(--color-border);
   color: var(--color-text);
   width: 320px;
   max-width: 100%;
   box-sizing: border-box;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .pptCard:hover,
 .previewCard:hover {
-  border-color: #ffd591;
-  box-shadow: 0 2px 8px rgba(212, 107, 8, 0.1);
+  border-color: var(--wb-border-default);
+  box-shadow: var(--shadow-raised);
 }
 
 .pptIcon {
@@ -204,7 +205,7 @@
 }
 
 .previewModalExpanded .previewModalBody {
-  height: calc(100vh - 140px);
+  height: calc(var(--ui-viewport-height) - 140px);
 }
 
 .modalTitleBar {

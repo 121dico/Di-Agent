@@ -12,6 +12,7 @@ import {
   SaveOutlined,
 } from '@ant-design/icons';
 import { message as antMessage } from '@/utils/message';
+import { copyText } from '@/utils/clipboard';
 import type { Artifact } from '@/types/message';
 import { aiEditArtifact, createArtifactVersion, listArtifactVersions } from '@/api/artifact';
 import { ApiError } from '@/api/client';
@@ -254,7 +255,7 @@ export const ArtifactEditor: React.FC<ArtifactEditorProps> = ({ artifact, open, 
   };
 
   const handleCopy = (value: string) => {
-    navigator.clipboard.writeText(value).then(() => {
+    copyText(value).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }).catch(() => antMessage.error('复制失败'));

@@ -1,42 +1,46 @@
 .bubble {
   display: flex;
-  width: min(100%, 900px);
+  width: min(100%, var(--chat-reading-width));
   margin: 0 auto;
-  padding: 14px 26px;
+  padding: 11px 0;
   position: relative;
 }
 
 .bubbleUser {
   flex-direction: row-reverse;
-  margin-right: -8px;
 }
-.bubbleAssistant {
-  flex-direction: row;
-  margin-left: -24px;
-}
-.bubbleGrouped { padding-top: 3px; }
+.bubbleAssistant { flex-direction: row; }
+.bubbleGrouped { padding-top: 3px; padding-bottom: 3px; }
 
 .chatAvatar {
   flex-shrink: 0;
-  margin-top: 18px;
+  margin-top: 19px;
   color: var(--color-bg-white);
-  background: var(--gradient-agent) !important;
+  background: var(--wb-action) !important;
   font-size: 12px;
   font-weight: 700;
 }
 
-.bubbleUser .chatAvatar { margin: 20px 0 0 10px; }
-.bubbleAssistant .chatAvatar { margin: 20px 10px 0 0; }
+.bubbleUser .chatAvatar { margin: 18px 0 0 10px; }
+.bubbleAssistant .chatAvatar { margin: 18px 11px 0 0; }
 
-.avatarSpacer { width: 46px; flex-shrink: 0; }
+.avatarSpacer { width: 47px; flex-shrink: 0; }
 
 .content {
   display: flex;
   flex: 0 0 auto;
+  min-width: 0;
   width: fit-content;
-  max-width: min(520px, 72%);
+  max-width: min(620px, 78%);
   flex-direction: column;
   align-items: flex-start;
+  position: relative;
+}
+
+.bubbleAssistant .content {
+  width: 100%;
+  max-width: none;
+  flex: 1 1 auto;
 }
 
 .bubbleUser .content { align-items: flex-end; }
@@ -44,34 +48,35 @@
 .meta {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   min-height: 16px;
-  margin-bottom: 4px;
-  padding: 0 4px;
+  margin-bottom: 5px;
+  padding: 0 2px;
 }
 
 .bubbleUser .meta { flex-direction: row-reverse; }
 
 .agentLabel {
   color: var(--color-text);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 650;
 }
 
 .metaTime,
 .systemText {
-  color: var(--color-text-secondary) !important;
-  font-size: 10.5px;
+  color: var(--wb-text-tertiary) !important;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 
 .inner {
   position: relative;
   display: inline-block;
   max-width: 100%;
-  padding: 11px 16px;
+  padding: 10px 14px;
   color: var(--color-text);
-  font-size: 13.5px;
-  line-height: 1.7;
+  font-size: 14px;
+  line-height: 1.72;
   word-break: break-word;
   overflow-wrap: anywhere;
   box-shadow: var(--shadow-bubble-assistant);
@@ -79,41 +84,27 @@
 
 .innerUser {
   color: #ffffff;
-  background: linear-gradient(135deg, var(--color-user-bubble-from) 0%, var(--color-user-bubble-to) 100%);
-  border-radius: 18px 18px 6px 18px;
-  box-shadow: var(--shadow-bubble-user);
+  background: var(--wb-action);
+  border-radius: var(--radius-5) var(--radius-5) var(--radius-2) var(--radius-5);
+  box-shadow: none;
 }
 
 .innerAssistant {
   color: var(--color-text);
-  background: var(--color-surface-strong);
-  border: 1px solid rgba(31, 35, 40, 0.06);
-  border-radius: 18px 18px 18px 6px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  display: block;
+  width: 100%;
+  padding-inline: 0;
 }
 
 .innerUser::after,
-.innerAssistant::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  width: 10px;
-  height: 10px;
-}
-
-.innerUser::after {
-  right: -4px;
-  background: var(--color-user-bubble-to);
-  clip-path: polygon(0 0, 100% 100%, 0 100%);
-}
-
-.innerAssistant::after {
-  left: -4px;
-  background: var(--color-surface-strong);
-  clip-path: polygon(100% 0, 100% 100%, 0 100%);
-}
+.innerAssistant::after { display: none; }
 
 .innerCollapsed {
-  max-height: 240px;
+  max-height: 260px;
   overflow: hidden;
 }
 
@@ -148,13 +139,13 @@
   left: 0;
   right: 0;
   bottom: 0;
-  height: 52px;
+  height: 68px;
   pointer-events: none;
   border-radius: inherit;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0), var(--color-surface-strong) 78%);
 }
 
-.innerUser .fadeMask { background: linear-gradient(180deg, rgba(47, 143, 107, 0), var(--color-user-bubble-to) 78%); }
+.innerUser .fadeMask { background: linear-gradient(180deg, rgba(29, 29, 31, 0), var(--wb-action) 78%); }
 
 .innerAssistant :global(table),
 .innerUser :global(table) {
@@ -202,7 +193,7 @@
 .markdownBody :global(blockquote) {
   margin: 8px 0;
   padding: 4px 10px;
-  border-left: 3px solid var(--color-primary);
+  border-left: 3px solid var(--wb-link);
   background: rgba(0, 0, 0, 0.03);
   border-radius: 4px;
   color: var(--color-text-secondary);
@@ -247,9 +238,9 @@
 .systemText {
   color: var(--color-text-secondary);
   font-size: 12px;
-  background-color: var(--color-surface-muted);
-  padding: 4px 14px;
-  border-radius: 10px;
+  background: transparent;
+  padding: 4px 10px;
+  border-radius: var(--radius-2);
 }
 
 /* 围栏代码块样式已抽到 CodeBlock.module.css，供 markdown / 产物卡片复用 */
@@ -302,7 +293,7 @@
   height: 1em;
   margin-left: 2px;
   vertical-align: text-bottom;
-  background-color: var(--color-primary);
+  background-color: var(--wb-link);
   animation: cursorPulse 0.8s ease-in-out infinite;
 }
 
@@ -318,9 +309,9 @@
 
 .innerSending {
   color: var(--color-bg-white);
-  background: linear-gradient(135deg, var(--color-user-bubble-from) 0%, var(--color-user-bubble-to) 100%);
-  border-radius: 18px 18px 6px 18px;
-  padding: 11px 16px;
+  background: var(--wb-action);
+  border-radius: var(--radius-5) var(--radius-5) var(--radius-2) var(--radius-5);
+  padding: 10px 14px;
   box-shadow: var(--shadow-bubble-user);
   opacity: 0.85;
 }
@@ -353,77 +344,71 @@
 .retryBtn { color: var(--color-danger) !important; }
 .removeBtn { color: var(--color-text-tertiary) !important; }
 
-.replyBtn {
-  position: static;
-  align-self: center;
-  margin: 0 4px;
+.messageActions {
+  position: absolute;
+  top: -5px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 2px;
+  border: 1px solid var(--wb-border-subtle);
+  border-radius: var(--radius-3);
+  background: var(--glass-bg-strong);
+  box-shadow: var(--shadow-raised);
   opacity: 0;
-  color: var(--color-text-secondary);
-  flex-shrink: 0;
   pointer-events: none;
-  transition: opacity var(--transition-fast);
+  transform: translateY(3px);
+  transition: opacity var(--motion-control) var(--ease-standard), transform var(--motion-control) var(--ease-out);
+  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter);
 }
 
-.bubbleAssistant .chatAvatar { order: 1; }
-.bubbleAssistant .content { order: 2; }
-.bubbleAssistant .replyBtn { order: 3; }
-.bubbleAssistant .pinBtn { order: 4; }
-.bubbleAssistant .recallBtn { order: 5; }
-.bubbleAssistant .deleteBtn { order: 6; }
+.bubbleAssistant .messageActions { right: 0; }
+.bubbleUser .messageActions { right: calc(100% + 8px); }
 
-.bubbleUser .chatAvatar { order: 0; }
-.bubbleUser .content { order: 1; }
-.bubbleUser .replyBtn { order: 2; }
-.bubbleUser .pinBtn { order: 3; }
-.bubbleUser .recallBtn { order: 4; }
-.bubbleUser .deleteBtn { order: 5; }
-
-.deleteBtn {
-  color: var(--color-text-secondary);
-}
-
-.deleteBtn:hover {
-  color: #e5484d !important;
-}
-
-.pinBtn {
-  color: var(--color-text-secondary);
-}
-
-.pinBtnActive {
-  color: var(--color-primary);
-}
-
-.pinBtn:hover,
-.pinBtnActive:hover {
-  color: var(--color-primary-active);
-}
-
-.bubble:hover .replyBtn,
-.bubble:focus-within .replyBtn {
+.bubble:hover .messageActions,
+.bubble:focus-within .messageActions {
   opacity: 1;
   pointer-events: auto;
+  transform: translateY(0);
 }
+
+.messageActionButton {
+  width: 26px !important;
+  min-width: 26px !important;
+  height: 26px !important;
+  padding: 0 !important;
+  border-radius: var(--radius-2) !important;
+  color: var(--wb-text-tertiary) !important;
+}
+
+.messageActionButton:hover {
+  color: var(--wb-text-primary) !important;
+  background: var(--wb-surface-hover) !important;
+}
+
+.messageActionActive { color: var(--wb-link) !important; }
 
 .expandToggle {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   margin: 7px 0 0;
-  padding: 3px 11px;
-  border: 1px solid rgba(22, 163, 101, 0.16);
-  border-radius: 999px;
-  color: var(--color-primary);
-  background: var(--color-bg-white);
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+  padding: 4px 2px;
+  border: 0;
+  border-radius: var(--radius-2);
+  color: var(--wb-link);
+  background: transparent;
+  box-shadow: none;
   cursor: pointer;
   font-size: 11px;
   font-weight: 600;
 }
 
 .expandToggle:hover {
-  color: var(--color-primary-active);
-  border-color: rgba(22, 163, 101, 0.28);
+  color: var(--wb-text-primary);
+  background: var(--wb-surface-hover);
 }
 
 .replyQuote {
@@ -432,18 +417,21 @@
   gap: 2px;
   padding: 5px 8px;
   margin-bottom: 6px;
-  border-left: 2px solid var(--color-primary);
-  background: rgba(210, 222, 214, 0.55);
-  border-radius: 8px;
+  border-left: 2px solid var(--wb-focus);
+  background: var(--wb-surface-subtle);
+  border-radius: var(--radius-2);
   color: var(--color-text);
   font-size: 12px;
+  width: fit-content;
+  min-width: min(320px, 100%);
+  max-width: 100%;
   cursor: pointer;
   transition: background-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .replyQuote:hover {
-  background: rgba(210, 222, 214, 0.8);
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+  background: var(--wb-surface-selected);
+  box-shadow: none;
 }
 
 .replyQuote:focus-visible {
@@ -468,7 +456,7 @@
 .sendingSpin { margin-left: 8px; }
 
 .mention {
-  color: var(--color-primary);
+  color: var(--wb-link);
   font-weight: 500;
   cursor: default;
   padding: 0 2px;
@@ -482,10 +470,10 @@
   max-width: min(280px, 100%);
   margin: 0 2px;
   padding: 1px 7px;
-  border: 1px solid rgba(47, 143, 107, 0.18);
+  border: 1px solid rgba(10, 102, 255, 0.18);
   border-radius: 999px;
-  color: var(--color-primary);
-  background: rgba(47, 143, 107, 0.08);
+  color: var(--wb-link);
+  background: var(--wb-surface-selected);
   font-size: 12px;
   font-weight: 600;
   line-height: 1.7;
@@ -524,7 +512,7 @@
 
 .knowledgeAttachmentIcon {
   flex-shrink: 0;
-  color: var(--color-primary);
+  color: var(--wb-link);
   font-size: 18px;
 }
 
@@ -561,9 +549,9 @@
   min-height: 28px;
   margin: 0 0 7px;
   padding: 4px 8px;
-  border: 1px solid rgba(47, 143, 107, 0.18);
+  border: 1px solid rgba(10, 102, 255, 0.18);
   border-radius: 8px;
-  background: rgba(47, 143, 107, 0.07);
+  background: var(--wb-surface-selected);
   color: var(--color-text-secondary);
   font-size: 12px;
   line-height: 1.4;
@@ -571,13 +559,13 @@
 
 .knowledgeContextIcon {
   flex-shrink: 0;
-  color: var(--color-primary);
+  color: var(--wb-link);
   font-size: 13px;
 }
 
 .knowledgeContextTitle {
   flex-shrink: 0;
-  color: var(--color-primary);
+  color: var(--wb-link);
   font-weight: 600;
 }
 
@@ -639,49 +627,15 @@
   margin-left: 4px;
   font-size: 10px;
   font-weight: 600;
-  color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-  border-radius: 8px;
+  color: var(--wb-text-secondary);
+  background: var(--wb-surface-hover);
+  border-radius: var(--radius-2);
   line-height: 1.5;
 }
 
 .pinBadge {
-  color: var(--color-primary);
+  color: var(--wb-link);
   font-size: 12px;
-}
-
-/* ── 暗色模式 ── */
-:global(html.dark) .innerAssistant {
-  border-color: rgba(255, 255, 255, 0.06);
-}
-
-:global(html.dark) .innerAssistant .mention {
-  color: #8ab4f8;
-  background: rgba(138, 180, 248, 0.15);
-}
-
-:global(html.dark) .innerAssistant .knowledgeRef {
-  border-color: rgba(47, 143, 107, 0.32);
-  background: rgba(47, 143, 107, 0.14);
-}
-
-:global(html.dark) .innerAssistant .knowledgeAttachmentCard {
-  border-color: rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-:global(html.dark) .innerAssistant .knowledgeContextCompact {
-  border-color: rgba(47, 143, 107, 0.32);
-  background: rgba(47, 143, 107, 0.13);
-}
-
-:global(html.dark) .markdownBody :global(blockquote) {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-/* 用户气泡（绿色背景）里的 @mention 改为白色，保持可读性 */
-.innerUser .mention {
-  color: rgba(255, 255, 255, 0.92);
 }
 
 .deployCard {
@@ -708,4 +662,59 @@
 }
 .threadBtn:hover {
   text-decoration: underline;
+}
+
+/* ===== 流式生成动效边框（仿 Claude 流光）：贴着内容气泡边缘的旋转流光 =====
+   挂在 .inner 容器（真正的气泡）上；::after 被气泡尾巴占用，故用 ::before。
+   颜色由 .glowClaude / .glowCodex 的 --glow-color 决定。 */
+@property --glowAngle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.glowStreaming::before { display: none; }
+
+@keyframes glowSpin {
+  to {
+    --glowAngle: 360deg;
+  }
+}
+
+@media (max-width: 1100px) {
+  .bubble { padding-inline: 0; }
+  .bubbleAssistant .chatAvatar { margin-right: 8px; }
+  .embeddedMarkdownDocument { padding: 18px 20px; }
+}
+
+@media (max-width: 720px) {
+  .bubble { width: 100%; }
+  .content { max-width: 88%; }
+  .bubbleAssistant .content { max-width: calc(100% - 38px); }
+  .chatAvatar { width: 26px !important; height: 26px !important; line-height: 26px !important; }
+  .avatarSpacer { width: 34px; }
+  .bubbleAssistant .chatAvatar { margin-right: 8px; }
+  .bubbleUser .chatAvatar { margin-left: 8px; }
+  .messageActions { top: -7px; }
+  .bubbleUser .messageActions { right: 0; transform: translateY(-100%); }
+  .bubbleUser:hover .messageActions,
+  .bubbleUser:focus-within .messageActions { transform: translateY(-100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streamingCursor { animation: none; opacity: .7; }
+  .glowStreaming::before { animation: none; background: var(--glow-color, var(--wb-link)); opacity: .55; }
+  .messageActions { transition: none; transform: none; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .messageActions { background: var(--wb-surface); backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+
+.glowClaude {
+  --glow-color: #52c41a;
+}
+
+.glowCodex {
+  --glow-color: #38bdf8;
 }

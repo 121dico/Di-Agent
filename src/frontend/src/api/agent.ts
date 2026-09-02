@@ -1,4 +1,4 @@
-import { del, get, post, put } from './client';
+import { ApiError, del, get, getAuthHeaders, post, put } from './client';
 import type {
   Agent,
   AgentCandidate,
@@ -8,12 +8,19 @@ import type {
   CreateDaemonMachineRequest,
   CreateDaemonMachineResponse,
   DaemonMachine,
+  AgentRuntimeOverview,
+  InstallGitHubSkillRequest,
+  InstalledGitHubSkill,
   OpenSkillLocationRequest,
 } from '@/types/agent';
 
 export async function getAgents(): Promise<Agent[]> {
   const agents = await get<Agent[] | null>('/api/agents');
   return agents ?? [];
+}
+
+export async function getAgentRuntimeOverview(id: string, days = 7): Promise<AgentRuntimeOverview> {
+  return get<AgentRuntimeOverview>(`/api/agents/${id}/runtime-overview?days=${days}`);
 }
 
 export async function createAgent(body: AgentRequest): Promise<Agent> {
@@ -44,11 +51,12 @@ export async function getDaemonMachines(): Promise<DaemonMachine[]> {
 export async function createDaemonMachine(
   body: CreateDaemonMachineRequest,
 ): Promise<CreateDaemonMachineResponse> {
-  const created = await post<Omit<CreateDaemonMachineResponse, 'command'>>('/api/daemon/machines', body);
+  const created = await post<Omit<CreateDaemonMachineResponse, 'command' | 'install_command'>>('/api/daemon/machines', body);
   const connect = await getMachineConnectCommand(created.machine.id);
   return {
     ...created,
     command: connect.command,
+    install_command: connect.install_command,
     api_key: connect.api_key,
     daemon_npm_path: connect.daemon_npm_path,
   };
@@ -72,6 +80,7 @@ export async function addAgentCandidate(
 
 export interface MachineConnectResponse {
   command: string;
+  install_command: string;
   api_key: string;
   daemon_npm_path: string;
   machine: DaemonMachine;
@@ -81,11 +90,41 @@ export async function getMachineConnectCommand(id: string): Promise<MachineConne
   return get<MachineConnectResponse>(`/api/daemon/machines/${id}/connect`);
 }
 
+/**
+ * 下载一键安装启动器（.command / .bat，内嵌本机 API Key）。
+ * 每次下载后端会重新生成 Key，旧启动器自然失效。
+ */
+export async function downloadMachineLauncher(id: string, os: 'mac' | 'win'): Promise<void> {
+  const res = await fetch(`/api/daemon/machines/${id}/launcher?os=${os}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, 0, `下载启动器失败 (${res.status})`);
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get('Content-Disposition') ?? '';
+  const match = disposition.match(/filename="?([^";]+)"?/);
+  const filename = match?.[1] ?? (os === 'mac' ? 'AgentHub-Setup.command' : 'AgentHub-Setup.bat');
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function openSkillLocation(
   id: string,
   body: OpenSkillLocationRequest,
 ): Promise<void> {
   return post<void>(`/api/agents/${id}/skills/open-location`, body);
+}
+
+export async function installGitHubSkill(
+  id: string,
+  body: InstallGitHubSkillRequest,
+): Promise<InstalledGitHubSkill> {
+  return post<InstalledGitHubSkill>(`/api/agents/${id}/skills/install`, body);
 }
 
 export async function startAgent(id: string): Promise<void> {

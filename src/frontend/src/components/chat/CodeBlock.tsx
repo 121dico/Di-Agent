@@ -1,12 +1,15 @@
-import React, { useState, type ReactNode } from 'react';
+import React, { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   CheckOutlined,
   CopyOutlined,
+  DownOutlined,
   ExpandOutlined,
   RobotOutlined,
+  UpOutlined,
 } from '@ant-design/icons';
 import { Input } from 'antd';
 import { message as antMessage } from '@/utils/message';
+import { copyText } from '@/utils/clipboard';
 import type { Artifact } from '@/types/message';
 import { aiEditArtifact } from '@/api/artifact';
 import { ApiError } from '@/api/client';
@@ -47,6 +50,10 @@ interface CodeBlockProps {
  * 所有文本类产物（code/webpage/document）共享。本组件展开时构造 Artifact 对象
  * 交给 ArtifactEditor，自身不再承载工作台状态。
  */
+/** 折叠阈值：超过该行数/字符数的代码块默认收起，只显示头部摘要。 */
+const CODE_COLLAPSE_LINES = 12;
+const CODE_COLLAPSE_CHARS = 400;
+
 export const CodeBlock: React.FC<CodeBlockProps> = ({
   className,
   children,
@@ -63,6 +70,21 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
 
   const [copied, setCopied] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
+  // 内联折叠：长代码默认收起（产物预览置顶阅读流的一部分——代码可按需展开）
+  const collapsibleInline = (sourceCodeStr ? sourceCodeStr.split('\n').length : 0) > CODE_COLLAPSE_LINES
+    || (sourceCodeStr ? sourceCodeStr.length : 0) > CODE_COLLAPSE_CHARS;
+  const [inlineCollapsed, setInlineCollapsed] = useState(collapsibleInline);
+  // 用户手动切换过折叠后，不再自动干预（流式增长只影响"从未交互"的块）
+  const userToggledRef = useRef(false);
+  useEffect(() => {
+    if (userToggledRef.current) return;
+    // 流式增长：超过阈值时自动收起（初始短、长着长着变长的代码块）
+    setInlineCollapsed(collapsibleInline);
+  }, [collapsibleInline]);
+  const firstLineSummary = (() => {
+    const first = (sourceCodeStr || '').split('\n').find((l) => l.trim()) || '…';
+    return first.trim().slice(0, 46);
+  })();
 
   // 内联 AI 局部修改（不展开时的轻量交互）
   const [selectedCode, setSelectedCode] = useState('');
@@ -107,7 +129,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(sourceCodeStr).then(() => {
+    copyText(sourceCodeStr).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }).catch(() => {
@@ -178,8 +200,22 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
   return (
     <div className={styles.codeBlockWrapper}>
       <div className={styles.codeHeader}>
-        <span>{displayLang}</span>
+        <span className={styles.codeHeaderLang}>{displayLang}</span>
+        {inlineCollapsed && (
+          <span className={styles.codeHeaderSummary}>{firstLineSummary}</span>
+        )}
         <div className={styles.codeActions}>
+          {collapsibleInline && (
+            <button
+              className={styles.codeActionBtn}
+              type="button"
+              title={inlineCollapsed ? '展开代码' : '收起代码'}
+              onClick={() => { userToggledRef.current = true; setInlineCollapsed((v) => !v); }}
+            >
+              <span className={styles.codeCopyIcon}>{inlineCollapsed ? <DownOutlined /> : <UpOutlined />}</span>
+              <span className={styles.codeCopyText}>{inlineCollapsed ? '展开代码' : '收起'}</span>
+            </button>
+          )}
           {expandable && (
             <button className={styles.codeActionBtn} type="button" title="展开代码" onClick={() => setEditorOpen(true)}>
               <span className={styles.codeCopyIcon}><ExpandOutlined /></span>
@@ -197,14 +233,19 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
           </button>
         </div>
       </div>
-      <pre
-        ref={inlineCodeRef}
-        className={styles.codeBlock}
-        onMouseUp={() => captureSelectionFrom(inlineCodeRef.current)}
-        onKeyUp={() => captureSelectionFrom(inlineCodeRef.current)}
-      >
-        <code dangerouslySetInnerHTML={{ __html: highlighted }} />
-      </pre>
+      {!inlineCollapsed && (
+        <pre
+          ref={inlineCodeRef}
+          className={styles.codeBlock}
+          onMouseUp={() => captureSelectionFrom(inlineCodeRef.current)}
+          onKeyUp={() => captureSelectionFrom(inlineCodeRef.current)}
+        >
+          <code dangerouslySetInnerHTML={{ __html: highlighted }} />
+        </pre>
+      )}
+      {inlineCollapsed && (
+        <div className={styles.collapsedHint}>代码已收起 · 共 {sourceCodeStr.split('\n').length} 行</div>
+      )}
       {artifactRootId && selectedCode.trim() && !editorOpen && renderInlineAIEditPanel()}
 
       {editorArtifact && (

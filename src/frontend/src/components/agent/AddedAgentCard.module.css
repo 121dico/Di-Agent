@@ -13,14 +13,14 @@
 }
 
 .container:hover {
-  border-color: rgba(47, 143, 107, 0.28);
+  border-color: rgba(15, 118, 110, 0.28);
   box-shadow: 0 10px 18px rgba(15, 23, 42, 0.1);
   transform: translateY(-1px);
 }
 
 .active {
-  border-color: rgba(47, 143, 107, 0.5);
-  box-shadow: 0 10px 20px rgba(47, 143, 107, 0.16);
+  border-color: rgba(15, 118, 110, 0.5);
+  box-shadow: 0 10px 20px rgba(15, 118, 110, 0.16);
 }
 
 .head {
@@ -117,10 +117,10 @@
   border-color: var(--color-border);
 }
 :global(html.dark) .container:hover {
-  border-color: rgba(52, 211, 153, 0.4);
+  border-color: rgba(22, 140, 128, 0.4);
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
 }
 :global(html.dark) .active {
-  border-color: rgba(52, 211, 153, 0.55);
-  box-shadow: 0 8px 18px rgba(52, 211, 153, 0.22);
+  border-color: rgba(22, 140, 128, 0.55);
+  box-shadow: 0 8px 18px rgba(22, 140, 128, 0.22);
 }

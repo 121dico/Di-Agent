@@ -1,6 +1,6 @@
 .drawer :global(.ant-drawer-header) {
-  border-bottom: 1px solid var(--color-border);
-  padding: 12px 20px;
+  border-bottom: 1px solid var(--wb-border-subtle);
+  padding: 13px 18px;
 }
 
 .drawer :global(.ant-drawer-body) {
@@ -19,7 +19,7 @@
 /* ── Bubble layout ── */
 .bubble {
   display: flex;
-  padding: 20px 16px;
+  padding: 16px 16px;
 }
 
 .bubbleLeft {
@@ -31,7 +31,7 @@
 }
 
 .bubbleOriginal {
-  padding: 10px 16px;
+  padding: 12px 16px;
 }
 
 .avatar {
@@ -94,17 +94,18 @@
 
 .innerOther {
   color: var(--color-text);
-  background: var(--color-surface-strong);
-  border: 1px solid rgba(31, 35, 40, 0.06);
-  border-radius: 16px 16px 16px 4px;
-  box-shadow: var(--shadow-bubble-assistant);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding-inline: 0;
 }
 
 .innerOwn {
   color: #ffffff;
-  background: linear-gradient(135deg, var(--color-user-bubble-from) 0%, var(--color-user-bubble-to) 100%);
-  border-radius: 16px 16px 4px 16px;
-  box-shadow: var(--shadow-bubble-user);
+  background: var(--wb-action);
+  border-radius: var(--radius-5) var(--radius-5) var(--radius-2) var(--radius-5);
+  box-shadow: none;
 }
 
 /* ── Markdown ── */
@@ -224,7 +225,7 @@
   height: 48px;
   pointer-events: none;
   border-radius: inherit;
-  background: linear-gradient(180deg, rgba(47, 143, 107, 0), var(--color-user-bubble-to) 78%);
+  background: linear-gradient(180deg, rgba(29, 29, 31, 0), var(--wb-action) 78%);
 }
 
 .expandToggle {
@@ -232,11 +233,11 @@
   align-items: center;
   gap: 4px;
   margin: 4px 0 0;
-  padding: 6px 10px;
-  border: 1px solid rgba(22, 163, 101, 0.16);
-  border-radius: 999px;
-  color: var(--color-primary);
-  background: var(--color-bg-white);
+  padding: 5px 2px;
+  border: 0;
+  border-radius: var(--radius-2);
+  color: var(--wb-link);
+  background: transparent;
   cursor: pointer;
   font-size: 11px;
   font-weight: 600;
@@ -244,14 +245,14 @@
 }
 
 .expandToggle:hover {
-  color: var(--color-primary-active);
-  border-color: rgba(22, 163, 101, 0.28);
+  color: var(--wb-text-primary);
+  background: var(--wb-surface-hover);
 }
 
 /* ── Original message highlight ── */
 .bubbleOriginal .innerOther,
 .bubbleOriginal .innerOwn {
-  border-left: 3px solid var(--color-primary);
+  border-left: 3px solid var(--wb-focus);
 }
 
 /* ── Divider ── */
@@ -299,16 +300,16 @@
   align-items: flex-end;
   gap: 8px;
   padding: 12px 16px 16px;
-  border-top: 1px solid var(--color-border);
-  background: var(--color-bg);
+  border-top: 1px solid var(--wb-border-subtle);
+  background: var(--wb-surface);
 }
 
 .inputArea :global(.ant-input) {
   flex: 1;
-  border-radius: 8px;
+  border-radius: var(--radius-3);
 }
 
 .sendBtn {
   flex-shrink: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-3);
 }

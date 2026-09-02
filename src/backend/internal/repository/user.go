@@ -24,7 +24,9 @@ func NewUserRepo(db *sqlx.DB) *UserRepo {
 func (r *UserRepo) CreateUser(ctx context.Context, username, passwordHash string) (*model.User, error) {
 	var u model.User
 	err := r.db.QueryRowxContext(ctx,
-		`INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id, username, password_hash, avatar, created_at`,
+		`INSERT INTO users (username, password_hash, is_admin)
+		 SELECT $1, $2, NOT EXISTS (SELECT 1 FROM users)
+		 RETURNING id, username, password_hash, avatar, is_admin, created_at`,
 		username, passwordHash,
 	).StructScan(&u)
 	if err != nil {
@@ -37,7 +39,7 @@ func (r *UserRepo) CreateUser(ctx context.Context, username, passwordHash string
 func (r *UserRepo) GetUserByUsername(ctx context.Context, username string) (*model.User, error) {
 	var u model.User
 	err := r.db.QueryRowxContext(ctx,
-		`SELECT id, username, password_hash, avatar, created_at FROM users WHERE username = $1`,
+		`SELECT id, username, password_hash, avatar, is_admin, created_at FROM users WHERE username = $1`,
 		username,
 	).StructScan(&u)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -53,7 +55,7 @@ func (r *UserRepo) GetUserByUsername(ctx context.Context, username string) (*mod
 func (r *UserRepo) GetUserByID(ctx context.Context, id string) (*model.User, error) {
 	var u model.User
 	err := r.db.QueryRowxContext(ctx,
-		`SELECT id, username, password_hash, avatar, created_at FROM users WHERE id = $1`,
+		`SELECT id, username, password_hash, avatar, is_admin, created_at FROM users WHERE id = $1`,
 		id,
 	).StructScan(&u)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -70,7 +72,7 @@ func (r *UserRepo) UpdateUsername(ctx context.Context, id, username string) (*mo
 	var u model.User
 	err := r.db.QueryRowxContext(ctx,
 		`UPDATE users SET username = $1 WHERE id = $2
-		 RETURNING id, username, password_hash, avatar, created_at`,
+		 RETURNING id, username, password_hash, avatar, is_admin, created_at`,
 		username, id,
 	).StructScan(&u)
 	if err != nil {
@@ -84,7 +86,7 @@ func (r *UserRepo) UpdateAvatar(ctx context.Context, id, avatar string) (*model.
 	var u model.User
 	err := r.db.QueryRowxContext(ctx,
 		`UPDATE users SET avatar = $1 WHERE id = $2
-		 RETURNING id, username, password_hash, avatar, created_at`,
+		 RETURNING id, username, password_hash, avatar, is_admin, created_at`,
 		avatar, id,
 	).StructScan(&u)
 	if errors.Is(err, sql.ErrNoRows) {

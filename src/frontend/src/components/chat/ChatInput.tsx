@@ -4,6 +4,7 @@ import { message } from '@/utils/message';
 import {
   CloseOutlined,
   DatabaseOutlined,
+  DashboardOutlined,
   GlobalOutlined,
   LinkOutlined,
   LockOutlined,
@@ -11,6 +12,7 @@ import {
   SendOutlined,
   UpOutlined,
   DownOutlined,
+  ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import { useMessages } from '@/hooks/useMessages';
 import { useMessageStore } from '@/store/messageStore';
@@ -30,9 +32,12 @@ import type { TextAreaRef } from 'antd/es/input/TextArea';
 import type { AttachmentPayload } from '@/types/attachment';
 import type { Message, ReplyToPreview } from '@/types/message';
 import { AttachmentPreview, type PendingAttachment } from './AttachmentPreview';
+import {
+  ComposerConversationActions,
+  type ComposerConversationActionsProps,
+} from './ComposerConversationActions';
 import { appendKnowledgeRefs } from '@/components/knowledge/knowledgeReferenceState';
 import styles from './ChatInput.module.css';
-import replyStyles from './ChatInput.module.css';
 
 const { TextArea } = Input;
 
@@ -65,6 +70,9 @@ interface ChatInputProps {
   conversationId: string;
   replyTo?: Message | null;
   onCancelReply?: () => void;
+  onOpenContext?: () => void;
+  contextActive?: boolean;
+  conversationActions?: ComposerConversationActionsProps;
   /**
    * 把内部 processFiles 暴露给父级（ChatWindow），让整个聊天窗口的拖放都能复用同一套
    * 校验 + 上传逻辑。传 null 表示注销（卸载时）。
@@ -72,10 +80,31 @@ interface ChatInputProps {
   onRegisterProcessFiles?: (handler: ((files: FileList | File[]) => void) | null) => void;
 }
 
+export const ComposerContextAction: React.FC<{
+  onOpen: () => void;
+  active: boolean;
+}> = ({ onOpen, active }) => (
+  <Tooltip title="上下文用量与检查点">
+    <Button
+      type="text"
+      icon={<DashboardOutlined />}
+      className={styles.contextBtn}
+      aria-label="上下文与检查点"
+      aria-pressed={active}
+      onClick={onOpen}
+    >
+      <span className={styles.contextBtnLabel}>上下文</span>
+    </Button>
+  </Tooltip>
+);
+
 export const ChatInput: React.FC<ChatInputProps> = ({
   conversationId,
   replyTo,
   onCancelReply,
+  onOpenContext,
+  contextActive = false,
+  conversationActions,
   onRegisterProcessFiles,
 }) => {
   const [expanded, setExpanded] = useState(false);
@@ -90,6 +119,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [mentionVisible, setMentionVisible] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
   const [mentionIndex, setMentionIndex] = useState(0);
@@ -196,6 +226,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     setKbLoadError(null);
     setKbVisible(false);
     setSelectedKnowledgeBases([]);
+    setSendError(null);
   }, [conversationId]);
 
   // Proactively load agent names when there's an active target (for the target bar display)
@@ -254,6 +285,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setValue(val);
+    if (sendError) setSendError(null);
     sendTypingStart();
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     typingTimerRef.current = setTimeout(() => {
@@ -298,7 +330,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
     if (mentionVisible) setMentionVisible(false);
     if (kbVisible) setKbVisible(false);
-  }, [sendTypingStart, sendTypingStop, isGroup, mentionVisible, kbVisible, loadMentionTargets, loadKnowledgeBases]);
+  }, [sendTypingStart, sendTypingStop, isGroup, mentionVisible, kbVisible, loadMentionTargets, loadKnowledgeBases, sendError]);
 
   // 文件入库通用逻辑：校验大小 → 入 pendingFiles → 逐个上传。
   // input onChange 与拖拽 onDrop 共用，避免两份逻辑漂移。
@@ -376,22 +408,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const insertMention = useCallback((target: MentionTarget) => {
     const before = value.slice(0, mentionStart);
     const after = value.slice(mentionStart + mentionQuery.length + 1); // +1 for @
-    // Append " #" to auto-trigger KB selection after choosing an agent
-    const hashPos = mentionStart + target.mentionLabel.length + 2; // position of the new #
-    const newValue = `${before}@${target.mentionLabel} #${after}`;
+    // 直接插入 @提及 + 尾随空格：不再自动追加 "#"（曾用于联动知识库选择，
+    // 但对绝大多数场景是多余字符，知识库可经输入框的 KB 入口手动选择）。
+    const newValue = `${before}@${target.mentionLabel} ${after}`;
     setValue(newValue);
     setMentionVisible(false);
 
-    // Auto-trigger KB selection
-    setKbQuery('');
-    setKbIndex(0);
-    setKbStart(hashPos);
-    setKbVisible(true);
-    loadKnowledgeBases();
-
     // Focus back on textarea
     setTimeout(() => textareaRef.current?.focus(), 0);
-  }, [value, mentionStart, mentionQuery, loadKnowledgeBases]);
+  }, [value, mentionStart, mentionQuery]);
 
   const hasMention = useCallback((content: string, label: string) => {
     const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -456,6 +481,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     const submitConversationId = conversationId;
     const trimmed = value.trim();
     const knowledgeBasesForSend = selectedKnowledgeBases;
+    const pendingFilesForSend = pendingFiles;
     const persistedContent = appendKnowledgeRefs(trimmed, knowledgeBasesForSend);
     const attachments: AttachmentPayload[] = pendingFiles
       .filter((p) => p.status === 'done' && p.payload)
@@ -479,6 +505,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
 
     setSending(true);
+    setSendError(null);
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     sendTypingStop();
 
@@ -518,15 +545,27 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       if (activeConversationIdRef.current === submitConversationId) {
         setValue(trimmed);
         setSelectedKnowledgeBases(knowledgeBasesForSend);
-        message.error('发送失败，请稍后重试');
+        setPendingFiles(pendingFilesForSend);
+        setSendError('发送失败，草稿和附件已保留。');
       }
     } finally {
       setSending(false);
     }
   }, [value, selectedKnowledgeBases, pendingFiles, isStreaming, send, sendTypingStop, replyTo, onCancelReply, isGroup, mentionTargetsLoaded, fetchMentionTargets, members, agentMembers, hasMention, directAgentId, bindDirectAgentChat, conversationId]);
 
+  const lastSendAtRef = useRef(0);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      // IME 组合态守卫：中文输入法选词/上屏的 Enter（isComposing 或 keyCode 229）
+      // 只作用于输入法，绝不能触发发送——否则"输入 html 按回车确认"会直接把
+      // 消息发出去，且组合中的残片还可能被第二次 Enter 单独发出。
+      const native = e.nativeEvent;
+      const composing = (native as KeyboardEvent & { isComposing?: boolean }).isComposing
+        || native.keyCode === 229;
+      if (composing) {
+        return;
+      }
       // KB dropdown navigation (takes priority when visible)
       if (kbVisible) {
         const total = filteredKBTargets.length + 1; // +1 for "不使用知识库"
@@ -583,6 +622,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
+        // 防连发：上一次发送后极短时间内的 Enter（双击习惯）不再重复发送。
+        const now = Date.now();
+        if (now - lastSendAtRef.current < 120) {
+          return;
+        }
+        lastSendAtRef.current = now;
         handleSubmit();
       }
     },
@@ -591,7 +636,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const canSend = Boolean(
     value.trim() || selectedKnowledgeBases.length > 0 || pendingFiles.some((p) => p.status === 'done'),
-  ) && !isStreaming;
+  ) && !isStreaming && !sending;
 
   // 点击下拉列表外部关闭 mention 和 KB 下拉
   useEffect(() => {
@@ -608,7 +653,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   }, [mentionVisible, kbVisible]);
 
   return (
-    <div className={styles.container}>
+    <div className={styles.container} data-chat-composer>
       {(isStreaming || agentTyping) && (
         <div className={styles.typingIndicator}>
           <Spin size="small" />
@@ -631,12 +676,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
       {replyTo && (
-        <div className={replyStyles.replyBar}>
-          <div className={replyStyles.replyBarContent}>
-            <div className={replyStyles.replyBarLabel}>
+        <div className={styles.replyBar}>
+          <div className={styles.replyBarContent}>
+            <div className={styles.replyBarLabel}>
               回复 {replyTo.username || (replyTo.role === 'user' ? '用户' : '助手')}
             </div>
-            <div className={replyStyles.replyBarText}>{truncatePreview(replyTo.content)}</div>
+            <div className={styles.replyBarText}>{truncatePreview(replyTo.content)}</div>
           </div>
           <Button
             type="text"
@@ -670,6 +715,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
       <AttachmentPreview items={pendingFiles} onRemove={handleRemoveFile} />
+      {sendError && (
+        <div id="composer-send-error" className={styles.sendError} role="alert">
+          <ExclamationCircleOutlined aria-hidden="true" />
+          <span>{sendError}</span>
+          <button type="button" onClick={() => void handleSubmit()}>重试</button>
+          <button type="button" className={styles.sendErrorDismiss} onClick={() => setSendError(null)} aria-label="关闭发送错误提示">
+            <CloseOutlined />
+          </button>
+        </div>
+      )}
       <div className={styles.inputRow}>
         <Tooltip title="添加附件">
           <Button
@@ -704,7 +759,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           placeholder="发送至当前对话"
           autoSize={{ minRows: expanded ? 8 : 1, maxRows: expanded ? 20 : 4 }}
           className={styles.textarea}
+          aria-invalid={Boolean(sendError)}
+          aria-describedby={sendError ? 'composer-send-error' : undefined}
         />
+        {onOpenContext && <ComposerContextAction onOpen={onOpenContext} active={contextActive} />}
+        {conversationActions && <ComposerConversationActions {...conversationActions} />}
         <Tooltip title={expanded ? '收起输入框' : '展开输入框'}>
           <Button
             type="text"

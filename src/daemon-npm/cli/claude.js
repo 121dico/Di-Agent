@@ -117,6 +117,10 @@ function createClaudeCliSpec(ctx) {
       return roots;
     },
 
+    installSkillRoot(home) {
+      return ctx.pathJoin(home, '.claude', 'skills');
+    },
+
     // Claude 无登录态特殊检测（命令存在即视为可用），不实现 isAuthenticated。
 
     // === Step 2 扩展（agent-adapter 重构） ===

@@ -9,6 +9,7 @@ type AgentCandidate struct {
 	MachineName      string     `json:"machine_name" db:"machine_name"`
 	Name             string     `json:"name" db:"name"`
 	CLITool          string     `json:"cli_tool" db:"cli_tool"`
+	Variant          string     `json:"variant" db:"variant"` // cli | desktop（底座类型）
 	Version          string     `json:"version,omitempty" db:"version"`
 	CapabilitiesJSON string     `json:"capabilities_json,omitempty" db:"capabilities_json"`
 	LastSeenAt       *time.Time `json:"last_seen_at,omitempty" db:"last_seen_at"`

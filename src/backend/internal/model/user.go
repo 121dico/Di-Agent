@@ -8,5 +8,6 @@ type User struct {
 	Username     string    `json:"username" db:"username"`
 	PasswordHash string    `json:"-" db:"password_hash"`
 	Avatar       string    `json:"avatar,omitempty" db:"avatar"`
+	IsAdmin      bool      `json:"is_admin" db:"is_admin"`
 	CreatedAt    time.Time `json:"created_at" db:"created_at"`
 }

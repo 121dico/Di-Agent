@@ -44,6 +44,24 @@
   flex-direction: column;
 }
 
+.launcherButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.launcherNote {
+  margin-top: 6px;
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.machineLauncherButtons {
+  display: flex;
+  gap: 4px;
+}
+
 .commandLabel {
   display: flex;
   align-items: center;
