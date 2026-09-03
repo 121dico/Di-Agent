@@ -1,12 +1,18 @@
 // @vitest-environment jsdom
 
 import { act } from 'react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GlobalRail } from './GlobalRail';
 
 const STORAGE_KEY = 'di_agent_global_rail_collapsed';
+const railStylesheet = readFileSync(
+  resolve(process.cwd(), 'src/components/shell/GlobalRail.module.css'),
+  'utf8',
+);
 
 let container: HTMLDivElement;
 let root: Root;
@@ -57,6 +63,15 @@ afterEach(() => {
 });
 
 describe('GlobalRail collapse preference', () => {
+  it('does not keep the collapse icon visible from ordinary pointer focus', () => {
+    renderRail();
+
+    expect(railStylesheet).toMatch(/\.brandToggle:focus-visible \.brandGlyph/);
+    expect(railStylesheet).toMatch(/\.brandToggle:focus-visible \.brandToggleIcon/);
+    expect(railStylesheet).not.toMatch(/\.brandToggle:focus(?!-visible) \.brandGlyph/);
+    expect(railStylesheet).not.toMatch(/\.brandToggle:focus(?!-visible) \.brandToggleIcon/);
+  });
+
   it('starts expanded when no preference has been stored', () => {
     renderRail();
 

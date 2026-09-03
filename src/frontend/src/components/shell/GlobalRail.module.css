@@ -64,11 +64,11 @@
 .brandToggleIcon { display: grid; place-items: center; opacity: 0; }
 .brandToggleIcon svg { width: 18px; height: 18px; stroke-width: 1.9; }
 .brandToggle:hover .brandGlyph,
-.brandToggle:focus .brandGlyph,
+.brandToggle:focus-visible .brandGlyph,
 .railCollapsed .brandGlyph { opacity: 0; }
 
 .brandToggle:hover .brandToggleIcon,
-.brandToggle:focus .brandToggleIcon,
+.brandToggle:focus-visible .brandToggleIcon,
 .railCollapsed .brandToggleIcon { opacity: 1; }
 
 .brandLabel,
