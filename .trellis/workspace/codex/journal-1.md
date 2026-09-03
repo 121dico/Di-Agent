@@ -58,7 +58,10 @@
 
 ### Main Changes
 
-(Add details)
+- Established `Di Agent` as the canonical UI, prompt, package, module, storage, environment, daemon, and documentation brand.
+- Added audited compatibility migration for legacy state, localStorage, MCP configuration, and environment variables.
+- Fixed LAN HTTP clipboard fallback and rebuilt the daemon bundle without symlinks.
+- Deployed and verified the production server, then migrated this Mac's daemon, sessions, database role, and Docker services.
 
 ### Git Commits
 
@@ -69,6 +72,41 @@
 ### Testing
 
 - [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 3: 完成 Di Agent 全量品牌迁移与线上部署
+
+**Date**: 2026-09-03
+**Task**: 完成 Di Agent 全量品牌迁移与线上部署
+**Branch**: `price_sensitive`
+
+### Summary
+
+统一 Di Agent 品牌、修复内网复制和无符号链接安装包，部署生产服务，迁移本机 daemon/数据库/容器并建立兼容审计。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `71a767f` | (see git log) |
+| `b3be08a` | (see git log) |
+
+### Testing
+
+- [OK] Brand audit, macOS installer contract, Windows installer contract, frontend, Electron, Node daemon, Go daemon, focused backend, production health/readiness, and live macOS install.
+- [OK] Full backend suite has one pre-existing status-code assertion mismatch: traversal is rejected with 404 instead of the expected 403.
 
 ### Status
 
