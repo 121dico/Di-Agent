@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 1
+- **Total Sessions**: 2
 - **Last Active**: 2026-09-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~40 | Active |
+| `journal-1.md` | ~73 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 2 | 2026-09-03 | 修复并部署 daemon 符号链接安装 | `5d23a58de2ba682123b5cf1e1c5b1d1e9e0c27ed` | `price_sensitive` |
 | 1 | 2026-09-03 | 修复并部署 Agent 内网复制命令 | `9e5278950343eff5047f55380ebac17465629bcd` | `price_sensitive` |
 <!-- @@@/auto:session-history -->
 
