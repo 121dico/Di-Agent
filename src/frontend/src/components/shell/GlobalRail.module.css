@@ -218,8 +218,8 @@
   font-size: 9px;
 }
 
-.footer { display: grid; gap: 4px; padding: 8px; border-top: 1px solid var(--wb-border-subtle); }
-.accountRow { height: 42px; display: flex; align-items: center; gap: 6px; }
+.footer { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 8px; border-top: 1px solid var(--wb-border-subtle); }
+.accountRow { min-width: 0; height: 42px; display: flex; align-items: center; gap: 6px; }
 
 .accountButton {
   min-width: 0;
