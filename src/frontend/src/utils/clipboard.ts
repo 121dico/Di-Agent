@@ -3,13 +3,14 @@
  *
  * navigator.clipboard 仅在安全上下文（HTTPS 或 localhost）可用；部门内网通常
  * 通过 http://<局域网IP> 访问，此时 navigator.clipboard 为 undefined。
- * 降级方案为隐藏 textarea + document.execCommand('copy')。
+ * 降级方案为 copy 事件显式写入 + 隐藏 textarea 选区。
  *
  * 注意：部分浏览器（尤其 Safari）在非用户手势链路（如 await 网络请求之后）调用
- * execCommand 会"假成功"——返回 true 但未写入剪贴板。这里做了三类加固：
- * 1. setSelectionRange 显式选区（Safari 对 select() 有已知怪癖）；
- * 2. 连续两次 execCommand 重试；
- * 3. 调用方应把命令同时展示在可手动选中的界面上兜底（见 ConnectComputerModal）。
+ * execCommand 会"假成功"——返回 true 但未写入剪贴板。这里做了四类加固：
+ * 1. copy 事件通过 clipboardData 显式提供完整文本；
+ * 2. setSelectionRange 保留选区兼容兜底；
+ * 3. 连续两次 execCommand 重试；
+ * 4. 调用方应把命令同时展示在可手动选中的界面上兜底（见 ConnectComputerModal）。
  */
 export async function copyText(text: string): Promise<void> {
   if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
@@ -33,6 +34,13 @@ export async function copyText(text: string): Promise<void> {
   // Safari 怪癖：select() 可能不生效，必须 setSelectionRange 显式选区
   textarea.setSelectionRange(0, text.length);
 
+  const handleCopy = (event: ClipboardEvent) => {
+    if (!event.clipboardData) return;
+    event.clipboardData.setData('text/plain', text);
+    event.preventDefault();
+  };
+  document.addEventListener('copy', handleCopy);
+
   let ok = false;
   try {
     ok = document.execCommand('copy');
@@ -43,6 +51,7 @@ export async function copyText(text: string): Promise<void> {
     ok = false;
   }
 
+  document.removeEventListener('copy', handleCopy);
   window.getSelection()?.removeAllRanges();
   previousFocus?.focus?.();
   document.body.removeChild(textarea);

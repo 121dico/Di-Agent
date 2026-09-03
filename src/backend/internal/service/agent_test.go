@@ -305,6 +305,30 @@ func TestCreateDaemonMachineReturnsMachineKey(t *testing.T) {
 	}
 }
 
+func TestGetMachineConnectCommandUsesConfiguredServerURLForDownloadAndDaemon(t *testing.T) {
+	const (
+		serverURL = "http://agenthub.internal:8080"
+		machineID = "machine-1"
+		userID    = "user-1"
+	)
+	repo := &fakeAgentRepo{machines: []model.DaemonMachine{{ID: machineID, UserID: userID}}}
+	svc := NewAgentService(repo, nil)
+	svc.SetServerURL(serverURL)
+
+	command, installCommand, _, apiKey, err := svc.GetMachineConnectCommand(context.Background(), machineID, userID)
+	if err != nil {
+		t.Fatalf("get machine connect command failed: %v", err)
+	}
+	expectedCommand := "npx @hust-agenthub/daemon@0.3.0 --server-url " + serverURL + " --api-key " + apiKey
+	expectedInstallCommand := "curl -fsSL " + serverURL + "/downloads/install.sh | bash -s -- --server-url " + serverURL + " --api-key " + apiKey
+	if command != expectedCommand {
+		t.Fatal("daemon command did not use the configured server URL")
+	}
+	if installCommand != expectedInstallCommand {
+		t.Fatal("install command did not use the configured server URL for both download and daemon connection")
+	}
+}
+
 func TestRegisterMachineAgentsMarksMachineConnected(t *testing.T) {
 	repo := &fakeAgentRepo{}
 	svc := NewAgentService(repo, nil)

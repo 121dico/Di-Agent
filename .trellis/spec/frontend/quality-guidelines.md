@@ -31,3 +31,18 @@
 
 ### Required Tests
 - 配置保存类 store 需要覆盖 stale fetch 场景：先发起旧列表请求，再保存配置，最后旧请求返回时不得覆盖保存后的字段
+
+### 内网 HTTP 剪贴板兼容
+
+- 局域网 IP 的 HTTP 页面不是安全上下文，复制功能不能只依赖 `navigator.clipboard.writeText`。
+- 共享复制工具的降级路径必须在同步 `document.execCommand('copy')` 期间监听 `copy` 事件，通过 `clipboardData.setData('text/plain', text)` 显式写入完整文本并调用 `preventDefault()`；隐藏 textarea 选区只作为兼容兜底。
+- 无论 `execCommand` 返回 `false` 还是抛错，都必须移除临时监听器和 textarea、清理选区并恢复焦点；失败时向调用方抛出可展示的错误。
+- 回归测试至少覆盖：原生 Clipboard API 成功、原生 API 拒绝后降级、旧式复制的完整事件载荷、连续两次旧式复制失败后的清理。
+
+```ts
+const handleCopy = (event: ClipboardEvent) => {
+  if (!event.clipboardData) return;
+  event.clipboardData.setData('text/plain', text);
+  event.preventDefault();
+};
+```
