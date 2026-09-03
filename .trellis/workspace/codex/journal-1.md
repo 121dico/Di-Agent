@@ -115,3 +115,37 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: Codex 与 ZCode Desktop 运行时适配上线
+
+**Date**: 2026-09-03
+**Task**: Codex 与 ZCode Desktop 运行时适配上线
+**Branch**: `price_sensitive`
+
+### Summary
+
+支持 Codex/ZCode Desktop-only 运行、流式事件、单卡 CLI/Desktop 选择与精确运行时持久化；修复 daemon 离线包符号链接和注册后空任务；完成 0.4.0 打包、双远端推送及 10.190.52.164:8080 生产部署。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dc49fec` | (see git log) |
+| `3585589` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
