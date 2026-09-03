@@ -146,7 +146,7 @@ Windows 使用服务端提供的 `install.ps1`，具体命令以“连接电脑�
 - 报告运行结果以不可变快照保存，支持追踪成功、失败和历史版本。
 - 个人报告与对话关联，用户可以从 Agent 生成内容并持续保存迭代。
 
-报告模型和术语见 [`CONTEXT.md`](./CONTEXT.md)，示例配置见 [`src/backend/config/config.example.yaml`](./src/backend/config/config.example.yaml)。
+报告模型和术语见 [`CONTEXT.md`](./CONTEXT.md)，完整数据链路、存储表和 API 清单见 [`doc/architecture/reporting.md`](./doc/architecture/reporting.md)。服务配置示例见 [`src/backend/config/config.example.yaml`](./src/backend/config/config.example.yaml)，报表数据源环境变量模板见 [`src/backend/config/.env.example`](./src/backend/config/.env.example)。
 
 ## 知识库 RAG
 
