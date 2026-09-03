@@ -7,13 +7,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agent-hub/backend/pkg/ws"
+	"github.com/121dico/Di-Agent/src/backend/pkg/ws"
 	"github.com/google/uuid"
 )
 
 // daemonBrowseFilesTool 是 daemon 端 executeTask 的内置 cli_tool 分支，
-// 走文件浏览只读 RPC（与 __agenthub_open_path__ 同一通道）。
-const daemonBrowseFilesTool = "__agenthub_browse_files__"
+// 走文件浏览只读 RPC（与 __di_agent_open_path__ 同一通道）。
+const daemonBrowseFilesTool = "__di_agent_browse_files__"
 
 // BrowseAgentFilesTimeout 文件浏览 RPC 同步等待上限。daemon 端 git 操作另有
 // 10s 超时兜底，这里给足余量容纳多目录列表 + 大文件读取。

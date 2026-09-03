@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('agentHubDesktop', {
+contextBridge.exposeInMainWorld('diAgentDesktop', {
   platform: process.platform,
   isDesktop: true,
   // 窗口控制

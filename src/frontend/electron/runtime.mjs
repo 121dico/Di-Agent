@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { existsSync } from 'node:fs';
+import { canonicalizeDiAgentEnvironment, readDiAgentEnvironment } from './brand-environment.mjs';
 
 const DEFAULT_BACKEND_URL = 'http://127.0.0.1:8080';
 
@@ -7,8 +8,9 @@ export function resolveFrontendURL({ env, appPath, resourcesPath }) {
   if (env.VITE_DEV_SERVER_URL) {
     return env.VITE_DEV_SERVER_URL;
   }
-  if (env.AGENTHUB_BACKEND_URL) {
-    return env.AGENTHUB_BACKEND_URL;
+  const backendURL = readDiAgentEnvironment(env, 'BACKEND_URL');
+  if (backendURL) {
+    return backendURL;
   }
   if (appPath || resourcesPath) {
     return DEFAULT_BACKEND_URL;
@@ -20,10 +22,10 @@ export function shouldLaunchBackend(env) {
   if (env.VITE_DEV_SERVER_URL) {
     return false;
   }
-  if (env.AGENTHUB_DESKTOP_LAUNCH_BACKEND === 'false') {
+  if (readDiAgentEnvironment(env, 'DESKTOP_LAUNCH_BACKEND') === 'false') {
     return false;
   }
-  return !env.AGENTHUB_BACKEND_URL;
+  return !readDiAgentEnvironment(env, 'BACKEND_URL');
 }
 
 export function resolveBackendBinary({ resourcesPath, platform, exists = existsSync }) {
@@ -46,10 +48,11 @@ export function resolveFrontendDist({ resourcesPath }) {
 }
 
 export function buildBackendEnv({ baseEnv, configPath, frontendDist }) {
+  const canonicalEnv = canonicalizeDiAgentEnvironment(baseEnv);
   return {
-    ...baseEnv,
-    AGENTHUB_CONFIG: baseEnv.AGENTHUB_CONFIG || configPath,
-    AGENTHUB_FRONTEND_DIST: frontendDist,
+    ...canonicalEnv,
+    DI_AGENT_CONFIG: canonicalEnv.DI_AGENT_CONFIG || configPath,
+    DI_AGENT_FRONTEND_DIST: frontendDist,
   };
 }
 

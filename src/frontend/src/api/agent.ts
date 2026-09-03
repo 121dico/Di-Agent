@@ -104,7 +104,7 @@ export async function downloadMachineLauncher(id: string, os: 'mac' | 'win'): Pr
   const blob = await res.blob();
   const disposition = res.headers.get('Content-Disposition') ?? '';
   const match = disposition.match(/filename="?([^";]+)"?/);
-  const filename = match?.[1] ?? (os === 'mac' ? 'AgentHub-Setup.command' : 'AgentHub-Setup.bat');
+  const filename = match?.[1] ?? (os === 'mac' ? 'Di-Agent-Setup.command' : 'Di-Agent-Setup.bat');
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;

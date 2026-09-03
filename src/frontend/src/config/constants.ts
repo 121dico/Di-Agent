@@ -5,19 +5,25 @@
  * 避免散落在各个 store / hook / component 中产生不一致。
  */
 
+import { migrateLegacyStorage } from './storageMigration';
+
 // ---------------------------------------------------------------------------
 // localStorage keys
 // ---------------------------------------------------------------------------
 
 export const STORAGE_KEYS = {
-  TOKEN: 'agenthub_token',
-  USER: 'agenthub_user',
-  ACTIVE_CONV: 'agenthub_active_conv',
-  DIRECT_AGENT_CHATS: 'agenthub_direct_agent_chats',
+  TOKEN: 'di_agent_token',
+  USER: 'di_agent_user',
+  ACTIVE_CONV: 'di_agent_active_conv',
+  DIRECT_AGENT_CHATS: 'di_agent_direct_agent_chats',
   THEME: 'theme',
-  NOTIFY_SOUND: 'agenthub_notify_sound',
-  NOTIFY_DESKTOP: 'agenthub_notify_desktop',
+  NOTIFY_SOUND: 'di_agent_notify_sound',
+  NOTIFY_DESKTOP: 'di_agent_notify_desktop',
 } as const;
+
+if (typeof window !== 'undefined') {
+  migrateLegacyStorage(window.localStorage);
+}
 
 // ---------------------------------------------------------------------------
 // Message pagination & cache

@@ -20,8 +20,8 @@ export function useAuth() {
     useWsStore.getState().disconnect();
     logout();
     // 清除所有用户相关的 localStorage 键
-    localStorage.removeItem('agenthub_active_conv');
-    localStorage.removeItem('agenthub_direct_agent_chats');
+    localStorage.removeItem('di_agent_active_conv');
+    localStorage.removeItem('di_agent_direct_agent_chats');
     // 强制刷新页面，彻底清空所有 zustand 内存状态
     window.location.href = '/login';
   };

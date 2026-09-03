@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/pkg/ws"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/pkg/ws"
 )
 
 // TestStreamingWatchdog_MarksStaleMessage 验证 watchdog 把超时的 streaming message 标 error。

@@ -11,16 +11,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agent-hub/daemon/client"
-	"github.com/agent-hub/daemon/mcp"
-	"github.com/agent-hub/daemon/scanner"
+	"github.com/121dico/Di-Agent/src/daemon/client"
+	"github.com/121dico/Di-Agent/src/daemon/internal/brandenv"
+	"github.com/121dico/Di-Agent/src/daemon/mcp"
+	"github.com/121dico/Di-Agent/src/daemon/scanner"
 )
 
 const defaultDaemonWSURL = "ws://localhost:8080/daemon/ws"
 
 func main() {
 	wsURLFlag := flag.String("ws-url", "", "daemon websocket url")
-	serverURLFlag := flag.String("server-url", "", "AgentHub server url")
+	serverURLFlag := flag.String("server-url", "", "Di Agent server URL")
 	machineKeyFlag := flag.String("machine-key", "", "machine api key")
 	apiKeyFlag := flag.String("api-key", "", "machine api key")
 	agentIDFlag := flag.String("agent-id", "", "current agent id for MCP tool authorization")
@@ -42,16 +43,16 @@ func main() {
 func runMCP(agentID string) {
 	logger := slog.Default()
 
-	serverURL := os.Getenv("AGENTHUB_SERVER_URL")
+	serverURL := brandenv.Read("SERVER_URL")
 	if serverURL == "" {
 		serverURL = "http://localhost:8080"
 	}
 	token := firstNonEmpty(
-		os.Getenv("AGENTHUB_DAEMON_TOKEN"),
-		os.Getenv("AGENTHUB_MACHINE_KEY"),
+		brandenv.Read("DAEMON_TOKEN"),
+		brandenv.Read("MACHINE_KEY"),
 	)
 	if token == "" {
-		logger.Error("缺少认证 token，设置 AGENTHUB_DAEMON_TOKEN 环境变量")
+		logger.Error("缺少认证 token，设置 DI_AGENT_DAEMON_TOKEN 环境变量")
 		os.Exit(1)
 	}
 
@@ -60,7 +61,7 @@ func runMCP(agentID string) {
 	currentAgentID := firstNonEmpty(agentID, mcp.AgentIDFromEnv())
 	registry := mcp.BuildRegistry(api, currentAgentID)
 	allowed := api.AllowedToolsForAgent(currentAgentID)
-	server := mcp.NewServerFromRegistry("agenthub", "0.1.0", registry, logger).WithAllowedTools(allowed)
+	server := mcp.NewServerFromRegistry("di-agent", "0.1.0", registry, logger).WithAllowedTools(allowed)
 
 	ctx := context.Background()
 
@@ -91,10 +92,10 @@ func runDaemon(wsURLFlag, serverURLFlag, machineKeyFlag, apiKeyFlag *string) {
 
 	token := firstNonEmpty(*apiKeyFlag, *machineKeyFlag)
 	if token == "" {
-		token = os.Getenv("AGENTHUB_MACHINE_KEY")
+		token = brandenv.Read("MACHINE_KEY")
 	}
 	if token == "" {
-		token = os.Getenv("AGENTHUB_DAEMON_TOKEN")
+		token = brandenv.Read("DAEMON_TOKEN")
 	}
 	if token == "" {
 		return
@@ -104,7 +105,7 @@ func runDaemon(wsURLFlag, serverURLFlag, machineKeyFlag, apiKeyFlag *string) {
 		wsURL = buildDaemonWSURL(*serverURLFlag)
 	}
 	if wsURL == "" {
-		wsURL = os.Getenv("AGENTHUB_DAEMON_WS_URL")
+		wsURL = brandenv.Read("DAEMON_WS_URL")
 	}
 	if wsURL == "" {
 		wsURL = defaultDaemonWSURL

@@ -2,7 +2,7 @@
 
 ## 背景
 
-用户希望将 `https://github.com/Shallow-W/agent-hub/tree/dev` 的内容整合到当前本地项目，并强调“最好在兼容的情况下整合”。
+用户希望将 `https://github.com/Shallow-W/di-agent/tree/dev` 的内容整合到当前本地项目，并强调“最好在兼容的情况下整合”。
 
 当前本地分支为 `feat/multi-agent`，远端 `origin/dev` 比当前分支包含大量新增提交，涉及前端、后端、daemon、知识库、Orchestrator、Agent 工具配置等模块。
 
@@ -23,8 +23,8 @@
 ## 已知风险
 
 - `origin/dev` 的 `.gitignore` 存在残留冲突标记，需要合并后修复。
-- `origin/dev` 包含若干二进制构建产物，如 `src/backend/agenthub-server`、`src/backend/main`、`src/backend/tmp/main`，整合时需要判断是否应保留。
-- 当前工作树已有 `src/daemon-npm/bin/agenthub-daemon.js` 脏状态，不能直接覆盖。
+- `origin/dev` 包含若干二进制构建产物，如 `src/backend/di-agent-server`、`src/backend/main`、`src/backend/tmp/main`，整合时需要判断是否应保留。
+- 当前工作树已有 `src/daemon-npm/bin/di-agent-daemon.js` 脏状态，不能直接覆盖。
 - 前后端和数据库 migration 都有变化，可能出现类型、路由、模型、迁移顺序冲突。
 
 ## 验收标准

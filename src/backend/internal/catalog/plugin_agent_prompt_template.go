@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 // agentPromptTemplatePlugin implements DomainPlugin for the agent_prompt_template domain.

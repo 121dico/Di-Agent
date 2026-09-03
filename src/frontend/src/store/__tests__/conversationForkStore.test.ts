@@ -70,6 +70,6 @@ describe('conversation fork store', () => {
 
     expect(useConversationStore.getState().activeConversationId).toBe(child.id);
     expect(useConversationStore.getState().conversations.map((item) => item.id)).toEqual([child.id]);
-    expect(localStorage.getItem('agenthub_active_conv')).toBe(child.id);
+    expect(localStorage.getItem('di_agent_active_conv')).toBe(child.id);
   });
 });

@@ -35,7 +35,7 @@ function createWindow() {
     height: 820,
     minWidth: 960,
     minHeight: 640,
-    title: 'AgentHub',
+    title: 'Di Agent',
     // 无边框窗口，与前端内容融合为一体
     frame: false,
     // 透明窗口，让 CSS border-radius 正确裁切圆角

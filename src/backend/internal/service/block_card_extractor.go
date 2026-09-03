@@ -1,13 +1,13 @@
 // Package service: block_card_extractor.go
 //
 // SplitTextBlocksByCardFences 把 streaming 累积的 blocks 里的 text block 按
-// ```agenthub {"cards":[...]}``` fenced block 切分成 [text-before, card-block, text-middle,
+// ```di_agent {"cards":[...]}``` fenced block 切分成 [text-before, card-block, text-middle,
 // card-block, text-after]，让卡片成为 first-class block kind（与 text / thinking /
 // tool_use / tool_result / error 平级）。
 //
 // 切分算法复用 extractCardsFromContent 的 fence 识别逻辑（fenced block 协议契约
 // 三方一致：backend extractCardsFromContent / backend SplitTextBlocksByCardFences /
-// agent 系统提示词，统一使用 ```agenthub fence 标记）。本文件不重写识别算法，
+// agent 系统提示词，统一使用 ```di_agent fence 标记）。本文件不重写识别算法，
 // 而是把切分指令从 extractCardsFromContent 的「strippedContent + cards」表达
 // 升级为「blocks 数组」表达。
 //
@@ -24,15 +24,24 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 // fenceOpenMarker 是卡片协议的 fence 开启标记。
-// 用 agenthub 而非 json，避免与普通 JSON 代码块歧义——agent 写 ```json 时是
-// 普通代码产物，写 ```agenthub 时是卡片协议。
+// 用 di_agent 而非 json，避免与普通 JSON 代码块歧义——agent 写 ```json 时是
+// 普通代码产物，写 ```di_agent 时是卡片协议。
 // 协议三方一致：context_agent_config.go（agent 系统提示词）/ block_card_extractor.go
 // （block 切分）/ message.go extractCardsFromContent（content 提取）。
-const fenceOpenMarker = "```agenthub"
+const fenceOpenMarker = "```di_agent"
+const legacyFenceOpenMarker = "```agenthub" // [brand-compat] 仅兼容解析升级前已产生的卡片协议。
+
+func isCardFenceOpenMarker(value string) bool {
+	return value == fenceOpenMarker || value == legacyFenceOpenMarker
+}
+
+func containsCardFenceOpenMarker(value string) bool {
+	return strings.Contains(value, fenceOpenMarker) || strings.Contains(value, legacyFenceOpenMarker)
+}
 
 // SplitTextBlocksByCardFences 扫描 blocks 数组，对每个 text block 调用 splitTextBlockByCardFences
 // 切分。返回新 blocks 数组（含 card kind block）。非 text block 原样保留。所有 block 的
@@ -65,12 +74,12 @@ func SplitTextBlocksByCardFences(blocks []model.MessageBlock) []model.MessageBlo
 	return out
 }
 
-// splitTextBlockByCardFences 扫描单个 text block 的内容，识别所有 ```agenthub
+// splitTextBlockByCardFences 扫描单个 text block 的内容，识别所有 ```di_agent
 // {"cards":[...]}``` fenced block，切分成 [text, card, text, card, text] 序列。
 // 返回的 slice 元素 Index 未设置（由上层 SplitTextBlocksByCardFences 统一编号）。
 //
 // 识别算法与 extractCardsFromContent 完全一致（避免双源）：
-//   - 仅识别 fenced block（```agenthub 开启，``` 闭合）
+//   - 仅识别 fenced block（```di_agent 开启，``` 闭合）
 //   - block 内 JSON 解析失败 → 该 fence 原样保留（不切分）
 //   - block 无 cards 字段或 cards 非数组 → 该 fence 原样保留
 //   - block 未闭合（inBlock 仍 true 到末尾）→ 原样返回整个 text（不部分切分）
@@ -79,7 +88,7 @@ func SplitTextBlocksByCardFences(blocks []model.MessageBlock) []model.MessageBlo
 // 占位，前端 BlockRegistry 单独 render）。这是与 extractCardsFromContent 的细微差异——
 // 后者把多卡合并到单一 cards 数组，本函数把每张卡提升为独立 block。
 func splitTextBlockByCardFences(text string) []model.MessageBlock {
-	if !strings.Contains(text, fenceOpenMarker) {
+	if !containsCardFenceOpenMarker(text) {
 		// 快速路径：无 fence 标记，原样返回。
 		return []model.MessageBlock{{Kind: model.BlockKindText, Text: text}}
 	}
@@ -101,7 +110,7 @@ func splitTextBlockByCardFences(text string) []model.MessageBlock {
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if !inBlock {
-			if trimmed == fenceOpenMarker {
+			if isCardFenceOpenMarker(trimmed) {
 				inBlock = true
 				blockStart = i
 				jsonBuf.Reset()

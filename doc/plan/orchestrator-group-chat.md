@@ -21,7 +21,7 @@
 | OrchestratorService | 部分实现 | 仅有 `RouteMention`（@mention 路由），无意图拆解 |
 | DaemonTask | 已实现 | 内存队列，daemon 认领并执行 CLI 任务 |
 | Agent CRUD | 已实现 | 系统发现 + 用户自建 Agent |
-| MCP 工具 (M11) | 已实现 | daemon 暴露 agenthub-platform MCP server |
+| MCP 工具 (M11) | 已实现 | daemon 暴露 di-agent-platform MCP server |
 | WS Hub / DaemonHub | 已实现 | 实时推送 + daemon 长连接 |
 | 前端任务面板 | 基础 UI | 列表展示，缺少实时状态更新 |
 

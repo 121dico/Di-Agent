@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/pkg/ws"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/pkg/ws"
 )
 
 // buildEditService 组装一个可跑 AIEditArtifact 的 service（含 daemon hub）。

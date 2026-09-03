@@ -2,7 +2,7 @@
 
 ## 背景
 
-AgentHub 群聊中需要多个 Agent 协作完成任务。用户通过 @mention 与特定 Agent 交互，或通过 Orchestrator Agent 拆解复杂任务并分派给子 Agent。
+Di Agent 群聊中需要多个 Agent 协作完成任务。用户通过 @mention 与特定 Agent 交互，或通过 Orchestrator Agent 拆解复杂任务并分派给子 Agent。
 
 ## 核心设计
 

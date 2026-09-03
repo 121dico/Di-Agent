@@ -3,7 +3,7 @@ package main
 import "testing"
 
 func TestRAGDefaults(t *testing.T) {
-	t.Setenv("AGENTHUB_RAG_ENABLED", "")
+	t.Setenv("DI_AGENT_RAG_ENABLED", "")
 	var cfg Config
 	cfg.applyRAGDefaults(false)
 	if !cfg.RAG.Enabled || cfg.RAG.Model != "bge-m3" || cfg.RAG.Dimensions != 1024 || cfg.RAG.TopK != 6 || cfg.RAG.CandidateTopN != 20 {
@@ -18,7 +18,7 @@ func TestRAGValidationRejectsNonBGEVectorDimension(t *testing.T) {
 	var cfg Config
 	cfg.Server.Port = 8080
 	cfg.Database.Host = "localhost"
-	cfg.Database.DBName = "agenthub"
+	cfg.Database.DBName = "di_agent"
 	cfg.JWT.Secret = "test"
 	cfg.applyRAGDefaults(false)
 	cfg.RAG.Dimensions = 1023
@@ -28,14 +28,14 @@ func TestRAGValidationRejectsNonBGEVectorDimension(t *testing.T) {
 }
 
 func TestRAGEnvironmentOverrides(t *testing.T) {
-	t.Setenv("AGENTHUB_RAG_ENABLED", "false")
-	t.Setenv("AGENTHUB_RAG_OLLAMA_URL", "http://ollama:11434")
-	t.Setenv("AGENTHUB_RAG_TOP_K", "9")
-	t.Setenv("AGENTHUB_RAG_CANDIDATE_TOP_N", "25")
-	t.Setenv("AGENTHUB_RAG_RERANKER_ENABLED", "false")
-	t.Setenv("AGENTHUB_RAG_RERANKER_URL", "http://tei:80")
-	t.Setenv("AGENTHUB_RAG_RERANKER_MODEL", "custom-reranker")
-	t.Setenv("AGENTHUB_RAG_RERANKER_TIMEOUT_SECONDS", "45")
+	t.Setenv("DI_AGENT_RAG_ENABLED", "false")
+	t.Setenv("DI_AGENT_RAG_OLLAMA_URL", "http://ollama:11434")
+	t.Setenv("DI_AGENT_RAG_TOP_K", "9")
+	t.Setenv("DI_AGENT_RAG_CANDIDATE_TOP_N", "25")
+	t.Setenv("DI_AGENT_RAG_RERANKER_ENABLED", "false")
+	t.Setenv("DI_AGENT_RAG_RERANKER_URL", "http://tei:80")
+	t.Setenv("DI_AGENT_RAG_RERANKER_MODEL", "custom-reranker")
+	t.Setenv("DI_AGENT_RAG_RERANKER_TIMEOUT_SECONDS", "45")
 	var cfg Config
 	cfg.applyRAGDefaults(false)
 	if cfg.RAG.Enabled || cfg.RAG.OllamaURL != "http://ollama:11434" || cfg.RAG.TopK != 9 || cfg.RAG.CandidateTopN != 25 {
@@ -59,7 +59,7 @@ func TestRAGValidationRejectsInvalidRetrievalConfig(t *testing.T) {
 	var cfg Config
 	cfg.Server.Port = 8080
 	cfg.Database.Host = "localhost"
-	cfg.Database.DBName = "agenthub"
+	cfg.Database.DBName = "di_agent"
 	cfg.JWT.Secret = "test"
 	cfg.applyRAGDefaults(false)
 	cfg.RAG.TargetChunkChars = cfg.RAG.MaxChunkChars + 1
@@ -72,7 +72,7 @@ func TestRAGValidationRejectsCandidateBelowTopK(t *testing.T) {
 	var cfg Config
 	cfg.Server.Port = 8080
 	cfg.Database.Host = "localhost"
-	cfg.Database.DBName = "agenthub"
+	cfg.Database.DBName = "di_agent"
 	cfg.JWT.Secret = "test"
 	cfg.applyRAGDefaults(false)
 	cfg.RAG.CandidateTopN = cfg.RAG.TopK - 1
@@ -85,7 +85,7 @@ func TestRAGValidationRejectsInvalidRerankerTimeout(t *testing.T) {
 	var cfg Config
 	cfg.Server.Port = 8080
 	cfg.Database.Host = "localhost"
-	cfg.Database.DBName = "agenthub"
+	cfg.Database.DBName = "di_agent"
 	cfg.JWT.Secret = "test"
 	cfg.applyRAGDefaults(false)
 	cfg.RAG.RerankerTimeoutSecs = -1

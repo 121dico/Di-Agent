@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/internal/service"
-	"github.com/agent-hub/backend/pkg/ws"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/service"
+	"github.com/121dico/Di-Agent/src/backend/pkg/ws"
 	"github.com/gin-gonic/gin"
 	"nhooyr.io/websocket"
 )

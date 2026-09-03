@@ -1,9 +1,9 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
-const FRONTEND_URL = process.env.AGENTHUB_E2E_BASE_URL || 'http://127.0.0.1:5173';
-const BACKEND_URL = process.env.AGENTHUB_E2E_BACKEND_URL || 'http://127.0.0.1:8080';
-const USERNAME = process.env.AGENTHUB_E2E_USERNAME || 'yzk';
-const PASSWORD = process.env.AGENTHUB_E2E_PASSWORD || '123456';
+const FRONTEND_URL = process.env.DI_AGENT_E2E_BASE_URL || 'http://127.0.0.1:5173';
+const BACKEND_URL = process.env.DI_AGENT_E2E_BACKEND_URL || 'http://127.0.0.1:8080';
+const USERNAME = process.env.DI_AGENT_E2E_USERNAME || 'yzk';
+const PASSWORD = process.env.DI_AGENT_E2E_PASSWORD || '123456';
 
 interface APIResponse<T> {
   code: number;
@@ -36,7 +36,7 @@ async function loginByUI(page: Page): Promise<void> {
   await page.getByPlaceholder('请输入用户名').fill(USERNAME);
   await page.getByPlaceholder('请输入密码').fill(PASSWORD);
   await page.getByRole('button', { name: '登录' }).click();
-  await expect(page.getByText('AgentHub')).toBeVisible();
+  await expect(page.getByText('Di Agent')).toBeVisible();
 }
 
 async function cleanupAgents(request: APIRequestContext, token: string): Promise<void> {
@@ -44,7 +44,7 @@ async function cleanupAgents(request: APIRequestContext, token: string): Promise
   const response = await request.get(`${BACKEND_URL}/api/agents`, { headers });
   const body = await response.json() as APIResponse<AgentData[] | null>;
   for (const agent of body.data ?? []) {
-    if (agent.name.startsWith('AgentHub Tools E2E')) {
+    if (agent.name.startsWith('DiAgent Tools E2E')) {
       await request.delete(`${BACKEND_URL}/api/agents/${agent.id}`, { headers });
     }
   }
@@ -78,7 +78,7 @@ test('agent tool assignment survives save, refresh, and tab switches', async ({ 
   const token = await loginByAPI(request);
   await cleanupAgents(request, token);
   const headers = { Authorization: `Bearer ${token}` };
-  const agentName = `AgentHub Tools E2E ${Date.now()}`;
+  const agentName = `DiAgent Tools E2E ${Date.now()}`;
 
   const createResponse = await request.post(`${BACKEND_URL}/api/agents`, {
     headers,

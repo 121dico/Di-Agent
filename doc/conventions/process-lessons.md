@@ -12,7 +12,7 @@
 
 **规则**：每次后端代码 commit 后，必须：
 ```bash
-cd /Users/shallow/Desktop/repo/agent-hub/src/backend && go build -o bin/server ./cmd/server/
+cd /Users/shallow/Desktop/repo/di-agent/src/backend && go build -o bin/server ./cmd/server/
 # kill 旧进程，启动新二进制
 kill $(lsof -ti :8080) && ./bin/server
 ```
@@ -41,11 +41,11 @@ kill $(lsof -ti :8080) && ./bin/server
 
 **规则**：所有 Go 命令必须使用：
 ```bash
-cd /Users/shallow/Desktop/repo/agent-hub/src/backend && go build ./...
+cd /Users/shallow/Desktop/repo/di-agent/src/backend && go build ./...
 ```
 所有前端 npm/node 命令必须使用：
 ```bash
-cd /Users/shallow/Desktop/repo/agent-hub/src/frontend && npx tsc --noEmit
+cd /Users/shallow/Desktop/repo/di-agent/src/frontend && npx tsc --noEmit
 ```
 
 **注意**：`description` 参数只是描述标签，不影响实际执行目录。路径必须写在 `command` 参数中。

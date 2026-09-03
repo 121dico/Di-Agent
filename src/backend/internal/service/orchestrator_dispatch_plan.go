@@ -1,6 +1,6 @@
 package service
 
-import "github.com/agent-hub/backend/internal/model"
+import "github.com/121dico/Di-Agent/src/backend/internal/model"
 
 // ResolvedDispatchTask is a dispatch assignment after resolving the target
 // Agent name against the current group chat membership.

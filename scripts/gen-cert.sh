@@ -23,7 +23,7 @@ echo "生成自签名证书，SAN: IP:${IP}, IP:127.0.0.1, DNS:localhost"
 openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
   -keyout "$CERT_DIR/server.key" \
   -out "$CERT_DIR/server.crt" \
-  -subj "/CN=agenthub-local" \
+  -subj "/CN=di-agent-local" \
   -addext "subjectAltName=IP:${IP},IP:127.0.0.1,DNS:localhost" \
   -addext "basicConstraints=critical,CA:FALSE" \
   -addext "keyUsage=digitalSignature,keyEncipherment" \

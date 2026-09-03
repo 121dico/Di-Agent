@@ -30,9 +30,9 @@ task.dispatch arrives with { agent_id, conversation_id, prompt }
 #### Session 管理
 
 - 每个 `(agent_id, conversation_id)` 组合对应一个 Claude Code session ID
-- 首次遇到的对话：生成新的 sessionId（`agenthub-{agentId}-{convId}` 格式）
+- 首次遇到的对话：生成新的 sessionId（`di-agent-{agentId}-{convId}` 格式）
 - 再次遇到的对话：`--resume <sessionId>` 恢复上下文
-- sessionId 映射持久化到 `~/.agenthub/sessions.json`，daemon 重启后可恢复
+- sessionId 映射持久化到 `~/.di-agent/sessions.json`，daemon 重启后可恢复
 
 ### 传输协议
 
@@ -104,7 +104,7 @@ task.dispatch arrives with { agent_id, conversation_id, prompt }
 
 ## Technical Notes
 
-* 关键文件：`src/daemon-npm/bin/agenthub-daemon.js`
+* 关键文件：`src/daemon-npm/bin/di-agent-daemon.js`
 * 已有能力（复用）：`runningAgents` Map, `idleAgentConfigs`, `queueTail`, `EXEC_TIMEOUT_MS`
 * 需新增：`currentConversationId` 追踪, `sessions.json` 持久化, stream-json 事件解析器（可从 handleAgentStart 提取）
 * stream-json 事件类型：system(init/status/compact_boundary), assistant(thinking/text/tool_call), user(tool_result), result(success/error)

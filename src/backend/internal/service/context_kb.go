@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/agent-hub/backend/internal/port"
+	"github.com/121dico/Di-Agent/src/backend/internal/port"
 )
 
 // KBBuilder 构建知识库引用上下文段，前置到 current。

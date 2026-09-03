@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/agent-hub/backend/internal/domain"
-	"github.com/agent-hub/backend/internal/middleware"
-	"github.com/agent-hub/backend/internal/service"
+	"github.com/121dico/Di-Agent/src/backend/internal/domain"
+	"github.com/121dico/Di-Agent/src/backend/internal/middleware"
+	"github.com/121dico/Di-Agent/src/backend/internal/service"
 	"github.com/gin-gonic/gin"
 )
 

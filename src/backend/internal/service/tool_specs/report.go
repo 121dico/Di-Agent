@@ -1,6 +1,6 @@
 package tool_specs
 
-import "github.com/agent-hub/backend/internal/port"
+import "github.com/121dico/Di-Agent/src/backend/internal/port"
 
 // DiscoverReportData exposes only logical source names and approved field
 // capabilities. Endpoint, Hive DDL and credentials remain administrator-only.

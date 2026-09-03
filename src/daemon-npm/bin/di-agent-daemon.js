@@ -12,12 +12,13 @@ const path = require('node:path');
 // skillRoots / scanAgents 四处分支点的 CLI 行为（claude/codex/opencode/openclaw）
 // 收敛为 spec 对象。新增 CLI 只需在 cli/index.js 加一个工厂，零修改分发函数。
 const cliTools = require('../cli');
+const { readDiAgentEnvironment } = require('../cli/environment');
 const { StreamBuffer } = require('../cli/stream_adapter');
 
 // ===========================================================================
 // CONFIG —— daemon 所有运行时配置集中在此，便于一处查看与调整。
 // 按功能分组：连接 / 任务执行 / MCP / 部署 / 文件浏览 / 技能 / 路径。
-// 单文件发布约束：不抽成独立文件（发布包只含 bin/agenthub-daemon.js）。
+// 单文件发布约束：不抽成独立文件（发布包只含 bin/di-agent-daemon.js）。
 // ===========================================================================
 const DEFAULT_AGENT_TIMEOUT_MS = 30 * 60 * 1000;
 
@@ -38,44 +39,44 @@ const CONFIG = {
   heartbeatIntervalMs: 30000,
 
   // —— 任务执行 ——
-  execTimeoutMs: resolveAgentTimeoutMs(process.env.AGENTHUB_AGENT_TIMEOUT_MS), // 默认 30 分钟，可按 daemon 覆盖
+  execTimeoutMs: resolveAgentTimeoutMs(readDiAgentEnvironment(process.env, 'AGENT_TIMEOUT_MS')), // 默认 30 分钟，可按 daemon 覆盖
 
   // —— MCP ——
   mcpProtocolVersion: '2024-11-05',
 
   // —— 部署（Docker + cloudflared 隧道，agent 主导模式）——
   deploy: {
-    stateDir: path.join(os.homedir(), '.agenthub', 'deploys'),
+    stateDir: path.join(os.homedir(), '.di-agent', 'deploys'),
     ttlMs: 4 * 60 * 60 * 1000,       // 部署有效期 4 小时，过期自动停止
     buildTimeoutMs: 5 * 60 * 1000,   // docker build（含 npm install 等）
     runTimeoutMs: 60 * 1000,         // docker run（启动容器）
     stopTimeoutMs: 10 * 1000,        // docker stop
     tunnelTimeoutMs: 30 * 1000,      // cloudflared 拿 URL 超时
-    cloudflaredDir: path.join(os.homedir(), '.agenthub', 'cloudflared'),
+    cloudflaredDir: path.join(os.homedir(), '.di-agent', 'cloudflared'),
     tunnelUrlRegex: /https:\/\/[a-z0-9-]+\.trycloudflare\.com/i,
   },
 
   // —— 文件浏览 RPC（前端抽屉浏览 agent 机器文件）——
   browse: {
-    toolName: '__agenthub_browse_files__',
+    toolName: '__di_agent_browse_files__',
     gitTimeoutMs: 10000,             // git 命令单独超时，避免大仓库卡住
     fileReadMaxSize: 2 * 1024 * 1024,// 单文件预览 2MB 上限
     zipMaxTotalSize: 100 * 1024 * 1024, // 整目录打包 100MB 上限
-    excludeDirs: new Set(['node_modules', '.git', '.next', 'dist', 'build', '.cache', '.agenthub']),
+    excludeDirs: new Set(['node_modules', '.git', '.next', 'dist', 'build', '.cache', '.di-agent']),
   },
 
   // —— 技能 / Agent 管理 ——
-  openPathTool: '__agenthub_open_path__',
+  openPathTool: '__di_agent_open_path__',
   openPathTimeoutMs: 5000,
   skillInstall: {
-    toolName: '__agenthub_install_skill__',
+    toolName: '__di_agent_install_skill__',
     gitTimeoutMs: 60000,
     maxFiles: 500,
     maxBytes: 20 * 1024 * 1024,
   },
   startQueueIntervalMs: 3000,
   minDescriptionChars: 6,
-  sessionsFile: path.join(os.homedir(), '.agenthub', 'sessions.json'),
+  sessionsFile: path.join(os.homedir(), '.di-agent', 'sessions.json'),
 };
 
 // 向后兼容别名（迁移期保留旧名引用，避免大范围改写；新代码请用 CONFIG.xxx）
@@ -225,7 +226,7 @@ function findFreePort() {
   });
 }
 
-// cloudflared 二进制管理：优先 PATH，找不到则下载到 ~/.agenthub/cloudflared。
+// cloudflared 二进制管理：优先 PATH，找不到则下载到 ~/.di-agent/cloudflared。
 // 路径与隧道 URL 正则在顶部 CONFIG.deploy 配置；这里只有二进制文件名映射逻辑。
 
 function cloudflaredBinary() {
@@ -253,7 +254,7 @@ function ensureCloudflared() {
   return downloadCloudflared();
 }
 
-/** 下载 cloudflared 到 ~/.agenthub/cloudflared/。返回路径或 null（失败）。 */
+/** 下载 cloudflared 到 ~/.di-agent/cloudflared/。返回路径或 null（失败）。 */
 function downloadCloudflared() {
   try {
     fs.mkdirSync(CLOUDFLARED_DIR, { recursive: true });
@@ -343,7 +344,7 @@ function startTunnel(port) {
 // 部署状态文件 IPC + TTL 管理
 // ---------------------------------------------------------------------------
 // 部署由 MCP 工具（deploy_project）在 MCP 子进程里发起，docker 容器和 cloudflared
-// 进程独立存活（detached）。状态通过 ~/.agenthub/deploys/<id>.json 文件传递给
+// 进程独立存活（detached）。状态通过 ~/.di-agent/deploys/<id>.json 文件传递给
 // daemon 主进程，由主进程负责 TTL 清理（4 小时后停止）。
 // 所有路径/超时/TTL 在顶部 CONFIG.deploy 配置。
 
@@ -376,7 +377,7 @@ function readDeployState(deployId) {
   }
 }
 
-/** 列出所有部署状态（扫 ~/.agenthub/deploys/）。 */
+/** 列出所有部署状态（扫 ~/.di-agent/deploys/）。 */
 function listDeployStates() {
   try {
     const files = fs.readdirSync(DEPLOY_STATE_DIR).filter((f) => f.endsWith('.json'));
@@ -402,7 +403,7 @@ function removeDeployState(deployId) {
  * 停止一个部署：杀 cloudflared 进程 + docker stop 容器 + 删状态文件。
  * 供 stop_deploy MCP 工具和 TTL 扫描器调用。
  *
- * 部署都在 MCP 子进程发起，状态通过文件 IPC（~/.agenthub/deploys/<id>.json）传递，
+ * 部署都在 MCP 子进程发起，状态通过文件 IPC（~/.di-agent/deploys/<id>.json）传递，
  * 故这里只读状态文件（不再有内存 runningDeploys——那是已废弃的 WS 部署路径遗留）。
  *
  * 注意：不删除 sourceDir（agent 的真实代码目录）——重构后部署直接用 sourceDir 作
@@ -457,7 +458,7 @@ async function executeDeploy(deployId, sourceDir, port = 80) {
   if (!deployId || !sourceDir) {
     throw new Error('参数缺失（deploy_id/source_dir）');
   }
-  const containerName = `agenthub-deploy-${deployId.slice(0, 12)}`;
+  const containerName = `di-agent-deploy-${deployId.slice(0, 12)}`;
   logFlow('info', 'deploy.start', { deploy_id: deployId, source_dir: sourceDir, port, container: containerName });
 
   // 1. 校验 sourceDir 存在且是目录
@@ -508,7 +509,7 @@ async function executeDeploy(deployId, sourceDir, port = 80) {
 // ---------------------------------------------------------------------------
 // 文件浏览 RPC：让前端抽屉浏览 agent 所在机器上 git 工作区的文件。
 // 复用 OPEN_PATH 同步 RPC 通道（taskID promise + task.dispatch + task.complete）。
-// 后端发 task.dispatch(cli_tool=__agenthub_browse_files__)，prompt 是 JSON payload。
+// 后端发 task.dispatch(cli_tool=__di_agent_browse_files__)，prompt 是 JSON payload。
 // 这里只做只读 + git diff 识别改动文件，不做编辑/写入。
 // 所有工具名/超时/大小上限/排除目录在顶部 CONFIG.browse 配置。
 // ---------------------------------------------------------------------------
@@ -554,8 +555,8 @@ function ensureGitRepoForTask(workDir, taskMeta = {}) {
   try {
     runGitSync(workDir, ['init']);
     // 配置本仓库 user.email/user.name，避免后续 commit 因缺少 identity 报错。
-    try { runGitSync(workDir, ['config', 'user.email', 'agenthub@local']); } catch { /* 已有 global identity 也行 */ }
-    try { runGitSync(workDir, ['config', 'user.name', 'AgentHub']); } catch { /* 同上 */ }
+    try { runGitSync(workDir, ['config', 'user.email', 'di-agent@local']); } catch { /* 已有 global identity 也行 */ }
+    try { runGitSync(workDir, ['config', 'user.name', 'Di Agent']); } catch { /* 同上 */ }
     // 只在有内容时才 commit，避免空目录 commit 报 "nothing to commit"。
     let hasContent = false;
     try {
@@ -1151,7 +1152,7 @@ const agentStartQueue = [];
 const daemonConn = { serverURL: '', apiKey: '', daemonToken: '' };
 
 // buildPlatformMcpServerArgs builds the daemon --mcp invocation for the current
-// AgentHub task. Passing conversation/user/agent IDs here gives MCP tools a default
+// Di Agent task. Passing conversation/user/agent IDs here gives MCP tools a default
 // group context, matching Claude Code's per-task injection behavior.
 //
 // taskId 用于 MCP subprocess emit 卡片时回传 task_id 给后端
@@ -1173,21 +1174,21 @@ function buildPlatformMcpArgs(conversationId, userId, agentId, taskId) {
   if (mcpServerArgs.length === 0) return [];
   const mcpConfig = JSON.stringify({
     mcpServers: {
-      'agenthub-platform': {
+      'di-agent-platform': {
         command: 'node',
         args: mcpServerArgs,
       },
     },
   });
-  return ['--mcp-config', mcpConfig, '--allowedTools', 'mcp__agenthub-platform'];
+  return ['--mcp-config', mcpConfig, '--allowedTools', 'mcp__di-agent-platform'];
 }
 
-function buildAgentHubContextEnv(conversationId, userId, agentId, taskId) {
+function buildDiAgentContextEnv(conversationId, userId, agentId, taskId) {
   const env = {};
-  if (conversationId) env.AGENTHUB_CONVERSATION_ID = conversationId;
-  if (userId) env.AGENTHUB_USER_ID = userId;
-  if (agentId) env.AGENTHUB_AGENT_ID = agentId;
-  if (taskId) env.AGENTHUB_TASK_ID = taskId;
+  if (conversationId) env.DI_AGENT_CONVERSATION_ID = conversationId;
+  if (userId) env.DI_AGENT_USER_ID = userId;
+  if (agentId) env.DI_AGENT_AGENT_ID = agentId;
+  if (taskId) env.DI_AGENT_TASK_ID = taskId;
   return Object.keys(env).length > 0 ? env : undefined;
 }
 
@@ -1197,7 +1198,7 @@ function opencodeContextChanged(task, savedSessionId) {
 }
 
 // ensureGlobalMcpConfigs 为不支持按次注入的 CLI（openclaw/codex/opencode）在启动时
-// 幂等写入全局 MCP 配置，把本 daemon 以 --mcp 模式注册为 agenthub-platform server。
+// 幂等写入全局 MCP 配置，把本 daemon 以 --mcp 模式注册为 di-agent-platform server。
 // 仅对本机实际安装的 CLI 生效，失败仅告警、不影响 daemon 连接。
 // 改造后：遍历所有已注册 CliToolSpec，调用其可选 ensureMcp(mcpArgs) 钩子。
 function ensureGlobalMcpConfigs(serverURL, apiKey) {
@@ -1209,7 +1210,8 @@ function ensureGlobalMcpConfigs(serverURL, apiKey) {
 }
 
 function openCodeConfigPath() {
-  if (process.env.AGENTHUB_OPENCODE_CONFIG) return process.env.AGENTHUB_OPENCODE_CONFIG;
+  const configuredPath = readDiAgentEnvironment(process.env, 'OPENCODE_CONFIG');
+  if (configuredPath) return configuredPath;
   return path.join(os.homedir(), '.config', 'opencode', 'opencode.json');
 }
 
@@ -1225,7 +1227,8 @@ function ensureOpenCodeMcpConfig(command) {
   }
   if (!config.$schema) config.$schema = 'https://opencode.ai/config.json';
   if (!config.mcp || typeof config.mcp !== 'object' || Array.isArray(config.mcp)) config.mcp = {};
-  config.mcp['agenthub-platform'] = {
+  delete config.mcp['agenthub-platform']; // [brand-compat] 升级时移除旧 server，避免重复暴露工具。
+  config.mcp['di-agent-platform'] = {
     type: 'local',
     command,
     enabled: true,
@@ -1511,22 +1514,22 @@ function addRoot(roots, root) {
   if (root && !roots.includes(root)) roots.push(root);
 }
 
-function isAgentHubWorkspace(root) {
+function isDiAgentWorkspace(root) {
   const daemonPackage = path.join(root, 'src', 'daemon-npm', 'package.json');
   const frontendPackage = path.join(root, 'src', 'frontend', 'package.json');
   if (!fs.existsSync(daemonPackage) || !fs.existsSync(frontendPackage)) return false;
   try {
     const pkg = JSON.parse(fs.readFileSync(daemonPackage, 'utf8'));
-    return pkg.name === '@hust-agenthub/daemon';
+    return pkg.name === 'di-agent-daemon';
   } catch {
     return false;
   }
 }
 
-function agentHubWorkspaceForPath(targetPath) {
+function diAgentWorkspaceForPath(targetPath) {
   let current = path.dirname(path.resolve(targetPath));
   while (current && current !== path.dirname(current)) {
-    if (isAgentHubWorkspace(current)) return current;
+    if (isDiAgentWorkspace(current)) return current;
     current = path.dirname(current);
   }
   return null;
@@ -1657,7 +1660,7 @@ function installSkillFromDirectory(sourceDir, installRoot) {
   fs.mkdirSync(installRoot, { recursive: true });
   const target = path.join(installRoot, manifest.name);
   if (fs.existsSync(target)) throw new Error(`Skill already exists: ${manifest.name}`);
-  const staging = path.join(installRoot, `.agenthub-install-${crypto.randomUUID()}`);
+  const staging = path.join(installRoot, `.di-agent-install-${crypto.randomUUID()}`);
   try {
     fs.cpSync(resolvedSource, staging, {
       recursive: true,
@@ -1678,7 +1681,7 @@ async function installGitHubSkill(prompt) {
   if (!spec || typeof spec.installSkillRoot !== 'function') {
     throw new Error(`Skill installation is not supported for ${source.cliTool || 'this Agent'}`);
   }
-  const cloneRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agenthub-skill-clone-'));
+  const cloneRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'di-agent-skill-clone-'));
   try {
     const checkout = path.join(cloneRoot, 'repo');
     const args = ['clone', '--depth', '1', '--single-branch'];
@@ -1946,12 +1949,12 @@ function buildPromptParts(task) {
         parts.push(`- ${h.agent_name}: 用户问 "${req}" → 回复：${res}`);
       }
       parts.push('');
-      parts.push('你是 AgentHub 群聊中被 @提及的机器人，请参考上述交接上下文回答用户消息。');
+      parts.push('你是 Di Agent 群聊中被 @提及的机器人，请参考上述交接上下文回答用户消息。');
     } else {
       parts.push(remainingCtx);
     }
   } else if (!systemPrompt) {
-    parts.push('你是 AgentHub 群聊中被 @提及的机器人，请直接回答用户当前消息。');
+    parts.push('你是 Di Agent 群聊中被 @提及的机器人，请直接回答用户当前消息。');
   }
 
   parts.push('');
@@ -1962,15 +1965,15 @@ function buildPromptParts(task) {
 
 function ensureTaskWorkdir(task) {
   const safeID = String(task.id || crypto.randomUUID()).replace(/[^a-zA-Z0-9_-]/g, '-');
-  const dir = path.join(os.tmpdir(), 'agenthub-cli-tasks', safeID);
+  const dir = path.join(os.tmpdir(), 'di-agent-cli-tasks', safeID);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
 
-function ensureAgentHubCodexHome() {
+function ensureDiAgentCodexHome() {
   // Codex 登录态默认保存在 ~/.codex。这里默认复用用户已登录的 CODEX_HOME，
-  // 避免 scanAgents 用默认 home 判定已登录、实际执行却切到空 ~/.agenthub/codex。
-  const configured = process.env.AGENTHUB_CODEX_HOME || process.env.CODEX_HOME;
+  // 避免 scanAgents 用默认 home 判定已登录、实际执行却切到空 ~/.di-agent/codex。
+  const configured = readDiAgentEnvironment(process.env, 'CODEX_HOME') || process.env.CODEX_HOME;
   const dir = configured || path.join(os.homedir(), '.codex');
   fs.mkdirSync(dir, { recursive: true });
   return dir;
@@ -1984,16 +1987,21 @@ function tomlArray(values) {
   return `[${values.map(tomlString).join(', ')}]`;
 }
 
-function ensureAgentHubCodexMcpConfig(codexHome, conversationId, userId, agentId, taskId) {
+function ensureDiAgentCodexMcpConfig(codexHome, conversationId, userId, agentId, taskId) {
   const configFile = path.join(codexHome, 'config.toml');
   let content = fs.existsSync(configFile) ? fs.readFileSync(configFile, 'utf8') : '';
-  const sectionPattern = /\n?\[mcp_servers\.agenthub-platform\]\n[\s\S]*?(?=\n\[[^\]]+\]|\s*$)/;
-  content = content.replace(sectionPattern, '').trimEnd();
+  const sectionPatterns = [
+    /\n?\[mcp_servers\.di-agent-platform\]\n[\s\S]*?(?=\n\[[^\]]+\]|\s*$)/,
+    /\n?\[mcp_servers\.agenthub-platform\]\n[\s\S]*?(?=\n\[[^\]]+\]|\s*$)/, // [brand-compat]
+  ];
+  for (const sectionPattern of sectionPatterns) {
+    content = content.replace(sectionPattern, '').trimEnd();
+  }
   const args = buildPlatformMcpServerArgs(conversationId, userId, agentId, taskId);
   if (args.length === 0) return configFile;
   const section = [
     '',
-    '[mcp_servers.agenthub-platform]',
+    '[mcp_servers.di-agent-platform]',
     'command = "node"',
     `args = ${tomlArray(args)}`,
     'enabled = true',
@@ -2047,20 +2055,20 @@ const initCliToolsCtx = {
   createAsyncQueue: require('../cli/events').createAsyncQueue,
   // prompt / context 辅助
   buildPlatformMcpArgs,
-  buildAgentHubContextEnv,
+  buildDiAgentContextEnv,
   buildPlatformMcpServerArgs,
   makeSessionId,
   sessionKeyForTask,
   opencodeContextChanged,
   // codex 专用
-  ensureAgentHubCodexHome,
-  ensureAgentHubCodexMcpConfig,
+  ensureDiAgentCodexHome,
+  ensureDiAgentCodexMcpConfig,
   ensureTaskWorkdir,
   codexLoginStatus,
   // opencode 专用
   ensureOpenCodeMcpConfig,
   // skill 扫描辅助
-  isAgentHubWorkspace,
+  isDiAgentWorkspace,
   openClawInstallSkillRoots,
   // 默认能力构造（CANDIDATES 派生用）
   defaultSkills,
@@ -2181,7 +2189,7 @@ async function executeTask(task, taskCtx, onEvent) {
           { ...taskMeta, mode: 'session_id_retry', onStdoutLine: streamLineCb || undefined },
         ));
       } catch (_err2) {
-        const freshId = `agenthub-${String(task.id || crypto.randomUUID()).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+        const freshId = `di-agent-${String(task.id || crypto.randomUUID()).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
         logFlow('warn', 'task.session_fresh_start', {
           ...taskMeta,
           previous_session_id: spec.sessionId,
@@ -2276,8 +2284,8 @@ function openSkillLocation(prompt) {
   if (!sourcePath || path.basename(sourcePath) !== 'SKILL.md') {
     throw new Error('Invalid skill file path');
   }
-  if (agentHubWorkspaceForPath(sourcePath)) {
-    throw new Error('Refuse to open stale AgentHub workspace skill source. Reconnect this computer to refresh skills.');
+  if (diAgentWorkspaceForPath(sourcePath)) {
+    throw new Error('Refuse to open stale Di Agent workspace skill source. Reconnect this computer to refresh skills.');
   }
   if (!fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isFile()) {
     throw new Error(`Skill file not found: ${sourcePath}`);
@@ -3167,7 +3175,7 @@ async function handleTaskDispatch(ws, data) {
       persistentSpec && typeof persistentSpec.spawnPersistent === 'function' &&
       task.agent_id &&
       task.conversation_id &&
-      process.env.AGENTHUB_DAEMON_DISABLE_STREAM_SLOT !== '1'
+      readDiAgentEnvironment(process.env, 'DAEMON_DISABLE_STREAM_SLOT') !== '1'
     ) {
       logFlow('info', 'task.execution_start', {
         task_id: task.id,
@@ -3448,8 +3456,8 @@ async function connectWS(serverURL, apiKey) {
 }
 
 // ── MCP 模式 ──────────────────────────────────────────────────────────────
-// 以 stdio JSON-RPC（换行分隔）对外暴露一个 agenthub-platform MCP server，
-// 让本机 Agent（Claude Code / Codex 等）可通过 MCP 工具操作 AgentHub 平台。
+// 以 stdio JSON-RPC（换行分隔）对外暴露一个 di-agent-platform MCP server，
+// 让本机 Agent（Claude Code / Codex 等）可通过 MCP 工具操作 Di Agent 平台。
 // 协议要求 stdout 只承载 JSON-RPC 报文，因此本模式所有日志改走 stderr。
 // MCP 协议版本在顶部 CONFIG.mcpProtocolVersion 配置。
 
@@ -4430,7 +4438,7 @@ async function handleMcpMessage(line, toolMap, ctx) {
       result: {
         protocolVersion: MCP_PROTOCOL_VERSION,
         capabilities: { tools: {} },
-        serverInfo: { name: 'agenthub-platform', version: '0.1.0' },
+        serverInfo: { name: 'di-agent-platform', version: '0.1.0' },
       },
     });
     return;
@@ -4492,12 +4500,12 @@ async function handleMcpMessage(line, toolMap, ctx) {
 }
 
 async function runMcpServer(serverURL, apiKey) {
-  const daemonToken = readArg('--daemon-token') || process.env.AGENTHUB_DAEMON_TOKEN || '';
+  const daemonToken = readArg('--daemon-token') || readDiAgentEnvironment(process.env, 'DAEMON_TOKEN') || '';
   const ctx = {
-    conversationId: readArg('--conversation-id') || process.env.AGENTHUB_CONVERSATION_ID || null,
-    userId: readArg('--user-id') || process.env.AGENTHUB_USER_ID || null,
-    agentId: readArg('--agent-id') || process.env.AGENTHUB_AGENT_ID || null,
-    taskId: readArg('--task-id') || process.env.AGENTHUB_TASK_ID || null,
+    conversationId: readArg('--conversation-id') || readDiAgentEnvironment(process.env, 'CONVERSATION_ID') || null,
+    userId: readArg('--user-id') || readDiAgentEnvironment(process.env, 'USER_ID') || null,
+    agentId: readArg('--agent-id') || readDiAgentEnvironment(process.env, 'AGENT_ID') || null,
+    taskId: readArg('--task-id') || readDiAgentEnvironment(process.env, 'TASK_ID') || null,
     allowedTools: null,
     currentAgent: undefined,
     callApi: (method, pathname, options) => callApi(serverURL, apiKey, method, pathname, options),
@@ -4564,7 +4572,7 @@ async function main() {
   const serverURL = readArg('--server-url');
   const apiKey = readArg('--api-key');
   if (!serverURL || !apiKey) {
-    logFlow('error', 'cli.usage_error', { usage: 'npx @hust-agenthub/daemon --server-url <url> --api-key <key> [--mcp]' });
+    logFlow('error', 'cli.usage_error', { usage: 'di-agent-daemon --server-url <url> --api-key <key> [--mcp]' });
     process.exit(2);
   }
 
@@ -4575,10 +4583,10 @@ async function main() {
 
   daemonConn.serverURL = serverURL;
   daemonConn.apiKey = apiKey;
-  daemonConn.daemonToken = readArg('--daemon-token') || process.env.AGENTHUB_DAEMON_TOKEN || '';
+  daemonConn.daemonToken = readArg('--daemon-token') || readDiAgentEnvironment(process.env, 'DAEMON_TOKEN') || '';
   loadSessionMap();
   // 部署 TTL 管理：启动时清理上次遗留的过期部署，之后每 5 分钟扫一次。
-  // MCP 工具 deploy_project 发起的部署写状态文件到 ~/.agenthub/deploys/，
+  // MCP 工具 deploy_project 发起的部署写状态文件到 ~/.di-agent/deploys/，
   // 由这里负责 4 小时后自动停止（docker stop + kill cloudflared）。
   scanAndCleanupDeploys();
   setInterval(scanAndCleanupDeploys, 5 * 60 * 1000).unref();
@@ -4599,7 +4607,7 @@ module.exports = {
   commandForTask,
   conversationSessions,
   ensureGitRepoForTask,
-  ensureAgentHubCodexMcpConfig,
+  ensureDiAgentCodexMcpConfig,
   executeTaskOnce,
   ensureOpenCodeMcpConfig,
   daemonConn,

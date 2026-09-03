@@ -3,7 +3,7 @@ package model
 import (
 	"time"
 
-	"github.com/agent-hub/backend/internal/domain"
+	"github.com/121dico/Di-Agent/src/backend/internal/domain"
 )
 
 // Conversation 对话模型

@@ -4,8 +4,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/agent-hub/backend/internal/port"
-	pkgws "github.com/agent-hub/backend/pkg/ws"
+	"github.com/121dico/Di-Agent/src/backend/internal/port"
+	pkgws "github.com/121dico/Di-Agent/src/backend/pkg/ws"
 )
 
 // EventTypeRoleChanged 会话内 Agent 角色变更事件的 WS type。

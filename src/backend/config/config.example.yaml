@@ -13,9 +13,9 @@
 database:
   host: localhost
   port: 5432
-  user: agenthub
-  password: agenthub
-  dbname: agenthub
+  user: di_agent
+  password: di_agent
+  dbname: di_agent
   sslmode: disable
 redis:
   host: localhost
@@ -33,7 +33,7 @@ cors:
 upload:
   dir: "./uploads"
   # Optional. Set to a public backend origin such as "http://111.228.35.61:8080"
-  # or "https://agenthub.example.com" so attachment APIs return absolute URLs.
+  # or "https://di-agent.example.com" so attachment APIs return absolute URLs.
   public_base_url: ""
   max_image_mb: 20
   max_pdf_mb: 50

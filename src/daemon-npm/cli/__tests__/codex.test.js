@@ -6,8 +6,8 @@ const assert = require('node:assert');
 const { createCodexCliSpec } = require('../codex');
 
 // ctx.codexLocalInstallPaths / codexExtensionPath / existingFile / commandVersion /
-// fs / pathJoin / tmpdir / defaultSkills / resolveCommand（fallback）/ ensureAgentHubCodexHome /
-// ensureAgentHubCodexMcpConfig / ensureTaskWorkdir / buildAgentHubContextEnv /
+// fs / pathJoin / tmpdir / defaultSkills / resolveCommand（fallback）/ ensureDiAgentCodexHome /
+// ensureDiAgentCodexMcpConfig / ensureTaskWorkdir / buildDiAgentContextEnv /
 // logFlow / processSpec / spawnSync / firstLine
 function buildMockCtx(overrides = {}) {
   return {
@@ -24,10 +24,10 @@ function buildMockCtx(overrides = {}) {
     },
     pathJoin: (...args) => args.join('/'),
     tmpdir: () => '/tmp',
-    ensureAgentHubCodexHome: overrides.ensureAgentHubCodexHome || (() => '/tmp/codex-home'),
-    ensureAgentHubCodexMcpConfig: overrides.ensureAgentHubCodexMcpConfig || (() => {}),
+    ensureDiAgentCodexHome: overrides.ensureDiAgentCodexHome || (() => '/tmp/codex-home'),
+    ensureDiAgentCodexMcpConfig: overrides.ensureDiAgentCodexMcpConfig || (() => {}),
     ensureTaskWorkdir: () => '/tmp/work',
-    buildAgentHubContextEnv: overrides.buildAgentHubContextEnv || (() => ({})),
+    buildDiAgentContextEnv: overrides.buildDiAgentContextEnv || (() => ({})),
     logFlow: () => {},
     processSpec: (command, args) => ({ command, args }),
     spawnSync: () => ({ status: 0, stdout: '', stderr: '' }),
@@ -35,19 +35,19 @@ function buildMockCtx(overrides = {}) {
   };
 }
 
-test('codex.resolveCommand returns AGENTHUB_CODEX_COMMAND env var when valid', () => {
-  process.env.AGENTHUB_CODEX_COMMAND = '/custom/codex';
+test('codex.resolveCommand returns DI_AGENT_CODEX_COMMAND env var when valid', () => {
+  process.env.DI_AGENT_CODEX_COMMAND = '/custom/codex';
   const ctx = buildMockCtx({
     existingFile: (v) => v || null,
     commandVersion: () => '1.2.3',
   });
   const spec = createCodexCliSpec(ctx);
   assert.strictEqual(spec.resolveCommand(), '/custom/codex');
-  delete process.env.AGENTHUB_CODEX_COMMAND;
+  delete process.env.DI_AGENT_CODEX_COMMAND;
 });
 
 test('codex.resolveCommand falls back through candidates', () => {
-  delete process.env.AGENTHUB_CODEX_COMMAND;
+  delete process.env.DI_AGENT_CODEX_COMMAND;
   const ctx = buildMockCtx({
     codexLocalInstallPaths: () => ['/home/.local/bin/codex'],
     codexExtensionPath: () => null,
@@ -58,7 +58,7 @@ test('codex.resolveCommand falls back through candidates', () => {
 });
 
 test('codex.resolveCommand returns "codex" literal when nothing matches', () => {
-  delete process.env.AGENTHUB_CODEX_COMMAND;
+  delete process.env.DI_AGENT_CODEX_COMMAND;
   const ctx = buildMockCtx({
     codexLocalInstallPaths: () => [],
     codexExtensionPath: () => null,
@@ -71,12 +71,12 @@ test('codex.resolveCommand returns "codex" literal when nothing matches', () => 
 test('codex.buildCommand passes task id to MCP config and context env', () => {
   const calls = [];
   const ctx = buildMockCtx({
-    ensureAgentHubCodexMcpConfig: (...args) => { calls.push(args); },
-    buildAgentHubContextEnv: (conv, user, agent, taskId) => ({
-      AGENTHUB_CONVERSATION_ID: conv,
-      AGENTHUB_USER_ID: user,
-      AGENTHUB_AGENT_ID: agent,
-      AGENTHUB_TASK_ID: taskId,
+    ensureDiAgentCodexMcpConfig: (...args) => { calls.push(args); },
+    buildDiAgentContextEnv: (conv, user, agent, taskId) => ({
+      DI_AGENT_CONVERSATION_ID: conv,
+      DI_AGENT_USER_ID: user,
+      DI_AGENT_AGENT_ID: agent,
+      DI_AGENT_TASK_ID: taskId,
     }),
   });
   const spec = createCodexCliSpec(ctx);
@@ -99,7 +99,7 @@ test('codex.buildCommand passes task id to MCP config and context env', () => {
     'agent-1',
     'task-from-context',
   ]);
-  assert.strictEqual(command.env.AGENTHUB_TASK_ID, 'task-from-context');
+  assert.strictEqual(command.env.DI_AGENT_TASK_ID, 'task-from-context');
 });
 
 test('codex.parseResult prefers outputFile when present and non-empty', () => {

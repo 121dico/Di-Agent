@@ -2,7 +2,7 @@
 
 ## 背景
 
-AgentHub 作为多 Agent 协作平台，需要让不同类型的 agent（Claude Code、Codex、OpenCode 等）能够操作平台功能（发送消息、创建会话、管理上下文等）。目前各 agent 的 tool 调用协议不同，逐个适配成本高。
+Di Agent 作为多 Agent 协作平台，需要让不同类型的 agent（Claude Code、Codex、OpenCode 等）能够操作平台功能（发送消息、创建会话、管理上下文等）。目前各 agent 的 tool 调用协议不同，逐个适配成本高。
 
 ## 目标
 
@@ -31,8 +31,8 @@ AgentHub 作为多 Agent 协作平台，需要让不同类型的 agent（Claude 
 ### 启动方式
 
 daemon 新增 `--mcp` 子命令模式：
-- `agent-hub daemon`：正常模式（扫描 + 注册 + 进程管理）
-- `agent-hub daemon --mcp`：仅启动 MCP Server（供 agent 配置使用）
+- `di-agent daemon`：正常模式（扫描 + 注册 + 进程管理）
+- `di-agent daemon --mcp`：仅启动 MCP Server（供 agent 配置使用）
 
 两种模式共享同一份 HTTP client 代码（调用后端 API）。
 
@@ -64,7 +64,7 @@ daemon 新增 `--mcp` 子命令模式：
 
 - **MCP SDK**：使用 Go 官方 MCP SDK (`github.com/modelcontextprotocol/go-sdk`) 或手写 JSON-RPC 2.0 处理（协议本身很薄）
 - **通信方式**：stdio（标准输入输出），agent 通过 `command` 字段配置启动
-- **认证**：daemon MCP 模式启动时通过环境变量 `AGENTHUB_DAEMON_TOKEN` 或 flag 传入 token，用于调用后端 API
+- **认证**：daemon MCP 模式启动时通过环境变量 `DI_AGENT_DAEMON_TOKEN` 或 flag 传入 token，用于调用后端 API
 - **与后端通信**：复用现有 HTTP API，daemon 作为 API client（不直接连数据库）
 
 ### 配置示例
@@ -73,12 +73,12 @@ Claude Code 的 `claude_desktop_config.json`：
 ```json
 {
   "mcpServers": {
-    "agenthub": {
-      "command": "agent-hub",
+    "di-agent": {
+      "command": "di-agent",
       "args": ["daemon", "--mcp"],
       "env": {
-        "AGENTHUB_SERVER_URL": "http://localhost:8080",
-        "AGENTHUB_DAEMON_TOKEN": "<token>"
+        "DI_AGENT_SERVER_URL": "http://localhost:8080",
+        "DI_AGENT_DAEMON_TOKEN": "<token>"
       }
     }
   }
@@ -102,7 +102,7 @@ src/daemon/
 
 ## 验收标准
 
-1. `agent-hub daemon --mcp` 启动后通过 stdio 响应 MCP `initialize` 和 `tools/list` 请求
+1. `di-agent daemon --mcp` 启动后通过 stdio 响应 MCP `initialize` 和 `tools/list` 请求
 2. 第一期 7 个 tool 全部可用，调用后端 API 返回正确结果
 3. Claude Code 连接后能自动发现 tool 并调用
 4. 单元测试覆盖 tool handler 逻辑（mock 后端 API）

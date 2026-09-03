@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 // TestSplitTextBlocksByCardFences 覆盖 PRD Step 2 列出的所有 case：
@@ -54,7 +54,7 @@ func TestSplitTextBlocksByCardFences(t *testing.T) {
 		{
 			name: "text with single fence in middle → [before, card, after]",
 			input: []model.MessageBlock{
-				{Index: 0, Kind: model.BlockKindText, Text: "before\n```agenthub\n{\"cards\":[{\"type\":\"info\",\"id\":\"c1\"}]}\n```\nafter"},
+				{Index: 0, Kind: model.BlockKindText, Text: "before\n```di_agent\n{\"cards\":[{\"type\":\"info\",\"id\":\"c1\"}]}\n```\nafter"},
 			},
 			expect: []model.MessageBlock{
 				{Index: 0, Kind: model.BlockKindText, Text: "before"},
@@ -63,9 +63,20 @@ func TestSplitTextBlocksByCardFences(t *testing.T) {
 			},
 		},
 		{
+			name: "retired fence remains readable during upgrade",
+			input: []model.MessageBlock{
+				{Index: 0, Kind: model.BlockKindText, Text: "before\n```agenthub\n{\"cards\":[{\"type\":\"info\",\"id\":\"legacy\"}]}\n```\nafter"}, // [brand-compat]
+			},
+			expect: []model.MessageBlock{
+				{Index: 0, Kind: model.BlockKindText, Text: "before"},
+				{Index: 1, Kind: model.BlockKindCard, Card: map[string]any{"type": "info", "id": "legacy"}},
+				{Index: 2, Kind: model.BlockKindText, Text: "after"},
+			},
+		},
+		{
 			name: "text with fence at start → [card, after] (empty before trimmed)",
 			input: []model.MessageBlock{
-				{Index: 0, Kind: model.BlockKindText, Text: "```agenthub\n{\"cards\":[{\"type\":\"info\",\"id\":\"c1\"}]}\n```\nafter"},
+				{Index: 0, Kind: model.BlockKindText, Text: "```di_agent\n{\"cards\":[{\"type\":\"info\",\"id\":\"c1\"}]}\n```\nafter"},
 			},
 			expect: []model.MessageBlock{
 				{Index: 0, Kind: model.BlockKindCard, Card: map[string]any{"type": "info", "id": "c1"}},
@@ -75,7 +86,7 @@ func TestSplitTextBlocksByCardFences(t *testing.T) {
 		{
 			name: "text with multiple fences → interleaved",
 			input: []model.MessageBlock{
-				{Index: 0, Kind: model.BlockKindText, Text: "intro\n```agenthub\n{\"cards\":[{\"type\":\"info\",\"id\":\"a\"}]}\n```\nmiddle\n```agenthub\n{\"cards\":[{\"type\":\"info\",\"id\":\"b\"}]}\n```\nending"},
+				{Index: 0, Kind: model.BlockKindText, Text: "intro\n```di_agent\n{\"cards\":[{\"type\":\"info\",\"id\":\"a\"}]}\n```\nmiddle\n```di_agent\n{\"cards\":[{\"type\":\"info\",\"id\":\"b\"}]}\n```\nending"},
 			},
 			expect: []model.MessageBlock{
 				{Index: 0, Kind: model.BlockKindText, Text: "intro"},
@@ -88,7 +99,7 @@ func TestSplitTextBlocksByCardFences(t *testing.T) {
 		{
 			name: "fence with multiple cards → N independent card blocks",
 			input: []model.MessageBlock{
-				{Index: 0, Kind: model.BlockKindText, Text: "```agenthub\n{\"cards\":[{\"type\":\"info\",\"id\":\"a\"},{\"type\":\"info\",\"id\":\"b\"},{\"type\":\"info\",\"id\":\"c\"}]}\n```"},
+				{Index: 0, Kind: model.BlockKindText, Text: "```di_agent\n{\"cards\":[{\"type\":\"info\",\"id\":\"a\"},{\"type\":\"info\",\"id\":\"b\"},{\"type\":\"info\",\"id\":\"c\"}]}\n```"},
 			},
 			expect: []model.MessageBlock{
 				{Index: 0, Kind: model.BlockKindCard, Card: map[string]any{"type": "info", "id": "a"}},
@@ -99,28 +110,28 @@ func TestSplitTextBlocksByCardFences(t *testing.T) {
 		{
 			name: "unclosed fence → original text preserved (no partial split)",
 			input: []model.MessageBlock{
-				{Index: 0, Kind: model.BlockKindText, Text: "before\n```agenthub\n{\"cards\":[{\"type\":\"info\",\"id\":\"c1\"}]}"},
+				{Index: 0, Kind: model.BlockKindText, Text: "before\n```di_agent\n{\"cards\":[{\"type\":\"info\",\"id\":\"c1\"}]}"},
 			},
 			expect: []model.MessageBlock{
-				{Index: 0, Kind: model.BlockKindText, Text: "before\n```agenthub\n{\"cards\":[{\"type\":\"info\",\"id\":\"c1\"}]}"},
+				{Index: 0, Kind: model.BlockKindText, Text: "before\n```di_agent\n{\"cards\":[{\"type\":\"info\",\"id\":\"c1\"}]}"},
 			},
 		},
 		{
 			name: "fence with invalid JSON → preserved verbatim",
 			input: []model.MessageBlock{
-				{Index: 0, Kind: model.BlockKindText, Text: "```agenthub\nnot json\n```\nafter"},
+				{Index: 0, Kind: model.BlockKindText, Text: "```di_agent\nnot json\n```\nafter"},
 			},
 			expect: []model.MessageBlock{
-				{Index: 0, Kind: model.BlockKindText, Text: "```agenthub\nnot json\n```\nafter"},
+				{Index: 0, Kind: model.BlockKindText, Text: "```di_agent\nnot json\n```\nafter"},
 			},
 		},
 		{
 			name: "fence with no cards field → preserved verbatim",
 			input: []model.MessageBlock{
-				{Index: 0, Kind: model.BlockKindText, Text: "```agenthub\n{\"foo\":1}\n```\nafter"},
+				{Index: 0, Kind: model.BlockKindText, Text: "```di_agent\n{\"foo\":1}\n```\nafter"},
 			},
 			expect: []model.MessageBlock{
-				{Index: 0, Kind: model.BlockKindText, Text: "```agenthub\n{\"foo\":1}\n```\nafter"},
+				{Index: 0, Kind: model.BlockKindText, Text: "```di_agent\n{\"foo\":1}\n```\nafter"},
 			},
 		},
 		{
@@ -128,7 +139,7 @@ func TestSplitTextBlocksByCardFences(t *testing.T) {
 			input: []model.MessageBlock{
 				{Index: 0, Kind: model.BlockKindText, Text: "intro"},
 				{Index: 1, Kind: model.BlockKindThinking, Text: "let me think"},
-				{Index: 2, Kind: model.BlockKindText, Text: "result:\n```agenthub\n{\"cards\":[{\"type\":\"info\",\"id\":\"x\"}]}\n```\ndone"},
+				{Index: 2, Kind: model.BlockKindText, Text: "result:\n```di_agent\n{\"cards\":[{\"type\":\"info\",\"id\":\"x\"}]}\n```\ndone"},
 			},
 			expect: []model.MessageBlock{
 				{Index: 0, Kind: model.BlockKindText, Text: "intro"},
@@ -155,7 +166,7 @@ func TestSplitTextBlocksByCardFencesIndexRenumber(t *testing.T) {
 	input := []model.MessageBlock{
 		{Index: 5, Kind: model.BlockKindText, Text: "first"},
 		{Index: 9, Kind: model.BlockKindThinking, Text: "thinking"},
-		{Index: 17, Kind: model.BlockKindText, Text: "```agenthub\n{\"cards\":[{\"type\":\"info\",\"id\":\"a\"}]}\n```"},
+		{Index: 17, Kind: model.BlockKindText, Text: "```di_agent\n{\"cards\":[{\"type\":\"info\",\"id\":\"a\"}]}\n```"},
 	}
 	got := SplitTextBlocksByCardFences(input)
 	for i, b := range got {
@@ -175,7 +186,7 @@ func TestSnapshotBlocksJSONFromBufferAppliesCardSplit(t *testing.T) {
 		{Type: model.AgentEventText, Content: "intro"},
 	})
 	buf.PushEvents(taskID, []model.AgentEvent{
-		{Type: model.AgentEventText, Content: "\n```agenthub\n{\"cards\":[{\"type\":\"info\",\"id\":\"c1\"}]}\n```\n"},
+		{Type: model.AgentEventText, Content: "\n```di_agent\n{\"cards\":[{\"type\":\"info\",\"id\":\"c1\"}]}\n```\n"},
 	})
 	buf.PushEvents(taskID, []model.AgentEvent{
 		{Type: model.AgentEventText, Content: "outro"},

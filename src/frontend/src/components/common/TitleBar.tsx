@@ -1,21 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { resolveDesktopBridge } from '@/config/desktopBridge';
 import styles from './TitleBar.module.css';
 
-declare global {
-  interface Window {
-    agentHubDesktop?: {
-      platform: string;
-      isDesktop: boolean;
-      minimize: () => void;
-      maximize: () => void;
-      close: () => void;
-      onMaximizeChange: (cb: (maximized: boolean) => void) => () => void;
-    };
-  }
-}
-
 const TitleBar: React.FC = () => {
-  const desktop = window.agentHubDesktop;
+  const desktop = resolveDesktopBridge(window);
   // 仅桌面端显示自定义标题栏
   if (!desktop?.isDesktop) return null;
 
@@ -23,7 +11,7 @@ const TitleBar: React.FC = () => {
 };
 
 const TitleBarInner: React.FC = () => {
-  const desktop = window.agentHubDesktop!;
+  const desktop = resolveDesktopBridge(window)!;
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
@@ -35,7 +23,7 @@ const TitleBarInner: React.FC = () => {
 
   // 最大化状态同步到 body，让布局层据此切换圆角
   useEffect(() => {
-    document.body.classList.toggle('ah-maximized', isMaximized);
+    document.body.classList.toggle('di-agent-maximized', isMaximized);
   }, [isMaximized]);
 
   return (

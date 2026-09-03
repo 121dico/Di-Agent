@@ -42,7 +42,7 @@
   - `daemonHub.RegisterTaskPromise()` + `AwaitTaskResult()` channel 等待（120s 超时）
 - **不再有 DB 轮询** — 完全通过 channel 回调
 
-### Daemon (NPM) (`src/daemon-npm/bin/agenthub-daemon.js`)
+### Daemon (NPM) (`src/daemon-npm/bin/di-agent-daemon.js`)
 
 - `connectWS()` 长驻 WS 连接，监听 `task.dispatch`，回传 `task.complete`
 - `pollTasks()` 仅作 WebSocket 库不可用时的降级

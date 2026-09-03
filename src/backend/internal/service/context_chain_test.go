@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 // fakeBuilder 是测试用的 ContextBuilder，把 tag 前置到 current（模拟前置型 builder）。
@@ -86,8 +86,8 @@ func TestAgentConfigInjector_PrependsAgentSystemPrompt(t *testing.T) {
 		Content: "请按规则回答",
 	}
 	got := b.Build(context.Background(), in, "BASE")
-	if !strings.HasPrefix(got, "[系统指令]\nHello rules") {
-		t.Fatalf("expected agent system prompt prepended, got %q", got)
+	if !strings.HasPrefix(got, "[Agent 身份]\n你是 Di Agent 平台上的智能体") || !strings.Contains(got, "[系统指令]\nHello rules") {
+		t.Fatalf("expected canonical agent identity and system prompt prepended, got %q", got)
 	}
 	if !strings.HasSuffix(got, "BASE") {
 		t.Fatalf("expected original current preserved at tail, got %q", got)
@@ -168,7 +168,7 @@ func TestPathA_DirectReplyChain_EquivalentToLegacyAssembly(t *testing.T) {
 	if chainOut != legacy {
 		t.Fatalf("path A mismatch:\n chain=%q\n legacy=%q", chainOut, legacy)
 	}
-	if !strings.HasPrefix(chainOut, "[系统指令]\nAGENT_RULES") {
+	if !strings.HasPrefix(chainOut, "[Agent 身份]\n你是 Di Agent 平台上的智能体") || !strings.Contains(chainOut, "[系统指令]\nAGENT_RULES") {
 		t.Fatalf("expected agent config block first, got %q", chainOut)
 	}
 }
@@ -196,7 +196,7 @@ func TestPathC_WorkerChain_EquivalentToLegacyAssembly(t *testing.T) {
 		t.Fatalf("path C mismatch:\n chain=%q\n legacy=%q", chainOut, legacy)
 	}
 	// 关键顺序断言：agentConfig 在前，kbPreload 在后
-	if !strings.HasPrefix(chainOut, "[系统指令]\nWORKER_RULES") {
+	if !strings.HasPrefix(chainOut, "[Agent 身份]\n你是 Di Agent 平台上的智能体") || !strings.Contains(chainOut, "[系统指令]\nWORKER_RULES") {
 		t.Fatalf("expected agent config first, got %q", chainOut)
 	}
 	if !strings.HasSuffix(chainOut, "KB_PRELOAD_BODY") {
@@ -230,7 +230,7 @@ func TestPathD_OrchChain_EquivalentToLegacyAssembly(t *testing.T) {
 		t.Fatalf("path D mismatch:\n chain=%q\n legacy=%q", chainOut, legacy)
 	}
 	// 顺序断言：agentConfig 在最前，orchPrompt 居中，kbPreload 在最后
-	if !strings.HasPrefix(chainOut, "[系统指令]\nORCH_RULES") {
+	if !strings.HasPrefix(chainOut, "[Agent 身份]\n你是 Di Agent 平台上的智能体") || !strings.Contains(chainOut, "[系统指令]\nORCH_RULES") {
 		t.Fatalf("expected agent config first, got prefix %q", chainOut[:50])
 	}
 	if !strings.Contains(chainOut, orchPrompt+"KB_PRELOAD_BODY") {
@@ -269,7 +269,7 @@ func TestPathC_FanoutChain_EquivalentToLegacyAssembly(t *testing.T) {
 		t.Fatalf("path C fanout mismatch:\n chain=%q\n legacy=%q", chainOut, legacy)
 	}
 	// 顺序断言：agentConfig 在最前，kbPreload 居中，frame 在最后
-	if !strings.HasPrefix(chainOut, "[系统指令]\nWORKER_RULES") {
+	if !strings.HasPrefix(chainOut, "[Agent 身份]\n你是 Di Agent 平台上的智能体") || !strings.Contains(chainOut, "[系统指令]\nWORKER_RULES") {
 		t.Fatalf("expected agent config first, got %q", chainOut)
 	}
 	if !strings.Contains(chainOut, "KB_PRELOAD_BODY") {

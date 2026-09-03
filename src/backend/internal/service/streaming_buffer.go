@@ -17,7 +17,7 @@ package service
 import (
 	"sync"
 
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 // StreamingBuffer 累积 task_id 对应的 StreamingState。

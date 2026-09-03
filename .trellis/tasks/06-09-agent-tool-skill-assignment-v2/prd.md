@@ -2,7 +2,7 @@
 
 ## Goal
 
-让用户能够针对不同自建 Agent 独立分配平台工具和平台 Skills。工具继续通过 AgentHub MCP 暴露，但必须按 Agent 授权控制 `tools/list` 和 `tools/call`；Skills 先做平台级分配和运行时渐进式提示词加载，后续再扩展为同步到对应电脑的原生 Skill 文件。
+让用户能够针对不同自建 Agent 独立分配平台工具和平台 Skills。工具继续通过 Di Agent MCP 暴露，但必须按 Agent 授权控制 `tools/list` 和 `tools/call`；Skills 先做平台级分配和运行时渐进式提示词加载，后续再扩展为同步到对应电脑的原生 Skill 文件。
 
 ## What I Already Know
 
@@ -60,7 +60,7 @@ MVP 的 Skill 运行时模型：
 
 - 适合场景：Skill 需要本地文件、脚本、模板、CLI 原生加载能力。
 - 同步对象：只同步用户明确选择的 Skills。
-- 同步位置：每台电脑/每个 CLI 使用独立受管目录，例如 AgentHub managed skills root。
+- 同步位置：每台电脑/每个 CLI 使用独立受管目录，例如 Di Agent managed skills root。
 - 安全边界：同步前展示 diff 或来源；支持撤销；避免覆盖用户手写原生 Skill。
 
 ## Requirements
@@ -104,14 +104,14 @@ MVP 的 Skill 运行时模型：
 - 相关 daemon 文件：
   - `src/daemon/mcp/tool_permissions.go`
   - `src/daemon/mcp/handlers.go`
-  - `src/daemon-npm/bin/agenthub-daemon.js`
+  - `src/daemon-npm/bin/di-agent-daemon.js`
 - 本阶段复用 `custom_skills` 字段承载结构化平台 Skill；后续如需版本、市场、资产文件，再拆成独立表。
 
 ## Verification
 
 - `bash scripts/test.sh`
 - `cd src/daemon && go test ./... -count=1`
-- `node --check src/daemon-npm/bin/agenthub-daemon.js`
+- `node --check src/daemon-npm/bin/di-agent-daemon.js`
 - `bash scripts/build.sh`
 - Playwright E2E：登录 `wjc` / `123456`，创建临时 `E2E工具Skill-*` Agent，验证工具集、结构化平台 Skills、刷新回显与 API 数据一致，最后删除临时 Agent。
 

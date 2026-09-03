@@ -155,7 +155,7 @@ func sofficeConvert(ctx context.Context, src, filter, targetExt string) (outPath
 	if soffice == "" {
 		return "", "", false
 	}
-	outDir, err := os.MkdirTemp("", "agenthub-extract-*")
+	outDir, err := os.MkdirTemp("", "di-agent-extract-*")
 	if err != nil {
 		return "", "", false
 	}

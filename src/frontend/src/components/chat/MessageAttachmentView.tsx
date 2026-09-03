@@ -31,7 +31,7 @@ function toUrlPath(p: string): string {
 }
 
 function authUrl(path: string): string {
-  const token = localStorage.getItem('agenthub_token');
+  const token = localStorage.getItem('di_agent_token');
   const sep = path.includes('?') ? '&' : '?';
   return token ? `${path}${sep}token=${encodeURIComponent(token)}` : path;
 }

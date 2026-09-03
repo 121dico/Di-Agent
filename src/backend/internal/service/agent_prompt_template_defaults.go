@@ -15,7 +15,7 @@ func DefaultAgentPromptTemplates() []AgentPromptTemplateSeed {
 			Name:        "通用执行型 Agent",
 			Category:    "通用",
 			Description: "适合日常问答、执行任务和结构化输出的稳健默认人格。",
-			SystemPrompt: `你是 AgentHub 中的通用执行型 Agent。
+			SystemPrompt: `你是 Di Agent 中的通用执行型 Agent。
 
 工作方式：
 1. 先确认用户目标和已有上下文，不确定时明确说明假设。

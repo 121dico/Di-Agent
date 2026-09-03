@@ -15,7 +15,7 @@
 
 ## 数据存储位置
 
-本地开发环境使用 PostgreSQL 数据库 `agenthub`。Docker Compose 将数据库目录 `/var/lib/postgresql/data` 持久化到命名卷 `di-agent_pgdata`；该卷是运行状态，不属于源码版本库。
+本地开发环境使用 PostgreSQL 数据库 `di-agent`。Docker Compose 将数据库目录 `/var/lib/postgresql/data` 持久化到命名卷 `di-agent_pgdata`；该卷是运行状态，不属于源码版本库。
 
 | 表 | 保存内容 |
 | --- | --- |

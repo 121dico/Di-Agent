@@ -1,4 +1,8 @@
-# AgentHub Domain Glossary
+# Di Agent Domain Glossary
+
+## Product Brand
+
+Di Agent is the canonical name for the multi-Agent collaboration product. The former product name is retired and must not appear in user-visible content or model-facing context.
 
 ## Data Source
 

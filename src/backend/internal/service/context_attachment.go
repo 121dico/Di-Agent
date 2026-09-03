@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/agent-hub/backend/internal/docextract"
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/docextract"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 // AttachmentBuilder 把消息附件抽取为文本，前置到 current。

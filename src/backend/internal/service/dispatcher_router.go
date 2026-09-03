@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 // DispatchRole 标识一个派发目标走哪条派发路径。

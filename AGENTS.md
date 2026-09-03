@@ -22,7 +22,7 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 
 ## Project
 
-AgentHub — IM-chat-driven multi-agent collaboration platform. Users chat with multiple AI Agents (Claude Code, Codex, OpenCode) through a Feishu/WeChat-style interface. Supports 1-on-1 chat, group chat, task dispatch, and artifact preview.
+Di Agent — IM-chat-driven multi-agent collaboration platform. Users chat with multiple AI Agents (Claude Code, Codex, OpenCode) through a Feishu/WeChat-style interface. Supports 1-on-1 chat, group chat, task dispatch, and artifact preview.
 
 ## Repository and Release Target
 
@@ -37,7 +37,7 @@ AgentHub — IM-chat-driven multi-agent collaboration platform. Users chat with 
 
 ```
 src/
-  backend/        Go backend (module: github.com/agent-hub/backend)
+  backend/        Go backend (module: github.com/121dico/Di-Agent/src/backend)
     cmd/server/main.go          — entrypoint, all DI wiring happens here
     internal/{handler,service,repository,model,middleware}/
     pkg/{ws,redis}/             — shared packages (WebSocket hub, Redis client)
@@ -47,7 +47,7 @@ src/
     src/{api,components,hooks,store,views,types,layout}/
     e2e/                         — Playwright E2E tests
   daemon/         Go daemon for local agent scanning & process management (separate go.mod)
-  daemon-npm/     npm wrapper @agenthub/daemon for the Go daemon
+  daemon-npm/     npm wrapper di-agent-daemon for the Go daemon
 scripts/
   dev.sh          starts postgres + runs migrations + backend + frontend
   build.sh        builds backend binary + frontend dist
@@ -112,7 +112,7 @@ These have caused real bugs in this codebase:
 
 ## Config
 
-`src/backend/config/config.example.yaml` documents all fields. `config.yaml` is gitignored. Default DB credentials: `agenthub:agenthub@localhost:5432/agenthub`. Redis optional — degrades gracefully when absent.
+`src/backend/config/config.example.yaml` documents all fields. `config.yaml` is gitignored. Default DB credentials: `di_agent:di_agent@localhost:5432/di_agent`. Redis optional — degrades gracefully when absent.
 
 ## Docs
 

@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 // 内存版 daemon 任务队列：不依赖 DB，db 字段保持 nil。

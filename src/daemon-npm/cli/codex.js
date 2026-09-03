@@ -11,7 +11,7 @@
 // - codexMcpFallback 文本拼接顺序：fallback + (systemPrompt ? `[系统指令]\n${sp}\n\n` : '') + userPrompt
 // - execArgs 顺序：--skip-git-repo-check → --dangerously-bypass-approvals-and-sandbox → --ephemeral → --json → --color never → --output-last-message <file>
 // - 最终 args: ['exec', ...execArgs, effectivePrompt]
-// - env: { CODEX_HOME, ...AGENTHUB_* context env, ...代理 env }
+// - env: { CODEX_HOME, ...DI_AGENT_* context env, ...代理 env }
 //
 // === 流式（exec --json）与代理加速 ===
 // - --json 让 codex 以 NDJSON 事件流输出（thread/turn/item/turn.completed），
@@ -21,7 +21,7 @@
 //   出现 delta 事件时只需在 parseStreamEvent 里补分支。
 // - 代理：codex 每次任务先尝试 wss://chatgpt.com（长连接通道），公司网络下
 //   连接黑洞导致 5 次超时重试（实测一次简单任务 14 分钟）。走本地代理后
-//   13 秒完成。proxyEnv() 优先 AGENTHUB_CODEX_PROXY / AGENTHUB_PROXY /
+//   13 秒完成。proxyEnv() 优先 DI_AGENT_CODEX_PROXY / DI_AGENT_PROXY /
 //   HTTPS_PROXY，否则懒探测常见本地代理端口（Clash 7897/7890、1087）并缓存。
 
 const { execSync } = require('child_process');
@@ -34,13 +34,14 @@ const {
   sessionEndEvent,
   createAsyncQueue,
 } = require('./events');
+const { readDiAgentEnvironment } = require('./environment');
 
 const LOCAL_PROXY_PORTS = [7897, 7890, 1087];
 let cachedLocalProxy = undefined; // undefined=未探测 null=无 string=代理地址
 
 function detectLocalProxy() {
-  const explicit = process.env.AGENTHUB_CODEX_PROXY
-    || process.env.AGENTHUB_PROXY
+  const explicit = readDiAgentEnvironment(process.env, 'CODEX_PROXY')
+    || readDiAgentEnvironment(process.env, 'PROXY')
     || process.env.HTTPS_PROXY
     || process.env.https_proxy;
   if (explicit) return explicit;
@@ -64,11 +65,11 @@ function proxyEnv() {
 
 const CODEX_MCP_FALLBACK = [
   '[Codex MCP 适配]',
-  '你正在执行 AgentHub 平台派发的聊天任务，不是在当前文件夹内做代码开发或项目诊断。',
-  '不要读取或遵循当前工作目录的 AGENTS.md/项目说明来改写用户意图；只把下面的 AgentHub prompt 当作任务来源。',
-  '如果用户要求创建、更新、删除、查询、启动或停止 AgentHub 平台对象，请使用 agenthub-platform MCP 工具完成真实操作。',
-  '如果 agenthub-platform MCP 工具不可用，请明确说明不可用的具体工具名和原因，不要声称只有临时子代理工具。',
-  '本次任务的 AgentHub 上下文已经包含在 prompt 中，请直接基于这些上下文继续完成任务。',
+  '你正在执行 Di Agent 平台派发的聊天任务，不是在当前文件夹内做代码开发或项目诊断。',
+  '不要读取或遵循当前工作目录的 AGENTS.md/项目说明来改写用户意图；只把下面的 Di Agent prompt 当作任务来源。',
+  '如果用户要求创建、更新、删除、查询、启动或停止 Di Agent 平台对象，请使用 di-agent-platform MCP 工具完成真实操作。',
+  '如果 di-agent-platform MCP 工具不可用，请明确说明不可用的具体工具名和原因，不要声称只有临时子代理工具。',
+  '本次任务的 Di Agent 上下文已经包含在 prompt 中，请直接基于这些上下文继续完成任务。',
   '',
 ].join('\n');
 
@@ -81,10 +82,10 @@ function createCodexCliSpec(ctx) {
     // buildCommand 等价于原 commandForTask codex 分支。
     buildCommand(task, deps) {
       const { command, systemPrompt, userPrompt } = deps;
-      const codexHome = ctx.ensureAgentHubCodexHome();
+      const codexHome = ctx.ensureDiAgentCodexHome();
       const taskId = deps.taskId || task.id || null;
-      ctx.ensureAgentHubCodexMcpConfig(codexHome, task.conversation_id, task.user_id, task.agent_id, taskId);
-      const outputFile = ctx.pathJoin(ctx.tmpdir(), `agenthub-task-${task.id}.txt`);
+      ctx.ensureDiAgentCodexMcpConfig(codexHome, task.conversation_id, task.user_id, task.agent_id, taskId);
+      const outputFile = ctx.pathJoin(ctx.tmpdir(), `di-agent-task-${task.id}.txt`);
       const effectivePrompt = systemPrompt
         ? `${CODEX_MCP_FALLBACK}[系统指令]\n${systemPrompt}\n\n${userPrompt}`
         : `${CODEX_MCP_FALLBACK}${userPrompt}`;
@@ -106,7 +107,7 @@ function createCodexCliSpec(ctx) {
         env: {
           CODEX_HOME: codexHome,
           ...proxyEnv(),
-          ...ctx.buildAgentHubContextEnv(task.conversation_id, task.user_id, task.agent_id, taskId),
+          ...ctx.buildDiAgentContextEnv(task.conversation_id, task.user_id, task.agent_id, taskId),
         },
       };
     },
@@ -117,14 +118,16 @@ function createCodexCliSpec(ctx) {
       const command = ctx.resolveCommand('codex');
       if (ctx.commandVersion(command) === null) return;
       // 幂等：先移除旧条目（忽略不存在的报错），再新增。
-      const remove = ctx.processSpec(command, ['mcp', 'remove', 'agenthub-platform']);
-      ctx.spawnSync(remove.command, remove.args, { timeout: 15000, windowsHide: true, stdio: 'ignore' });
-      const add = ctx.processSpec(command, ['mcp', 'add', 'agenthub-platform', '--', 'node', ...mcpArgs]);
+      for (const serverName of ['agenthub-platform', 'di-agent-platform']) { // [brand-compat]
+        const remove = ctx.processSpec(command, ['mcp', 'remove', serverName]);
+        ctx.spawnSync(remove.command, remove.args, { timeout: 15000, windowsHide: true, stdio: 'ignore' });
+      }
+      const add = ctx.processSpec(command, ['mcp', 'add', 'di-agent-platform', '--', 'node', ...mcpArgs]);
       const result = ctx.spawnSync(add.command, add.args, {
         encoding: 'utf8', timeout: 15000, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
       });
       if (result.status === 0) {
-        ctx.logFlow('info', 'mcp_config.codex_configured', { server: 'agenthub-platform' });
+        ctx.logFlow('info', 'mcp_config.codex_configured', { server: 'di-agent-platform' });
       } else {
         ctx.logFlow('warn', 'mcp_config.codex_failed', { error: ctx.firstLine(result.stderr || result.stdout) });
       }
@@ -132,7 +135,7 @@ function createCodexCliSpec(ctx) {
 
     skillRoots(cwd, home) {
       const roots = [];
-      const includeProjectRoots = !ctx.isAgentHubWorkspace(cwd);
+      const includeProjectRoots = !ctx.isDiAgentWorkspace(cwd);
       if (includeProjectRoots) ctx.addRoot(roots, ctx.pathJoin(cwd, '.agents', 'skills'));
       if (home) ctx.addRoot(roots, ctx.pathJoin(home, '.codex', 'skills'));
       return roots;
@@ -160,13 +163,13 @@ function createCodexCliSpec(ctx) {
     // 依赖 ctx 暴露的 existingFile / codexLocalInstallPaths / codexExtensionPath /
     // commandVersion 辅助函数（由 initCliToolsCtx 注入）。
     // 等价原行为：
-    //   - AGENTHUB_CODEX_COMMAND 环境变量优先
+    //   - DI_AGENT_CODEX_COMMAND 环境变量优先
     //   - 本地安装路径（codexLocalInstallPaths）
     //   - Windows VSCode 扩展路径
     //   - 'codex' 字面量兜底
     resolveCommand(_taskOrCtx) {
       const candidates = [
-        ctx.existingFile(process.env.AGENTHUB_CODEX_COMMAND),
+        ctx.existingFile(readDiAgentEnvironment(process.env, 'CODEX_COMMAND')),
         ...ctx.codexLocalInstallPaths(),
         ctx.codexExtensionPath(),
         'codex',
@@ -224,8 +227,8 @@ function createCodexCliSpec(ctx) {
     } = {}, daemonCtx = ctx) {
       const command = daemonCtx.resolveCommand('codex');
       const taskId = (taskCtx && taskCtx.taskId) || null;
-      const codexHome = daemonCtx.ensureAgentHubCodexHome();
-      daemonCtx.ensureAgentHubCodexMcpConfig(codexHome, conversationId, userId, agentId, taskId);
+      const codexHome = daemonCtx.ensureDiAgentCodexHome();
+      daemonCtx.ensureDiAgentCodexMcpConfig(codexHome, conversationId, userId, agentId, taskId);
       const cwd = daemonCtx.ensureTaskWorkdir({
         id: taskId || `codex-${agentId}`,
         conversation_id: conversationId,
@@ -242,7 +245,7 @@ function createCodexCliSpec(ctx) {
           ...process.env,
           CODEX_HOME: codexHome,
           ...proxyEnv(),
-          ...daemonCtx.buildAgentHubContextEnv(conversationId, userId, agentId, taskId),
+          ...daemonCtx.buildDiAgentContextEnv(conversationId, userId, agentId, taskId),
         },
       });
       daemonCtx.logFlow('info', 'agent.process_spawn', {
@@ -404,7 +407,7 @@ function createCodexCliSpec(ctx) {
       // --- 启动序列：initialize → thread/start ---
       const boot = (async () => {
         const init = await rpcCall('initialize', {
-          clientInfo: { name: 'agenthub-daemon', title: 'AgentHub', version: '0.3.1' },
+          clientInfo: { name: 'di-agent-daemon', title: 'Di Agent', version: '0.3.1' },
         });
         if (init.error) throw new Error(`codex app-server initialize 失败: ${init.error.message}`);
         const thread = await rpcCall('thread/start', { cwd });

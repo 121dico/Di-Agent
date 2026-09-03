@@ -2,7 +2,8 @@ package mcp
 
 import (
 	"encoding/json"
-	"os"
+
+	"github.com/121dico/Di-Agent/src/daemon/internal/brandenv"
 )
 
 // ToolsetInfo describes a built-in toolset template.
@@ -168,4 +169,4 @@ func filterTools(tools []Tool, allowed map[string]bool) []Tool {
 	return out
 }
 
-func AgentIDFromEnv() string { return os.Getenv("AGENTHUB_AGENT_ID") }
+func AgentIDFromEnv() string { return brandenv.Read("AGENT_ID") }

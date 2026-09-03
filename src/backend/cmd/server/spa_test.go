@@ -18,7 +18,7 @@ func TestRegisterSPARoutesServesAssetsAndHistoryFallback(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(distDir, "index.html"), []byte("<!doctype html><div id=\"root\"></div>"), 0o644); err != nil {
 		t.Fatalf("write index: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(distDir, "app.js"), []byte("console.log('agenthub')"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(distDir, "app.js"), []byte("console.log('di_agent')"), 0o644); err != nil {
 		t.Fatalf("write asset: %v", err)
 	}
 
@@ -30,7 +30,7 @@ func TestRegisterSPARoutesServesAssetsAndHistoryFallback(t *testing.T) {
 	if asset.Code != http.StatusOK {
 		t.Fatalf("asset status = %d, want %d", asset.Code, http.StatusOK)
 	}
-	if asset.Body.String() != "console.log('agenthub')" {
+	if asset.Body.String() != "console.log('di_agent')" {
 		t.Fatalf("asset body = %q", asset.Body.String())
 	}
 
@@ -167,9 +167,9 @@ func TestLoadConfigUsesEnvironmentPath(t *testing.T) {
 database:
   host: localhost
   port: 5432
-  user: agenthub
-  password: agenthub
-  dbname: agenthub
+  user: di_agent
+  password: di_agent
+  dbname: di_agent
   sslmode: disable
 jwt:
   secret: test-secret
@@ -179,7 +179,7 @@ jwt:
 		t.Fatalf("write config: %v", err)
 	}
 
-	t.Setenv("AGENTHUB_CONFIG", configPath)
+	t.Setenv("DI_AGENT_CONFIG", configPath)
 	cfg, err := loadConfig("missing.yaml")
 	if err != nil {
 		t.Fatalf("load config: %v", err)
@@ -227,7 +227,7 @@ func TestCleanUploadRoutePathRejectsWindowsRootedPaths(t *testing.T) {
 
 func TestFrontendDistDirUsesEnvironmentPath(t *testing.T) {
 	distDir := t.TempDir()
-	t.Setenv("AGENTHUB_FRONTEND_DIST", distDir)
+	t.Setenv("DI_AGENT_FRONTEND_DIST", distDir)
 
 	if got := frontendDistDir(); got != distDir {
 		t.Fatalf("frontendDistDir() = %q, want %q", got, distDir)

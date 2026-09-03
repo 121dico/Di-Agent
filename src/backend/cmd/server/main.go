@@ -13,21 +13,21 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/agent-hub/backend/internal/catalog"
-	"github.com/agent-hub/backend/internal/ghpages"
-	"github.com/agent-hub/backend/internal/handler"
-	reportinfra "github.com/agent-hub/backend/internal/infrastructure/report"
-	wsinfra "github.com/agent-hub/backend/internal/infrastructure/ws"
-	"github.com/agent-hub/backend/internal/middleware"
-	"github.com/agent-hub/backend/internal/port"
-	"github.com/agent-hub/backend/internal/rag"
-	"github.com/agent-hub/backend/internal/repository"
-	"github.com/agent-hub/backend/internal/router"
-	"github.com/agent-hub/backend/internal/service"
-	"github.com/agent-hub/backend/internal/service/tool_specs"
-	"github.com/agent-hub/backend/internal/tunnel"
-	pkgredis "github.com/agent-hub/backend/pkg/redis"
-	"github.com/agent-hub/backend/pkg/ws"
+	"github.com/121dico/Di-Agent/src/backend/internal/catalog"
+	"github.com/121dico/Di-Agent/src/backend/internal/ghpages"
+	"github.com/121dico/Di-Agent/src/backend/internal/handler"
+	reportinfra "github.com/121dico/Di-Agent/src/backend/internal/infrastructure/report"
+	wsinfra "github.com/121dico/Di-Agent/src/backend/internal/infrastructure/ws"
+	"github.com/121dico/Di-Agent/src/backend/internal/middleware"
+	"github.com/121dico/Di-Agent/src/backend/internal/port"
+	"github.com/121dico/Di-Agent/src/backend/internal/rag"
+	"github.com/121dico/Di-Agent/src/backend/internal/repository"
+	"github.com/121dico/Di-Agent/src/backend/internal/router"
+	"github.com/121dico/Di-Agent/src/backend/internal/service"
+	"github.com/121dico/Di-Agent/src/backend/internal/service/tool_specs"
+	"github.com/121dico/Di-Agent/src/backend/internal/tunnel"
+	pkgredis "github.com/121dico/Di-Agent/src/backend/pkg/redis"
+	"github.com/121dico/Di-Agent/src/backend/pkg/ws"
 	"github.com/gin-gonic/gin"
 	goredis "github.com/redis/go-redis/v9"
 )
@@ -485,7 +485,7 @@ func main() {
 }
 
 func frontendDistDir() string {
-	if dir := os.Getenv("AGENTHUB_FRONTEND_DIST"); dir != "" {
+	if dir := readDiAgentEnv("FRONTEND_DIST"); dir != "" {
 		return dir
 	}
 	for _, dir := range frontendDistCandidates() {

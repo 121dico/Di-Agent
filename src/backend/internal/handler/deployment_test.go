@@ -11,10 +11,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/agent-hub/backend/internal/middleware"
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/internal/repository"
-	"github.com/agent-hub/backend/internal/service"
+	"github.com/121dico/Di-Agent/src/backend/internal/middleware"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/repository"
+	"github.com/121dico/Di-Agent/src/backend/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )

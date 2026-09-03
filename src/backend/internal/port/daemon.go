@@ -1,7 +1,7 @@
 package port
 
 import (
-	"github.com/agent-hub/backend/pkg/ws"
+	"github.com/121dico/Di-Agent/src/backend/pkg/ws"
 )
 
 // Compile-time assertion that the concrete infra type *ws.DaemonHub satisfies

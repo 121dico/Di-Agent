@@ -19,7 +19,7 @@
 **后端发 `task.dispatch` 时字段名 `"id"` 与 daemon 期望的 `"task_id"` 不匹配**，daemon 拿不到 task id 直接 return，不执行，后端等不到 `task.complete` 响应 → 20 秒超时。
 
 ```
-后端发:  { "id": "abc-123", "cli_tool": "__agenthub_browse_files__", ... }
+后端发:  { "id": "abc-123", "cli_tool": "__di_agent_browse_files__", ... }
 daemon 读: data.task_id → undefined
 daemon:   if (!task.id) return;   // 直接跳过，不执行
 后端:     等 task.complete ... 20s ... 超时 → 50401 浏览文件超时
@@ -30,7 +30,7 @@ daemon:   if (!task.id) return;   // 直接跳过，不执行
 - `internal/service/agent_browse.go`：`"id": taskID`（文件浏览）
 - `internal/service/agent_skill_open.go`：`"id": taskID`（打开 skill 目录，从未被端到端测过所以没暴露）
 
-daemon 端 `handleTaskDispatch`（`agenthub-daemon.js:3000`）读的是 `data.task_id`，全文无 `data.id` 的 fallback。
+daemon 端 `handleTaskDispatch`（`di-agent-daemon.js:3000`）读的是 `data.task_id`，全文无 `data.id` 的 fallback。
 
 ## 怎么定位的（端到端 curl 测试）
 关键转折点：**停止猜前端，直接用 curl 模拟前端调用**。
@@ -108,7 +108,7 @@ if (!task.id) {
   src/backend/internal/service/agent_skill_open.go    — OpenDaemonSkillLocation SendToMachine
 
 daemon 接收端（字段名期望）：
-  src/daemon-npm/bin/agenthub-daemon.js:3000          — handleTaskDispatch: id: data.task_id
+  src/daemon-npm/bin/di-agent-daemon.js:3000          — handleTaskDispatch: id: data.task_id
 
 task.dispatch 契约（无单一事实源，靠人肉同步）：
   字段: task_id / cli_tool / prompt / agent_id / conversation_id / user_id / context_messages

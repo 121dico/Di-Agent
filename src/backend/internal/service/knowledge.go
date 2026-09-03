@@ -13,10 +13,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/agent-hub/backend/internal/docextract"
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/internal/rag"
-	"github.com/agent-hub/backend/internal/repository"
+	"github.com/121dico/Di-Agent/src/backend/internal/docextract"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/rag"
+	"github.com/121dico/Di-Agent/src/backend/internal/repository"
 )
 
 var (

@@ -8,9 +8,9 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/internal/port"
-	"github.com/agent-hub/backend/internal/repository"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/port"
+	"github.com/121dico/Di-Agent/src/backend/internal/repository"
 )
 
 // RouteResult is returned by RouteMention containing agent reply messages and dispatch info.

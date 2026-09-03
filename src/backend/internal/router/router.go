@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/agent-hub/backend/internal/catalog"
-	"github.com/agent-hub/backend/internal/handler"
-	"github.com/agent-hub/backend/internal/middleware"
+	"github.com/121dico/Di-Agent/src/backend/internal/catalog"
+	"github.com/121dico/Di-Agent/src/backend/internal/handler"
+	"github.com/121dico/Di-Agent/src/backend/internal/middleware"
 	"github.com/gin-gonic/gin"
 )
 

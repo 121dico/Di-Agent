@@ -7,10 +7,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/internal/port"
-	"github.com/agent-hub/backend/internal/service"
-	"github.com/agent-hub/backend/internal/service/tool_specs"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/port"
+	"github.com/121dico/Di-Agent/src/backend/internal/service"
+	"github.com/121dico/Di-Agent/src/backend/internal/service/tool_specs"
 	"github.com/gin-gonic/gin"
 )
 

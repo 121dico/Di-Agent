@@ -129,7 +129,7 @@ PostgreSQL 可以保存完整历史，但每轮模型调用不会把数据库全
 详细目录说明见 `doc/conventions/project-structure.md`。简要概览：
 
 ```
-agent-hub/
+di-agent/
 ├── src/
 │   ├── frontend/          # React SPA
 │   ├── backend/           # Go API Server

@@ -4,7 +4,7 @@ Di Agent Daemon 通过 HTTP + WebSocket 连接 Di Agent 后端，在本机启动
 
 典型场景：你在 A 机器上运行 Di Agent 后端与数据库，希望在 B / C 机器上调用 `claude` / `codex` CLI，并复用统一的会话历史、任务卡片和审批流。每台执行机器运行一个 Daemon 并连接 A 即可。
 
-> 当前 npm 包名仍为 `@hust-agenthub/daemon`，这是发布与升级兼容标识；面向用户的产品名称统一为 Di Agent。
+Daemon 由 Di Agent 服务器以离线包分发，用户不需要从 npm 安装。
 
 ## 前置条件
 
@@ -17,17 +17,15 @@ Di Agent Daemon 通过 HTTP + WebSocket 连接 Di Agent 后端，在本机启动
 
 ## 快速上手（LAN 部署示例）
 
-假设 A 机器（运行 Di Agent 后端）的 LAN IP 是 `10.11.211.178`，后端端口为 `8080`。在 B 机器：
+假设 A 机器（运行 Di Agent 后端）的 LAN IP 是 `10.11.211.178`，后端端口为 `8080`。在 B 机器打开 Di Agent 的「连接电脑」弹窗，复制当次生成的安装命令。macOS 命令形如：
 
 ```bash
-npx @hust-agenthub/daemon \
+curl -fsSL http://10.11.211.178:8080/downloads/install.sh | bash -s -- \
   --server-url http://10.11.211.178:8080 \
-  --api-key <你的 daemon api key>
+  --api-key <弹窗生成的 machine key>
 ```
 
-看到日志 `daemon.registered` + `ws.connected` 就说明接入了。后端派任务给这台 daemon 时，会自动 spawn 对应 CLI 执行。
-
-> ℹ️ 首次跑 `npx` 会问你确认安装这个包，回车确认即可。后续执行不会重复询问。
+安装器会从同一台服务器下载 `di-agent-daemon-bundle.tar.gz`，安装到 `~/.di-agent`，并在 daemon 报告健康后完成开机自启切换。Windows 请使用弹窗提供的安装器。
 
 ## 获取 API key
 
@@ -40,35 +38,35 @@ API key 由后端签发。在 A 机器（后端所在机器）：
 
 ## 命令行参数 & 环境变量
 
-环境变量当前保留 `AGENTHUB_*` 前缀，以兼容已部署的 Daemon 与服务端配置。
+环境变量使用 `DI_AGENT_*` 前缀。
 
 | 参数 | 环境变量 | 必填 | 说明 |
 |------|---------|------|------|
 | `--server-url <url>` | — | ✅ | 后端 HTTP 根地址（如 `http://10.11.211.178:8080`） |
 | `--api-key <key>` | — | ✅ | 后端 API key |
-| `--daemon-token <tok>` | `AGENTHUB_DAEMON_TOKEN` | ❌ | 调 MCP 内部接口（emitCard / task-cards 队列）用的 token；不传则不能发卡片到任务面板 |
-| `--conversation-id <id>` | `AGENTHUB_CONVERSATION_ID` | ❌ | MCP 模式下绑死到某会话 |
-| `--user-id <id>` | `AGENTHUB_USER_ID` | ❌ | MCP 模式下绑死到某用户 |
-| `--agent-id <id>` | `AGENTHUB_AGENT_ID` | ❌ | MCP 模式下绑死到某 agent |
-| `--task-id <id>` | `AGENTHUB_TASK_ID` | ❌ | MCP 模式下绑死到某 task（emitCard 依赖） |
+| `--daemon-token <tok>` | `DI_AGENT_DAEMON_TOKEN` | ❌ | 调 MCP 内部接口（emitCard / task-cards 队列）用的 token；不传则不能发卡片到任务面板 |
+| `--conversation-id <id>` | `DI_AGENT_CONVERSATION_ID` | ❌ | MCP 模式下绑死到某会话 |
+| `--user-id <id>` | `DI_AGENT_USER_ID` | ❌ | MCP 模式下绑死到某用户 |
+| `--agent-id <id>` | `DI_AGENT_AGENT_ID` | ❌ | MCP 模式下绑死到某 agent |
+| `--task-id <id>` | `DI_AGENT_TASK_ID` | ❌ | MCP 模式下绑死到某 task（emitCard 依赖） |
 | `--mcp` | — | ❌ | 以 MCP server 模式跑（stdin/stdout 协议），不连 WS |
 
-可以混用：`AGENTHUB_DAEMON_TOKEN=xxx npx @hust-agenthub/daemon --server-url http://...:8080 --api-key yyy`。
+本地开发时可以直接运行：`DI_AGENT_DAEMON_TOKEN=xxx node bin/di-agent-daemon.js --server-url http://...:8080 --api-key yyy`。
 
 ## 故障排查
 
-- **`Cannot find module '../cli/...'`** —— 0.1.0 的已知 bug，0.2.0+ 已修。`npx @hust-agenthub/daemon@latest` 强制拉新版。
+- **离线包缺少入口文件** —— 在服务器仓库运行 `bash scripts/package-daemon.sh`，并确认发布了新的 `downloads/di-agent-daemon-bundle.tar.gz`。
 - **连不上后端** —— 先 `curl http://<server-url>/healthz` 验证可达；再检查防火墙是否放行 `:8080`。
 - **daemon 起来了但拿不到任务** —— 后端按 agent_id 派活，确认 daemon 用了正确的 `--api-key`（对应身份有权限接到目标 agent 的任务）。
 - **spawn claude 失败** —— 在 daemon 这台机器上跑 `claude -p "hi"`，确认能交互。CLI 没装或没登录是最常见原因。
-- **卡片不显示** —— 缺 `--daemon-token` 或 `AGENTHUB_DAEMON_TOKEN`，emitCard 调用会被后端拒绝（daemon 日志会打 `card.emit_failed`）。
+- **卡片不显示** —— 缺 `--daemon-token` 或 `DI_AGENT_DAEMON_TOKEN`，emitCard 调用会被后端拒绝（daemon 日志会打 `card.emit_failed`）。
 
 ## 作为常驻进程跑
 
-B 机器上想一直挂着，用 launchd / systemd / pm2 / nohup 都行。最简单的 nohup：
+B 机器上的服务生命周期由安装器管理（macOS 为 `com.diagent.daemon`）。仅本地开发调试时，可从本目录直接运行：
 
 ```bash
-nohup npx @hust-agenthub/daemon \
+nohup node bin/di-agent-daemon.js \
   --server-url http://10.11.211.178:8080 \
   --api-key <key> \
   > ~/di-agent-daemon.log 2>&1 &

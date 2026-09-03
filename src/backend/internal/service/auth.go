@@ -7,8 +7,8 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/internal/repository"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/repository"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )

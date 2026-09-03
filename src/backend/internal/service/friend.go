@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 // FriendRepo 好友服务所需的仓库接口

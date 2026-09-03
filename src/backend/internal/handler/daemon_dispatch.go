@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/pkg/ws"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/pkg/ws"
 )
 
 // DispatchTask 由任务队列创建回调触发，在线 daemon 立即收到 task.execute。

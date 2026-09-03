@@ -3,7 +3,7 @@ package port
 import (
 	"context"
 
-	"github.com/agent-hub/backend/internal/domain"
+	"github.com/121dico/Di-Agent/src/backend/internal/domain"
 )
 
 // RoleEvent 表示一次会话内 Agent 角色变更事件。

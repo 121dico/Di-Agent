@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/agent-hub/backend/internal/middleware"
+	"github.com/121dico/Di-Agent/src/backend/internal/middleware"
 	"github.com/gin-gonic/gin"
 )
 

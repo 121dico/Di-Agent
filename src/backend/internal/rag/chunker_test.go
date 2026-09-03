@@ -43,7 +43,7 @@ func TestChunkerBuildsSummaryAndSemanticBoundaries(t *testing.T) {
 		SummaryMaxChars:   70,
 	}, embedder)
 
-	text := "# AgentHub 架构\n\nDaemon 负责识别本地 CLI 并管理它们的生命周期。\n\n数据库使用 PostgreSQL 保存结构化业务数据。数据库向量由 pgvector 承载。"
+	text := "# Di Agent 架构\n\nDaemon 负责识别本地 CLI 并管理它们的生命周期。\n\n数据库使用 PostgreSQL 保存结构化业务数据。数据库向量由 pgvector 承载。"
 	chunks, err := chunker.Chunk(context.Background(), text)
 	if err != nil {
 		t.Fatalf("Chunk() error = %v", err)
@@ -54,7 +54,7 @@ func TestChunkerBuildsSummaryAndSemanticBoundaries(t *testing.T) {
 	if chunks[0].Type != ChunkTypeSummary {
 		t.Fatalf("first chunk type = %q, want %q", chunks[0].Type, ChunkTypeSummary)
 	}
-	if !strings.Contains(chunks[0].Content, "AgentHub 架构") {
+	if !strings.Contains(chunks[0].Content, "Di Agent 架构") {
 		t.Fatalf("summary %q does not preserve title", chunks[0].Content)
 	}
 	semanticCount := 0

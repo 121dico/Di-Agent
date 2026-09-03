@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/internal/repository"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/repository"
 )
 
 // AI 编辑产物相关错误（供 handler 映射 HTTP 状态码）。

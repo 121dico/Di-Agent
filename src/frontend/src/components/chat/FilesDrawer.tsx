@@ -319,7 +319,7 @@ export const FilesDrawer: React.FC<FilesDrawerProps> = ({ agentId, workDir, open
     setDownloading(true);
     try {
       const blob = await downloadZip(agentId, workDir, tree.repoRoot);
-      const name = tree.repoRoot.split('/').pop() || 'agenthub-files';
+      const name = tree.repoRoot.split('/').pop() || 'di-agent-files';
       triggerBlobDownload(blob, `${name}.zip`);
     } catch (err) {
       antMessage.error(err instanceof ApiError ? err.message : '下载失败');

@@ -1,4 +1,4 @@
-# AgentHub 任务列表
+# Di Agent 任务列表
 
 > 简略索引。每个任务的详细要求、子任务和验收标准见 `doc/task/` 下对应文件。
 
@@ -28,7 +28,7 @@
 |---|------|------|------|------|
 | M9 | 产物预览（结构化卡片：代码/网页/文件） | [doc/task/M9-产物预览.md](task/M9-产物预览.md) | M6 | [ ] |
 | M10 | Pin 消息上下文（Pin注入Agent请求） | [doc/task/M10-Pin上下文.md](task/M10-Pin上下文.md) | M3, M4 | [ ] |
-| M11 | 平台 MCP 工具（daemon 暴露 agenthub-platform MCP server） | [doc/task/M11-平台MCP工具.md](task/M11-平台MCP工具.md) | M4 | [x] |
+| M11 | 平台 MCP 工具（daemon 暴露 di-agent-platform MCP server） | [doc/task/M11-平台MCP工具.md](task/M11-平台MCP工具.md) | M4 | [x] |
 | M12 | Conversation Checkpoint 与 Context Meter | [doc/task/M12-会话检查点与上下文用量.md](task/M12-会话检查点与上下文用量.md) | M3, M4, M10 | [x] |
 
 ---

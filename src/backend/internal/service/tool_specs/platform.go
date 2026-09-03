@@ -1,6 +1,6 @@
 package tool_specs
 
-import "github.com/agent-hub/backend/internal/port"
+import "github.com/121dico/Di-Agent/src/backend/internal/port"
 
 // RenderCard 返回 render_card 平台内置工具 spec。
 // 这是平台基础设施工具：所有 Agent 默认可用，RouteInfo 为 nil

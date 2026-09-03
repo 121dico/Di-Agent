@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 // ContextInput 收集所有上下文构建可能用到的原料。

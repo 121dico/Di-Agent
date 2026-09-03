@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/agent-hub/backend/internal/middleware"
-	"github.com/agent-hub/backend/internal/service"
+	"github.com/121dico/Di-Agent/src/backend/internal/middleware"
+	"github.com/121dico/Di-Agent/src/backend/internal/service"
 	"github.com/gin-gonic/gin"
 )
 
@@ -113,7 +113,7 @@ func serveBrowseZip(c *gin.Context, raw *service.BrowseResult) {
 }
 
 // sanitizeZipName 从 baseDir 绝对路径提取一个安全的 zip 文件名。
-// 取最后一段目录名，剥离非法字符；兜底 "agenthub-files"。
+// 取最后一段目录名，剥离非法字符；兜底 "di-agent-files"。
 func sanitizeZipName(baseDir string) string {
 	name := baseDir
 	for i := len(name) - 1; i >= 0; i-- {
@@ -123,7 +123,7 @@ func sanitizeZipName(baseDir string) string {
 		}
 	}
 	if name == "" {
-		return "agenthub-files"
+		return "di-agent-files"
 	}
 	// 替换文件名非法字符
 	out := make([]byte, 0, len(name))
@@ -137,7 +137,7 @@ func sanitizeZipName(baseDir string) string {
 	}
 	result := string(out)
 	if result == "." || result == ".." {
-		return "agenthub-files"
+		return "di-agent-files"
 	}
 	return result
 }

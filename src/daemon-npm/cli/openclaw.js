@@ -14,13 +14,13 @@ function createOpenClawCliSpec(ctx) {
 
     // buildCommand 等价于原 commandForTask openclaw 分支。
     // 字段：{ command, args, resultFormat }
-    // sessionId 回退：task._sessionId → makeSessionId(conv,agent) → agenthub-<sanitized id>
+    // sessionId 回退：task._sessionId → makeSessionId(conv,agent) → di-agent-<sanitized id>
     buildCommand(task, deps) {
       const { command, userPrompt } = deps;
       const sessionId = task._sessionId
         || (task.conversation_id && task.agent_id
           ? ctx.makeSessionId(task.conversation_id, task.agent_id)
-          : `agenthub-${String(task.agent_id || task.id).replace(/[^a-zA-Z0-9_-]/g, '-')}`);
+          : `di-agent-${String(task.agent_id || task.id).replace(/[^a-zA-Z0-9_-]/g, '-')}`);
       return {
         command,
         args: [
@@ -38,17 +38,17 @@ function createOpenClawCliSpec(ctx) {
       };
     },
 
-    // ensureMcp 对应原 registerOpenClawMcp：spawn `openclaw mcp set agenthub-platform <json>`。
+    // ensureMcp 对应原 registerOpenClawMcp：spawn `openclaw mcp set di-agent-platform <json>`。
     ensureMcp(mcpArgs) {
       const command = 'openclaw';
       if (ctx.commandVersion(command) === null) return;
       const value = JSON.stringify({ command: 'node', args: mcpArgs });
-      const spec = ctx.processSpec(command, ['mcp', 'set', 'agenthub-platform', value]);
+      const spec = ctx.processSpec(command, ['mcp', 'set', 'di-agent-platform', value]);
       const result = ctx.spawnSync(spec.command, spec.args, {
         encoding: 'utf8', timeout: 15000, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
       });
       if (result.status === 0) {
-        ctx.logFlow('info', 'mcp_config.openclaw_configured', { server: 'agenthub-platform' });
+        ctx.logFlow('info', 'mcp_config.openclaw_configured', { server: 'di-agent-platform' });
       } else {
         ctx.logFlow('warn', 'mcp_config.openclaw_failed', { error: ctx.firstLine(result.stderr || result.stdout) });
       }
@@ -57,7 +57,7 @@ function createOpenClawCliSpec(ctx) {
     // skillRoots 与 opencode 共享（保留原 if (cliTool === 'opencode' || cliTool === 'openclaw') 行为）。
     skillRoots(cwd, home) {
       const roots = [];
-      const includeProjectRoots = !ctx.isAgentHubWorkspace(cwd);
+      const includeProjectRoots = !ctx.isDiAgentWorkspace(cwd);
       if (includeProjectRoots) {
         ctx.addRoot(roots, ctx.pathJoin(cwd, '.opencode', 'skills'));
         ctx.addRoot(roots, ctx.pathJoin(cwd, '.openclaw', 'skills'));

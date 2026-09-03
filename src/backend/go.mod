@@ -1,4 +1,4 @@
-module github.com/agent-hub/backend
+module github.com/121dico/Di-Agent/src/backend
 
 go 1.26.3
 

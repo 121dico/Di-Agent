@@ -161,7 +161,7 @@ func skillRoots(cliTool string) []string {
 	wd, _ := os.Getwd()
 	home, _ := os.UserHomeDir()
 	roots := make([]string, 0, 4)
-	includeProjectRoots := !isAgentHubWorkspace(wd)
+	includeProjectRoots := !isDiAgentWorkspace(wd)
 	switch cliTool {
 	case "claude":
 		if includeProjectRoots {
@@ -194,7 +194,7 @@ func skillRoots(cliTool string) []string {
 	return roots
 }
 
-func isAgentHubWorkspace(root string) bool {
+func isDiAgentWorkspace(root string) bool {
 	if root == "" {
 		return false
 	}
@@ -213,7 +213,7 @@ func isAgentHubWorkspace(root string) bool {
 	if err := json.Unmarshal(data, &pkg); err != nil {
 		return false
 	}
-	return pkg.Name == "@agenthub/daemon"
+	return pkg.Name == "di-agent-daemon"
 }
 
 func appendUniqueRoot(roots []string, root string) []string {

@@ -1,4 +1,4 @@
-module github.com/agent-hub/daemon
+module github.com/121dico/Di-Agent/src/daemon
 
 go 1.22
 

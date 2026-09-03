@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/agent-hub/backend/internal/middleware"
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/internal/service"
-	"github.com/agent-hub/backend/pkg/ws"
+	"github.com/121dico/Di-Agent/src/backend/internal/middleware"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/service"
+	"github.com/121dico/Di-Agent/src/backend/pkg/ws"
 	"github.com/gin-gonic/gin"
 	"nhooyr.io/websocket"
 )
@@ -150,7 +150,7 @@ func (h *DaemonHandler) Handle(c *gin.Context) {
 	}
 }
 
-// RegisterHTTP 处理 npx daemon 的一次性 HTTP 注册。
+// RegisterHTTP 处理 daemon 的一次性 HTTP 注册。
 func (h *DaemonHandler) RegisterHTTP(c *gin.Context, machine *model.DaemonMachine) {
 	var req struct {
 		MachineID    string                    `json:"machine_id"`

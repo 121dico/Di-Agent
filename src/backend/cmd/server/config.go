@@ -63,7 +63,7 @@ type Config struct {
 	GitHub struct {
 		Token     string `koanf:"token"`      // PAT（classic，repo 权限）；建议用环境变量 GITHUB_TOKEN 注入
 		Owner     string `koanf:"owner"`      // 仓库归属账号，如 Shallow-W；可用 GITHUB_PAGES_OWNER 覆盖
-		PagesRepo string `koanf:"pages_repo"` // 专用公开仓库名，如 agent-hub-sites；可用 GITHUB_PAGES_REPO 覆盖
+		PagesRepo string `koanf:"pages_repo"` // 专用公开仓库名，如 di-agent-sites；可用 GITHUB_PAGES_REPO 覆盖
 	} `koanf:"github"`
 	RAG struct {
 		Enabled             bool    `koanf:"enabled"`
@@ -88,7 +88,7 @@ type Config struct {
 
 // loadConfig 从 YAML 文件加载配置
 func loadConfig(path string) (*Config, error) {
-	if envPath := os.Getenv("AGENTHUB_CONFIG"); envPath != "" {
+	if envPath := readDiAgentEnv("CONFIG"); envPath != "" {
 		path = envPath
 	}
 	// Local credentials live beside config.yaml in a git-ignored file. Values
@@ -238,24 +238,24 @@ func (c *Config) applyRAGDefaults(hasEnabled bool, hasRerankerEnabled ...bool) {
 		c.RAG.RerankerTimeoutSecs = 30
 	}
 
-	if value, ok := os.LookupEnv("AGENTHUB_RAG_ENABLED"); ok {
+	if value, ok := lookupDiAgentEnv("RAG_ENABLED"); ok {
 		c.RAG.Enabled = !isFalsy(value)
 	}
-	c.RAG.OllamaURL = firstNonEmpty(os.Getenv("AGENTHUB_RAG_OLLAMA_URL"), c.RAG.OllamaURL)
-	c.RAG.Model = firstNonEmpty(os.Getenv("AGENTHUB_RAG_MODEL"), c.RAG.Model)
-	applyPositiveIntEnv("AGENTHUB_RAG_TOP_K", &c.RAG.TopK)
-	applyPositiveIntEnv("AGENTHUB_RAG_CANDIDATE_TOP_N", &c.RAG.CandidateTopN)
-	applyPositiveIntEnv("AGENTHUB_RAG_BATCH_SIZE", &c.RAG.BatchSize)
-	if value, ok := os.LookupEnv("AGENTHUB_RAG_RERANKER_ENABLED"); ok {
+	c.RAG.OllamaURL = firstNonEmpty(readDiAgentEnv("RAG_OLLAMA_URL"), c.RAG.OllamaURL)
+	c.RAG.Model = firstNonEmpty(readDiAgentEnv("RAG_MODEL"), c.RAG.Model)
+	applyPositiveIntEnv("RAG_TOP_K", &c.RAG.TopK)
+	applyPositiveIntEnv("RAG_CANDIDATE_TOP_N", &c.RAG.CandidateTopN)
+	applyPositiveIntEnv("RAG_BATCH_SIZE", &c.RAG.BatchSize)
+	if value, ok := lookupDiAgentEnv("RAG_RERANKER_ENABLED"); ok {
 		c.RAG.RerankerEnabled = !isFalsy(value)
 	}
-	c.RAG.RerankerURL = firstNonEmpty(os.Getenv("AGENTHUB_RAG_RERANKER_URL"), c.RAG.RerankerURL)
-	c.RAG.RerankerModel = firstNonEmpty(os.Getenv("AGENTHUB_RAG_RERANKER_MODEL"), c.RAG.RerankerModel)
-	applyPositiveIntEnv("AGENTHUB_RAG_RERANKER_TIMEOUT_SECONDS", &c.RAG.RerankerTimeoutSecs)
+	c.RAG.RerankerURL = firstNonEmpty(readDiAgentEnv("RAG_RERANKER_URL"), c.RAG.RerankerURL)
+	c.RAG.RerankerModel = firstNonEmpty(readDiAgentEnv("RAG_RERANKER_MODEL"), c.RAG.RerankerModel)
+	applyPositiveIntEnv("RAG_RERANKER_TIMEOUT_SECONDS", &c.RAG.RerankerTimeoutSecs)
 }
 
-func applyPositiveIntEnv(name string, target *int) {
-	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+func applyPositiveIntEnv(suffix string, target *int) {
+	if value := strings.TrimSpace(readDiAgentEnv(suffix)); value != "" {
 		if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
 			*target = parsed
 		}

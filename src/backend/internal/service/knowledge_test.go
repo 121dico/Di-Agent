@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agent-hub/backend/internal/docextract"
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/docextract"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 func TestParseKnowledgeRefs(t *testing.T) {
@@ -89,7 +89,7 @@ func TestExtractKnowledgePreviewUsesDocExtractForTextAndOOXML(t *testing.T) {
 		{
 			name:     "markdown",
 			filename: "guide.md",
-			content:  []byte("# AgentHub\n\n知识库可以帮助 Agent。"),
+			content:  []byte("# Di Agent\n\n知识库可以帮助 Agent。"),
 			want:     "知识库可以帮助 Agent",
 		},
 		{

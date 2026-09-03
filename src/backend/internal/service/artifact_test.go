@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/internal/repository"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/repository"
 )
 
 // fakeArtifactRepo 实现 ArtifactRepoForSvc + OrchArtifactRepo，用于隔离 service 鉴权与版本逻辑。

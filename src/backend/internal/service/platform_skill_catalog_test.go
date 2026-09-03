@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 // fakePlatformSkillCatalogStore is a stand-in for the catalog-backed

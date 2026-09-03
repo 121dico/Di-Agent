@@ -3,11 +3,11 @@
 ## Monorepo 整体布局
 
 ```
-agent-hub/
+di-agent/
 ├── CLAUDE.md              # Claude Code 指令文件（入口）
 ├── doc/                   # 文档
 │   ├── 需求文档.md
-│   ├── AgentHub-_多Agent协作平台设计.pdf
+│   ├── Di Agent-_多Agent协作平台设计.pdf
 │   ├── TASKLIST.md              # 任务索引
 │   ├── architecture/            # 稳定层：系统架构
 │   ├── conventions/             # 规范层：开发约定

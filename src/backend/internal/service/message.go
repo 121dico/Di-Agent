@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/internal/port"
-	"github.com/agent-hub/backend/pkg/ws"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/port"
+	"github.com/121dico/Di-Agent/src/backend/pkg/ws"
 	"github.com/google/uuid"
 )
 
@@ -109,26 +109,26 @@ func hasCodeArtifact(artifacts []model.Artifact) bool {
 	return false
 }
 
-// extractCardsFromContent 从 agent 回复文本里提取所有 ```agenthub {"cards":[...]} ```
+// extractCardsFromContent 从 agent 回复文本里提取所有 ```di_agent {"cards":[...]} ```
 // fenced block，合并所有 block 的 cards 为单一数组。同时生成 strippedContent：每个
 // block 替换为 N 个 `[CARD:<id>]` 占位符（N = block 内卡数，按数组顺序），保留卡片
 // 在正文中的位置。找不到 id 字段的卡用自动 UUID。
 //
 // 行为细则：
-//   - 只识别 fenced block（```agenthub 开启，``` 闭合），不识别整段 content 为 JSON
+//   - 只识别 fenced block（```di_agent 开启，``` 闭合），不识别整段 content 为 JSON
 //     （避免 agent 整段 JSON 回复被误解析）
 //   - 多个 fenced block 全部识别并合并
 //   - block 内 JSON 解析失败：静默丢弃该 block，原文中该 block（含 fence 行）原样保留
 //   - block 无 cards 字段或 cards 不是数组：静默丢弃，原文中该 block 原样保留
 //
-// 协议契约：fence 标记用 ```agenthub 而非 ```json，避免与普通 JSON 代码块歧义。
+// 协议契约：fence 标记用 ```di_agent 而非 ```json，避免与普通 JSON 代码块歧义。
 // 与 block_card_extractor.go / context_agent_config.go 三方一致。
 func extractCardsFromContent(content string) (cards []map[string]any, strippedContent string, cardsJSON string) {
 	lines := strings.Split(content, "\n")
 
 	// 第一遍：识别所有有效 block 的 (startLine, endLine, cards) 映射，便于第二遍精确替换。
 	type blockMatch struct {
-		startLine int // ```agenthub 所在行号
+		startLine int // ```di_agent 所在行号
 		endLine   int // ``` 闭合所在行号
 		cards     []map[string]any
 	}
@@ -141,7 +141,7 @@ func extractCardsFromContent(content string) (cards []map[string]any, strippedCo
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if !inBlock {
-			if trimmed == fenceOpenMarker {
+			if isCardFenceOpenMarker(trimmed) {
 				inBlock = true
 				blockStart = i
 				jsonBuf.Reset()
@@ -1325,14 +1325,14 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 		return nil, fmt.Errorf("daemon task failed: %s", result.Error)
 	}
 
-	// 提取 agent 在正文 ```agenthub {"cards":[...]}``` block 里写的卡片，同时把 block 从
+	// 提取 agent 在正文 ```di_agent {"cards":[...]}``` block 里写的卡片，同时把 block 从
 	// 用户可见正文里剥离掉（替换为 [CARD:<id>] 占位符）。
 	agentCards, strippedContent, _ := extractCardsFromContent(result.Result)
 
 	// 合并 daemon emitted cards：
 	//   1) result.Cards —— daemon 主进程通过 WS task.complete 上行的卡片
 	//   2) taskCardQueue 里 drain 出的 subprocess 卡片
-	//   3) agentCards —— agent 在回复正文写的 ```agenthub{"cards":[...]}``` block
+	//   3) agentCards —— agent 在回复正文写的 ```di_agent{"cards":[...]}``` block
 	allCards := append([]map[string]any{}, ValidateCards(result.Cards)...)
 	if s.taskCardQueue != nil {
 		if subprocessCards := s.taskCardQueue.Drain(task.ID); len(subprocessCards) > 0 {
@@ -1468,7 +1468,7 @@ func (s *MessageService) asyncAgentReply(convID, userID, agentID, content string
 }
 
 func (s *MessageService) postAgentFailure(ctx context.Context, convID, userID, content string, replyTo *string) {
-	meta, _ := json.Marshal(map[string]string{"agent_name": "AgentHub"})
+	meta, _ := json.Marshal(map[string]string{"agent_name": "Di Agent"})
 	msg, err := s.msgRepo.Create(ctx, convID, "assistant", content, string(meta), nil, replyTo, nil, nil)
 	if err != nil {
 		slog.Warn("create agent failure message failed", "convID", convID, "error", err)

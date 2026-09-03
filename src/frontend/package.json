@@ -1,5 +1,5 @@
 {
-  "name": "agent-hub-frontend",
+  "name": "di-agent-frontend",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -62,8 +62,8 @@
     "wait-on": "^9.0.10"
   },
   "build": {
-    "appId": "com.agenthub.desktop",
-    "productName": "AgentHub",
+    "appId": "com.diagent.desktop",
+    "productName": "Di Agent",
     "directories": {
       "output": "../../.tmp/electron-release"
     },

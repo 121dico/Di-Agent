@@ -111,9 +111,9 @@
 **[D2] 提取层 — daemon 层（已定，含关键架构修正）**
 - Context：产物准确性 vs 改动复杂度。
 - Decision：在 daemon 层提取产物（贴近 CLI 原始输出，能拿文件创建/工具调用等结构化信号），而非 backend 正则。
-- ⚠️ **架构修正（已核实）**：活路径是 **JS daemon `src/daemon-npm/bin/agenthub-daemon.js`**，它直接 spawn Claude Code/Codex CLI（[:152-195](../../../src/daemon-npm/bin/agenthub-daemon.js#L152)）。Go 的 `src/daemon/adapter/adapter.go` 里那个 `Artifact` struct + `StreamChunk.Artifact` 字段是**死代码/遗留脚手架，全库无一处填充**——不要往那儿写，否则白做。
-- 真正 hook 点：JS daemon 拿到 CLI 结果文本处（[:818-826](../../../src/daemon-npm/bin/agenthub-daemon.js#L818) `runProcess` 后、`parseOpenClawOutput`），在回传 assistant 消息给 backend 前解析产物。
-- 提升准确度的路子：Claude Code 现在用 `--output-last-message`（只拿最终文本）。若改/并用 `--output-format stream-json`（[:726](../../../src/daemon-npm/bin/agenthub-daemon.js#L726) 已有 `--output-format` 用法），可拿到 `tool_use`（Write/Edit 文件创建）等结构化事件 → 文件类产物提取更准。
+- ⚠️ **架构修正（已核实）**：活路径是 **JS daemon `src/daemon-npm/bin/di-agent-daemon.js`**，它直接 spawn Claude Code/Codex CLI（[:152-195](../../../src/daemon-npm/bin/di-agent-daemon.js#L152)）。Go 的 `src/daemon/adapter/adapter.go` 里那个 `Artifact` struct + `StreamChunk.Artifact` 字段是**死代码/遗留脚手架，全库无一处填充**——不要往那儿写，否则白做。
+- 真正 hook 点：JS daemon 拿到 CLI 结果文本处（[:818-826](../../../src/daemon-npm/bin/di-agent-daemon.js#L818) `runProcess` 后、`parseOpenClawOutput`），在回传 assistant 消息给 backend 前解析产物。
+- 提升准确度的路子：Claude Code 现在用 `--output-last-message`（只拿最终文本）。若改/并用 `--output-format stream-json`（[:726](../../../src/daemon-npm/bin/di-agent-daemon.js#L726) 已有 `--output-format` 用法），可拿到 `tool_use`（Write/Edit 文件创建）等结构化事件 → 文件类产物提取更准。
 - Consequences：提取放 JS daemon；需打通 daemon→backend 产物字段（随 assistant 消息上行，落到 D1 的 artifacts 表）。Go adapter 不动。
 
 ## Refined Task List (A0–A10, 修正版)
@@ -193,7 +193,7 @@ A1+A2 已落地。daemon(JS) 产出的 artifact JSON、backend Go model、以及
 | `version` | int | 版本，默认 1（仅后端持久化，daemon 不传） | 后端补 | 后端补 |
 
 落地位置：
-- **daemon 解析**：`src/daemon-npm/bin/agenthub-daemon.js` 的 `parseArtifacts(text)`，在 `task.complete` 上行 payload 加 `artifacts` 数组（围栏代码块→code/webpage、裸 URL→webpage）。
+- **daemon 解析**：`src/daemon-npm/bin/di-agent-daemon.js` 的 `parseArtifacts(text)`，在 `task.complete` 上行 payload 加 `artifacts` 数组（围栏代码块→code/webpage、裸 URL→webpage）。
 - **WS 契约**：`pkg/ws/daemon_hub.go` 的 `TaskResult.Artifacts []ArtifactResult`；handler `handleTaskComplete` 接收并透传。
 - **持久化**：独立 `artifacts` 表（migration `024_create_artifacts.sql`），`model.Artifact` + `repository/ArtifactRepo`。assistant 消息落库后由 `MessageService.createAgentReply` / `OrchestratorService.persistArtifacts` 调用 `msgRepo.SaveArtifacts` 写入。
 - **查询回传**：`MessageRepo.fillArtifacts` 按 message_id 批量加载，挂到 `Message.Artifacts`（`db:"-"`），随消息 API/WS 自动返回。`artifacts_json` 未改动，Agent 名字显示零回归。

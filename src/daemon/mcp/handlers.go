@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// APIClient calls the AgentHub backend REST API.
+// APIClient calls the Di Agent backend REST API.
 type APIClient struct {
 	baseURL    string
 	token      string

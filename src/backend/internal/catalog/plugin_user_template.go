@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 // userTemplatePlugin implements DomainPlugin for the user_template domain.

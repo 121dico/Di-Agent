@@ -2,7 +2,7 @@
 
 ## Goal
 
-对照 `doc/AgentHub-_多Agent协作平台设计.pdf` 中核心功能 1-4，在暂不考虑桌面客户端/移动端的前提下，补齐 Web UI 版自建 Agent 的 skill 分配与工具集分配闭环，并做端到端验证。
+对照 `doc/Di Agent-_多Agent协作平台设计.pdf` 中核心功能 1-4，在暂不考虑桌面客户端/移动端的前提下，补齐 Web UI 版自建 Agent 的 skill 分配与工具集分配闭环，并做端到端验证。
 
 ## PDF Scope Notes
 

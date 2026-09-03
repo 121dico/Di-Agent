@@ -21,7 +21,7 @@ package service
 import (
 	"encoding/json"
 
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 // StreamingState 是 reducer 累积的状态，与 frontend StreamingState 对齐。
@@ -65,7 +65,7 @@ func InitialStreamingState() StreamingState {
 //   - tool.call.end：no-op（block 边界，不累积）
 //   - tool_result / tool.result：总是新 block，记录 is_error 标记
 //     （注意：与早期版本不同，is_error=true 不再切 Status='error'——agent 在
-//     工具失败后通常仍会输出总结文本 + agenthub 卡片，提前切 error 会触发
+//     工具失败后通常仍会输出总结文本 + di_agent 卡片，提前切 error 会触发
 //     终态保护丢弃后续 text.delta / turn_end 事件，导致消息截断。真正的流级
 //     失败由独立的 error 事件表达，与 TS 版前端 reducer 严格对齐。）
 //   - error：总是新 block，Status='error'

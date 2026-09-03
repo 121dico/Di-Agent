@@ -42,7 +42,7 @@ doc/
 ├── task/                      # 任务详情（与 TASKLIST.md 配合）
 ├── 需求文档.md
 ├── TASKLIST.md
-└── AgentHub-_多Agent协作平台设计.pdf
+└── Di Agent-_多Agent协作平台设计.pdf
 ```
 
 ---

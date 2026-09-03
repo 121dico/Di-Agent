@@ -40,7 +40,7 @@
 - 统一派发：`src/backend/internal/service/dispatcher.go`
 - 用户 WebSocket：`src/backend/pkg/ws/hub.go`
 - Daemon WebSocket：`src/backend/pkg/ws/daemon_hub.go`、`src/backend/internal/handler/daemon.go`
-- Daemon 运行时：`src/daemon-npm/bin/agenthub-daemon.js`
+- Daemon 运行时：`src/daemon-npm/bin/di-agent-daemon.js`
 - CLI Adapter：`src/daemon-npm/cli/`
 - 数据库迁移：`src/backend/migrations/`
 - Redis：`src/backend/internal/repository/redis_msg.go`

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 // ToolDefinitionRepo 定义 ToolDefinitionService 需要的仓库接口。

@@ -6,7 +6,7 @@ package service
 import (
 	"testing"
 
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 func TestStreamingBuffer_PushAndGetState(t *testing.T) {

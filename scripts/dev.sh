@@ -16,14 +16,31 @@ echo "启动 PostgreSQL..."
 docker compose up -d postgres
 
 echo "等待数据库就绪..."
-until docker compose exec -T postgres pg_isready -U agenthub -q; do
+DB_USER="${DI_AGENT_DB_USER:-di_agent}"
+DB_PASSWORD="${DI_AGENT_DB_PASSWORD:-di_agent}"
+DB_NAME="${DI_AGENT_DB_NAME:-di_agent}"
+until docker compose exec -T postgres pg_isready -U "$DB_USER" -q || \
+  docker compose exec -T postgres pg_isready -U agenthub -q; do # [brand-compat]
   sleep 1
 done
+
+# PostgreSQL 初始化变量只在空卷首次生效；已有旧卷继续使用其物理身份。
+if ! docker compose exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -Atqc 'SELECT 1' >/dev/null 2>&1; then
+  if docker compose exec -T postgres psql -U agenthub -d agenthub -Atqc 'SELECT 1' >/dev/null 2>&1; then # [brand-compat]
+    DB_USER="agenthub" # [brand-compat]
+    DB_PASSWORD="agenthub" # [brand-compat]
+    DB_NAME="agenthub" # [brand-compat]
+    echo "检测到升级前的 PostgreSQL 数据卷，保留现有物理数据库身份"
+  else
+    echo "数据库身份不可用：既未找到 canonical 数据库，也未找到可兼容的旧数据卷" >&2
+    exit 1
+  fi
+fi
 echo "数据库就绪"
 
 echo "运行迁移..."
 for f in src/backend/migrations/*.sql; do
-  PGPASSWORD=agenthub psql -h localhost -U agenthub -d agenthub -f "$f"
+  PGPASSWORD="$DB_PASSWORD" psql -h localhost -U "$DB_USER" -d "$DB_NAME" -f "$f"
 done
 
 echo "启动后端服务..."

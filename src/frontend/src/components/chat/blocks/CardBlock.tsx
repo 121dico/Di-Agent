@@ -20,7 +20,7 @@ interface CardBlockProps {
  * 与 MessageBubble 顶层 `splitByCardPlaceholder` + 末尾 unmatchedCards 兜底的差异：
  *   - 老路径（content placeholder）：依赖 agent 在正文里写 `[CARD:id]` 占位符，
  *     cards_json 单独存结构化数据；前端按占位符拆段。双表示，容易 desync。
- *   - 新路径（card block）：fenced ```agenthub{"cards":[...]}``` block 在 backend finalize
+ *   - 新路径（card block）：fenced ```di_agent{"cards":[...]}``` block 在 backend finalize
  *     时被 SplitTextBlocksByCardFences 切分成独立 card block，与 text/thinking 平级。
  *     单一真源 = blocks_json，无 desync。
  *

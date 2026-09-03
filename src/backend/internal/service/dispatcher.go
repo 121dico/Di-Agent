@@ -8,9 +8,9 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/internal/port"
-	"github.com/agent-hub/backend/pkg/ws"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/port"
+	"github.com/121dico/Di-Agent/src/backend/pkg/ws"
 )
 
 // ErrDaemonNotConnected 表示 daemon 未通过 WS 连接导致派发失败。
@@ -350,7 +350,7 @@ func (d *Dispatcher) streamingDeps() StreamingPipelineDeps {
 // 单聊（createAgentReply）与群聊（Dispatcher）共用此包级函数。
 //
 // 切分：取出 blocks 后调用 SplitTextBlocksByCardFences，把 text block 里的
-// ```agenthub {"cards":[...]}``` fenced block 提升为独立 card kind block。这样
+// ```di_agent {"cards":[...]}``` fenced block 提升为独立 card kind block。这样
 // 卡片成为 first-class block（与 text/thinking 平级），前端 BlockRegistry 直接渲染，
 // 无需依赖 content placeholder + cards_json 的双表示路径。
 func snapshotBlocksJSONFromBuffer(buf *StreamingBuffer, taskID string) string {

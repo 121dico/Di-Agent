@@ -10,7 +10,7 @@ const {
   commandForTask,
   conversationSessions,
   daemonConn,
-  ensureAgentHubCodexMcpConfig,
+  ensureDiAgentCodexMcpConfig,
   ensureGitRepoForTask,
   executeTaskOnce,
   ensureOpenCodeMcpConfig,
@@ -22,7 +22,7 @@ const {
   resolveAgentTimeoutMs,
   runtimeAgentKey,
   runningAgents,
-} = require('./agenthub-daemon.js');
+} = require('./di-agent-daemon.js');
 
 test('governed report hooks are built in for existing agents', async () => {
   const names = MCP_TOOLS.map((tool) => tool.name);
@@ -102,7 +102,7 @@ test('GitHub Skill source accepts only a public HTTPS GitHub repository', () => 
 });
 
 test('Skill deployment validates manifest, is atomic, and never overwrites', () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agenthub-skill-install-'));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'di-agent-skill-install-'));
   const sourceDir = path.join(tempDir, 'checkout', 'ask-matt');
   const installRoot = path.join(tempDir, 'installed');
   fs.mkdirSync(sourceDir, { recursive: true });
@@ -224,9 +224,9 @@ test('commandForTask runs opencode with conversation session when available', ()
   assert.equal(spec.resultFormat, 'opencode-json');
   assert.equal(spec.persistSessionKey, 'agent-1:conv-1');
   assert.deepEqual(spec.env, {
-    AGENTHUB_CONVERSATION_ID: 'conv-1',
-    AGENTHUB_AGENT_ID: 'agent-1',
-    AGENTHUB_TASK_ID: 'task-1',
+    DI_AGENT_CONVERSATION_ID: 'conv-1',
+    DI_AGENT_AGENT_ID: 'agent-1',
+    DI_AGENT_TASK_ID: 'task-1',
   });
   assert.deepEqual(spec.args.slice(0, 7), [
     'run',
@@ -258,9 +258,9 @@ test('commandForTask starts opencode without session on first conversation turn'
 });
 
 test('commandForTask runs codex with non-interactive MCP-capable execution', () => {
-  const tempCodexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'agenthub-codex-home-'));
-  const originalCodexHome = process.env.AGENTHUB_CODEX_HOME;
-  process.env.AGENTHUB_CODEX_HOME = tempCodexHome;
+  const tempCodexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'di-agent-codex-home-'));
+  const originalCodexHome = process.env.DI_AGENT_CODEX_HOME;
+  process.env.DI_AGENT_CODEX_HOME = tempCodexHome;
   try {
     const spec = commandForTask({
       id: 'codex-task-1',
@@ -276,35 +276,40 @@ test('commandForTask runs codex with non-interactive MCP-capable execution', () 
     assert.equal(spec.args.includes('--ephemeral'), true);
     assert.equal(spec.args.includes('--sandbox'), false);
     assert.equal(spec.args.includes('read-only'), false);
-    assert.deepEqual(spec.env, {
-      CODEX_HOME: tempCodexHome,
-      AGENTHUB_CONVERSATION_ID: 'conv-1',
-      AGENTHUB_USER_ID: 'user-1',
-      AGENTHUB_AGENT_ID: 'agent-1',
-      AGENTHUB_TASK_ID: 'codex-task-1',
-    });
+    assert.equal(spec.env.CODEX_HOME, tempCodexHome);
+    assert.equal(spec.env.DI_AGENT_CONVERSATION_ID, 'conv-1');
+    assert.equal(spec.env.DI_AGENT_USER_ID, 'user-1');
+    assert.equal(spec.env.DI_AGENT_AGENT_ID, 'agent-1');
+    assert.equal(spec.env.DI_AGENT_TASK_ID, 'codex-task-1');
+    const proxyValues = ['HTTPS_PROXY', 'HTTP_PROXY', 'https_proxy', 'http_proxy']
+      .map((key) => spec.env[key])
+      .filter(Boolean);
+    if (proxyValues.length > 0) {
+      assert.equal(proxyValues.length, 4);
+      assert.equal(new Set(proxyValues).size, 1);
+    }
   } finally {
     if (originalCodexHome === undefined) {
-      delete process.env.AGENTHUB_CODEX_HOME;
+      delete process.env.DI_AGENT_CODEX_HOME;
     } else {
-      process.env.AGENTHUB_CODEX_HOME = originalCodexHome;
+      process.env.DI_AGENT_CODEX_HOME = originalCodexHome;
     }
     fs.rmSync(tempCodexHome, { recursive: true, force: true });
   }
 });
 
-test('ensureAgentHubCodexMcpConfig writes task context and auto-approved platform tools', () => {
-  const tempCodexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'agenthub-codex-home-'));
+test('ensureDiAgentCodexMcpConfig writes task context and auto-approved platform tools', () => {
+  const tempCodexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'di-agent-codex-home-'));
   const original = {
     serverURL: daemonConn.serverURL,
     apiKey: daemonConn.apiKey,
     daemonToken: daemonConn.daemonToken,
   };
-  daemonConn.serverURL = 'http://agenthub.test';
+  daemonConn.serverURL = 'http://di-agent.test';
   daemonConn.apiKey = 'api-key';
   daemonConn.daemonToken = 'daemon-token';
   try {
-    const configFile = ensureAgentHubCodexMcpConfig(
+    const configFile = ensureDiAgentCodexMcpConfig(
       tempCodexHome,
       'conv-1',
       'user-1',
@@ -312,7 +317,7 @@ test('ensureAgentHubCodexMcpConfig writes task context and auto-approved platfor
       'task-1',
     );
     const config = fs.readFileSync(configFile, 'utf8');
-    assert.match(config, /\[mcp_servers\.agenthub-platform\]/);
+    assert.match(config, /\[mcp_servers\.di-agent-platform\]/);
     assert.match(config, /--conversation-id", "conv-1"/);
     assert.match(config, /--user-id", "user-1"/);
     assert.match(config, /--agent-id", "agent-1"/);
@@ -326,6 +331,25 @@ test('ensureAgentHubCodexMcpConfig writes task context and auto-approved platfor
   }
 });
 
+test('ensureDiAgentCodexMcpConfig removes the retired MCP section during upgrade', () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'di-agent-codex-mcp-migration-'));
+  const original = { ...daemonConn };
+  daemonConn.serverURL = 'http://di-agent.test';
+  daemonConn.apiKey = 'api-key';
+  try {
+    const configFile = path.join(tempRoot, 'config.toml');
+    fs.writeFileSync(configFile, '[mcp_servers.agenthub-platform]\ncommand = "old"\n\n[notice]\nhide = true\n'); // [brand-compat]
+    ensureDiAgentCodexMcpConfig(tempRoot, 'conv-1', 'user-1', 'agent-1', 'task-1');
+    const config = fs.readFileSync(configFile, 'utf8');
+    assert.doesNotMatch(config, /mcp_servers\.agenthub-platform/); // [brand-compat]
+    assert.match(config, /\[mcp_servers\.di-agent-platform\]/);
+    assert.match(config, /\[notice\]/);
+  } finally {
+    Object.assign(daemonConn, original);
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('parseOpenCodeOutput tests removed — superseded by cli/__tests__/opencode.test.js (Switch 7)', () => {
   // parseOpenCodeOutput was deleted from daemon.js; its logic lives in
   // OpenCodeCliSpec.parseResult, fully covered by cli/__tests__/opencode.test.js
@@ -333,11 +357,11 @@ test('parseOpenCodeOutput tests removed — superseded by cli/__tests__/opencode
   assert.ok(true);
 });
 
-test('ensureOpenCodeMcpConfig preserves existing config and writes AgentHub server', () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agenthub-opencode-config-'));
+test('ensureOpenCodeMcpConfig preserves existing config and writes Di Agent server', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'di-agent-opencode-config-'));
   const configPath = path.join(tempDir, 'opencode.json');
-  const originalConfigPath = process.env.AGENTHUB_OPENCODE_CONFIG;
-  process.env.AGENTHUB_OPENCODE_CONFIG = configPath;
+  const originalConfigPath = process.env.DI_AGENT_OPENCODE_CONFIG;
+  process.env.DI_AGENT_OPENCODE_CONFIG = configPath;
   try {
     fs.writeFileSync(configPath, JSON.stringify({
       $schema: 'https://opencode.ai/config.json',
@@ -351,18 +375,42 @@ test('ensureOpenCodeMcpConfig preserves existing config and writes AgentHub serv
     assert.equal(writtenPath, configPath);
     assert.equal(config.model, 'provider/model');
     assert.equal(config.provider.example.options.apiKey, 'secret');
-    assert.deepEqual(config.mcp['agenthub-platform'], {
+    assert.deepEqual(config.mcp['di-agent-platform'], {
       type: 'local',
       command: ['node', 'daemon.js', '--mcp'],
       enabled: true,
     });
   } finally {
     if (originalConfigPath === undefined) {
-      delete process.env.AGENTHUB_OPENCODE_CONFIG;
+      delete process.env.DI_AGENT_OPENCODE_CONFIG;
     } else {
-      process.env.AGENTHUB_OPENCODE_CONFIG = originalConfigPath;
+      process.env.DI_AGENT_OPENCODE_CONFIG = originalConfigPath;
     }
     fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('ensureOpenCodeMcpConfig removes the retired MCP server during upgrade', () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'di-agent-opencode-migration-'));
+  const previous = process.env.DI_AGENT_OPENCODE_CONFIG;
+  try {
+    const configPath = path.join(tempRoot, 'opencode.json');
+    process.env.DI_AGENT_OPENCODE_CONFIG = configPath;
+    fs.writeFileSync(configPath, JSON.stringify({
+      mcp: {
+        'agenthub-platform': { type: 'local', command: ['node', 'old.js'] }, // [brand-compat]
+        keep: { type: 'remote', url: 'https://example.test' },
+      },
+    }));
+    ensureOpenCodeMcpConfig(['node', 'daemon.js', '--mcp']);
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    assert.equal(Object.hasOwn(config.mcp, 'agenthub-platform'), false); // [brand-compat]
+    assert.ok(config.mcp['di-agent-platform']);
+    assert.ok(config.mcp.keep);
+  } finally {
+    if (previous === undefined) delete process.env.DI_AGENT_OPENCODE_CONFIG;
+    else process.env.DI_AGENT_OPENCODE_CONFIG = previous;
+    fs.rmSync(tempRoot, { recursive: true, force: true });
   }
 });
 
@@ -378,7 +426,7 @@ test('executeTaskOnce ignores duplicate completed task ids', async () => {
 });
 
 test('ensureGitRepoForTask auto-inits non-git workdir with baseline commit', () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agenthub-git-init-'));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'di-agent-git-init-'));
   try {
     // 写一个文件，模拟 agent 修改前的 workdir 内容
     fs.writeFileSync(path.join(tempDir, 'hello.txt'), 'hello\n');
@@ -398,7 +446,7 @@ test('ensureGitRepoForTask auto-inits non-git workdir with baseline commit', () 
 });
 
 test('ensureGitRepoForTask is no-op on existing git repo', () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agenthub-git-skip-'));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'di-agent-git-skip-'));
   try {
     execFileSync('git', ['-C', tempDir, 'init'], { encoding: 'utf8' });
     execFileSync('git', ['-C', tempDir, 'config', 'user.email', 'test@example.com'], { encoding: 'utf8' });

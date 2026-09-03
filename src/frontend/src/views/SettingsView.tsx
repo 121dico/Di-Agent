@@ -49,8 +49,8 @@ const SettingsView: React.FC = () => {
   const navigate = useNavigate();
 
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
-  const [notifySound, setNotifySound] = useState(() => getInitialBool('agenthub_notify_sound', true));
-  const [notifyDesktop, setNotifyDesktop] = useState(() => getInitialBool('agenthub_notify_desktop', false));
+  const [notifySound, setNotifySound] = useState(() => getInitialBool('di_agent_notify_sound', true));
+  const [notifyDesktop, setNotifyDesktop] = useState(() => getInitialBool('di_agent_notify_desktop', false));
 
   const handleLogout = () => {
     logout();
@@ -73,7 +73,7 @@ const SettingsView: React.FC = () => {
 
   const handleNotifySound = useCallback((checked: boolean) => {
     setNotifySound(checked);
-    localStorage.setItem('agenthub_notify_sound', String(checked));
+    localStorage.setItem('di_agent_notify_sound', String(checked));
   }, []);
 
   const handleNotifyDesktop = useCallback(async (checked: boolean) => {
@@ -81,12 +81,12 @@ const SettingsView: React.FC = () => {
       const perm = await Notification.requestPermission();
       if (perm !== 'granted') {
         setNotifyDesktop(false);
-        localStorage.setItem('agenthub_notify_desktop', 'false');
+        localStorage.setItem('di_agent_notify_desktop', 'false');
         return;
       }
     }
     setNotifyDesktop(checked);
-    localStorage.setItem('agenthub_notify_desktop', String(checked));
+    localStorage.setItem('di_agent_notify_desktop', String(checked));
   }, []);
 
   if (!user) {
@@ -157,7 +157,7 @@ const SettingsView: React.FC = () => {
               <div className={styles.settingRow}>
                 <div className={styles.settingCopy}>
                   <span className={styles.settingLabel}>主题</span>
-                  <span className={styles.settingHint}>控制 AgentHub 的整体显示模式</span>
+                  <span className={styles.settingHint}>控制 Di Agent 的整体显示模式</span>
                 </div>
                 <Segmented
                   className={styles.themeSegment}
@@ -206,7 +206,7 @@ const SettingsView: React.FC = () => {
               </div>
               <div className={styles.aboutItem}>
                 <span className={styles.aboutLabel}>应用名称</span>
-                <span className={styles.aboutValue}>AgentHub</span>
+                <span className={styles.aboutValue}>Di Agent</span>
               </div>
               <div className={styles.aboutItem}>
                 <span className={styles.aboutLabel}>版本</span>

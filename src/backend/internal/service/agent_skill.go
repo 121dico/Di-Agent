@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	daemonOpenPathTool     = "__agenthub_open_path__"
-	daemonInstallSkillTool = "__agenthub_install_skill__"
+	daemonOpenPathTool     = "__di_agent_open_path__"
+	daemonInstallSkillTool = "__di_agent_install_skill__"
 )
 
 // DiscoveredSkill 兼容旧 daemon 的字符串能力，也承载真实 SKILL.md 内容。

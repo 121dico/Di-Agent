@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/agent-hub/daemon/scanner"
+	"github.com/121dico/Di-Agent/src/daemon/scanner"
 	"nhooyr.io/websocket"
 )
 

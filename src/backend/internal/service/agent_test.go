@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/pkg/ws"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/pkg/ws"
 )
 
 type fakeAgentRepo struct {
@@ -307,7 +307,7 @@ func TestCreateDaemonMachineReturnsMachineKey(t *testing.T) {
 
 func TestGetMachineConnectCommandUsesConfiguredServerURLForDownloadAndDaemon(t *testing.T) {
 	const (
-		serverURL = "http://agenthub.internal:8080"
+		serverURL = "http://di-agent.internal:8080"
 		machineID = "machine-1"
 		userID    = "user-1"
 	)
@@ -319,10 +319,9 @@ func TestGetMachineConnectCommandUsesConfiguredServerURLForDownloadAndDaemon(t *
 	if err != nil {
 		t.Fatalf("get machine connect command failed: %v", err)
 	}
-	expectedCommand := "npx @hust-agenthub/daemon@0.3.0 --server-url " + serverURL + " --api-key " + apiKey
 	expectedInstallCommand := "curl -fsSL " + serverURL + "/downloads/install.sh | bash -s -- --server-url " + serverURL + " --api-key " + apiKey
-	if command != expectedCommand {
-		t.Fatal("daemon command did not use the configured server URL")
+	if command != expectedInstallCommand {
+		t.Fatal("canonical command must use the hosted installer instead of an unpublished package")
 	}
 	if installCommand != expectedInstallCommand {
 		t.Fatal("install command did not use the configured server URL for both download and daemon connection")

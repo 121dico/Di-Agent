@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 // mentionRe matches @AgentName patterns, supporting Unicode/CJK characters.

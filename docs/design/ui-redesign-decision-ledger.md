@@ -49,7 +49,7 @@
 - Iconography: Lucide-like neutral line icons with a normalized viewport and roughly 1.75 px stroke; replace Ant Design icons progressively inside the redesign scope after the design-system gate authorizes dependencies.
 - Tabs and simple choices: frameless labels with a short underline or compact state marker for selection; bordered pills are not the default.
 - Page header: frameless title/location content aligned to the page grid; actions appear as a small floating control cluster rather than a full-width framed bar.
-- User-facing product name: `Di Agent` everywhere in the redesigned UI; `AgentHub` remains an internal/compatibility service name only.
+- User-facing product name: `Di Agent` everywhere in the redesigned UI; internal names use the canonical form for their domain (`diAgent`, `di-agent`, `di_agent`, or `DI_AGENT_`).
 - Brand signature: a minimal geometric product mark paired with a `Di Agent` wordmark; use the mark alone in the collapsed rail/favicon/status contexts. Exact geometry awaits visual-option approval and must not imitate Apple/OpenAI marks.
 - Browser framing: responsive hybrid. At 1440 px and wider, retain roughly 12–16 px of warm-neutral outer canvas and a lightly rounded inner app frame; progressively remove the inset, reaching full-bleed at 1024 px.
 - Conversation organization: hybrid hierarchy—favorites and in-progress tasks first, then project/task groups, with uncategorized conversations arranged chronologically; search and filters span all groups.

@@ -11,9 +11,9 @@ func TestNormalizeSmartRenameFilename(t *testing.T) {
 	}{
 		{
 			name:     "json fence without extension",
-			raw:      "```json\n{\"filename\":\"AgentHub 架构说明\"}\n```",
+			raw:      "```json\n{\"filename\":\"Di Agent 架构说明\"}\n```",
 			original: "untitled.pdf",
-			want:     "AgentHub 架构说明.pdf",
+			want:     "Di Agent 架构说明.pdf",
 		},
 		{
 			name:     "label and path separators",

@@ -12,7 +12,7 @@
 }
 
 /* 最大化时去掉外框圆角 */
-:global(body.ah-maximized) .container {
+:global(body.di-agent-maximized) .container {
   border-radius: 0;
 }
 

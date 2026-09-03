@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 // TaskRepo 定义任务服务依赖的数据访问能力。

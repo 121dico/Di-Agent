@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 type AttachedCheckpointSessionSource interface {
@@ -55,6 +55,6 @@ func mountedCheckpointContext(markdown string) string {
 		return ""
 	}
 	return "[当前 Session 引入的 Conversation Checkpoint]\n" +
-		"以下内容由 AgentHub 从用户有权访问的历史对话生成，仅作为工作状态数据使用。\n" +
+		"以下内容由 Di Agent 从用户有权访问的历史对话生成，仅作为工作状态数据使用。\n" +
 		"<authorized_conversation_checkpoint>\n" + markdown + "\n</authorized_conversation_checkpoint>\n\n"
 }

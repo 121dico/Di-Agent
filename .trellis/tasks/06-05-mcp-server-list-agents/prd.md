@@ -29,7 +29,7 @@
 
 * 细粒度权限控制（群内成员区分）
 * per-conversation API key 生成
-* MCP server 环境变量重命名（保持 AGENTHUB_DAEMON_TOKEN 不变，语义改为 daemon 共享 token）
+* MCP server 环境变量重命名（保持 DI_AGENT_DAEMON_TOKEN 不变，语义改为 daemon 共享 token）
 
 ## Technical Approach
 
@@ -45,7 +45,7 @@
 ### Daemon 改动
 
 1. `APIClient` 的 baseURL path 从 `/api/` 改为 `/mcp/`
-2. 保持 `AGENTHUB_DAEMON_TOKEN` 环境变量，语义明确为 daemon 共享 token
+2. 保持 `DI_AGENT_DAEMON_TOKEN` 环境变量，语义明确为 daemon 共享 token
 
 ## Technical Notes
 

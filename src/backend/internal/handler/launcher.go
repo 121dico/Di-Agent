@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/agent-hub/backend/internal/middleware"
+	"github.com/121dico/Di-Agent/src/backend/internal/middleware"
 	"github.com/gin-gonic/gin"
 )
 
@@ -29,7 +29,7 @@ func (h *AgentHandler) GetMachineLauncher(c *gin.Context) {
 		return
 	}
 
-	c.Header("Content-Disposition", `attachment; filename="AgentHub-Setup.bat"`)
+	c.Header("Content-Disposition", `attachment; filename="Di-Agent-Setup.bat"`)
 	c.Data(http.StatusOK, "application/bat", []byte(winLauncherScript(serverURL, apiKey)))
 }
 
@@ -40,14 +40,14 @@ func (h *AgentHandler) GetMachineLauncher(c *gin.Context) {
 func winLauncherScript(serverURL, apiKey string) string {
 	return fmt.Sprintf(`@echo off
 chcp 65001 >nul
-echo [AgentHub] 开始安装 daemon（需要联网下载 Node 的情况请耐心等待）...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Join-Path $env:TEMP 'agenthub-install.ps1'; Invoke-WebRequest -Uri '%s/downloads/install.ps1' -OutFile $p -UseBasicParsing; & $p -ServerUrl '%s' -ApiKey '%s'"
+echo [Di Agent] 开始安装 daemon（需要联网下载 Node 的情况请耐心等待）...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Join-Path $env:TEMP 'di-agent-install.ps1'; Invoke-WebRequest -Uri '%s/downloads/install.ps1' -OutFile $p -UseBasicParsing; & $p -ServerUrl '%s' -ApiKey '%s'"
 if errorlevel 1 (
   echo.
-  echo [AgentHub] 安装失败，请把上方红色错误信息截图反馈。
+  echo [Di Agent] 安装失败，请把上方红色错误信息截图反馈。
 ) else (
   echo.
-  echo [AgentHub] 安装完成！已注册开机自启，回到浏览器刷新页面即可。
+  echo [Di Agent] 安装完成！已注册开机自启，回到浏览器刷新页面即可。
 )
 pause
 `, serverURL, serverURL, apiKey)

@@ -152,7 +152,7 @@
 ### B20 [P3] 重复 token 管理
 
 - **文件**: `src/api/client.ts:3`, `src/store/authStore.ts:18`
-- **现象**: 两个地方都读写 `agenthub_token`，职责不清
+- **现象**: 两个地方都读写 `di-agent_token`，职责不清
 - **修复**: 统一到 client.ts 管理，store 不重复存 token
 
 ---
@@ -1297,7 +1297,7 @@
 ### B79 [P1] authStore login/register 不调用 setToken，刷新后 token 丢失
 
 - **文件**: `src/frontend/src/store/authStore.ts:32,47` vs `src/frontend/src/api/client.ts:15-16`
-- **现象**: login 和 register 仅 `localStorage.setItem(USER_KEY, ...)` 保存用户信息，但未调用 `setToken(token)` 将 JWT 持久化到 `localStorage`（`setToken` 由 `client.ts` 导出，写入 `agenthub_token`）。`loadFromStorage` 第 66 行通过 `localStorage.getItem(TOKEN_KEY)` 恢复 token，但 login/register 从未写入该 key。页面刷新后 token 丢失，用户被踢回登录页
+- **现象**: login 和 register 仅 `localStorage.setItem(USER_KEY, ...)` 保存用户信息，但未调用 `setToken(token)` 将 JWT 持久化到 `localStorage`（`setToken` 由 `client.ts` 导出，写入 `di-agent_token`）。`loadFromStorage` 第 66 行通过 `localStorage.getItem(TOKEN_KEY)` 恢复 token，但 login/register 从未写入该 key。页面刷新后 token 丢失，用户被踢回登录页
 - **复现**: 登录成功 → 刷新页面 → 自动 logout（token 为 null）
 - **修复**: login 和 register 成功后添加 `setToken(data.token)`
 

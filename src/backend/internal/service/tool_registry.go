@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/internal/port"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/port"
 )
 
 // ToolRegistryReader is the read-only subset consumed by tool_config validators.

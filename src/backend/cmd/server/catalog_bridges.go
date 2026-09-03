@@ -6,8 +6,8 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/agent-hub/backend/internal/catalog"
-	"github.com/agent-hub/backend/internal/service"
+	"github.com/121dico/Di-Agent/src/backend/internal/catalog"
+	"github.com/121dico/Di-Agent/src/backend/internal/service"
 )
 
 // ---------------------------------------------------------------------------

@@ -14,7 +14,7 @@ describe('Electron runtime helpers', () => {
   it('uses Vite URL and does not launch backend in development', () => {
     const env = {
       VITE_DEV_SERVER_URL: 'http://127.0.0.1:5173',
-      AGENTHUB_BACKEND_URL: 'http://127.0.0.1:8080',
+      DI_AGENT_BACKEND_URL: 'http://127.0.0.1:8080',
     };
 
     assert.equal(resolveFrontendURL({ env, appPath: '/app', resourcesPath: '/resources' }), 'http://127.0.0.1:5173');
@@ -30,8 +30,8 @@ describe('Electron runtime helpers', () => {
 
   it('honors explicit backend URL and disables bundled backend launch', () => {
     const env = {
-      AGENTHUB_BACKEND_URL: 'http://10.0.0.5:8080',
-      AGENTHUB_DESKTOP_LAUNCH_BACKEND: 'false',
+      DI_AGENT_BACKEND_URL: 'http://10.0.0.5:8080',
+      DI_AGENT_DESKTOP_LAUNCH_BACKEND: 'false',
     };
 
     assert.equal(resolveFrontendURL({ env, appPath: '/app', resourcesPath: '/resources' }), 'http://10.0.0.5:8080');
@@ -39,7 +39,7 @@ describe('Electron runtime helpers', () => {
   });
 
   it('resolves packaged resources for backend binary and config', () => {
-    const resourcesPath = path.join('C:', 'AgentHub', 'resources');
+    const resourcesPath = path.join('C:', 'Di Agent', 'resources');
 
     assert.equal(
       resolveBackendBinary({
@@ -53,7 +53,7 @@ describe('Electron runtime helpers', () => {
   });
 
   it('falls back to extensionless backend binary for current build output', () => {
-    const resourcesPath = path.join('C:', 'AgentHub', 'resources');
+    const resourcesPath = path.join('C:', 'Di Agent', 'resources');
 
     assert.equal(
       resolveBackendBinary({
@@ -67,14 +67,14 @@ describe('Electron runtime helpers', () => {
 
   it('builds backend environment without clobbering existing variables', () => {
     const env = buildBackendEnv({
-      baseEnv: { PATH: 'x', AGENTHUB_CONFIG: 'custom.yaml' },
+      baseEnv: { PATH: 'x', DI_AGENT_CONFIG: 'custom.yaml' },
       configPath: 'default.yaml',
       frontendDist: 'dist',
     });
 
     assert.equal(env.PATH, 'x');
-    assert.equal(env.AGENTHUB_CONFIG, 'custom.yaml');
-    assert.equal(env.AGENTHUB_FRONTEND_DIST, 'dist');
+    assert.equal(env.DI_AGENT_CONFIG, 'custom.yaml');
+    assert.equal(env.DI_AGENT_FRONTEND_DIST, 'dist');
   });
 
   it('waits until an HTTP endpoint becomes available', async () => {

@@ -11,7 +11,7 @@ interface TaskInspectorProps {
 
 type InspectorTab = 'overview' | 'progress' | 'artifacts' | 'activity';
 
-const INSPECTOR_WIDTH_KEY = 'agenthub:task-inspector-width';
+const INSPECTOR_WIDTH_KEY = 'di_agent:task-inspector-width';
 const INSPECTOR_DEFAULT_WIDTH = 400;
 const INSPECTOR_MIN_WIDTH = 360;
 const INSPECTOR_MAX_WIDTH = 560;

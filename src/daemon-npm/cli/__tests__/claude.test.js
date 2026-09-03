@@ -8,7 +8,7 @@ const { EVENT_TYPES } = require('../events');
 
 // 构建 mock ctx —— claude.js 当前依赖的 ctx 字段：
 //   defaultSkills, resolveCommand, buildPlatformMcpArgs, addRoot, pathJoin,
-//   isAgentHubWorkspace, makeSessionId, logFlow, processSpec, spawn, crypto,
+//   isDiAgentWorkspace, makeSessionId, logFlow, processSpec, spawn, crypto,
 //   truncateStr, EXEC_TIMEOUT_MS, agentTurnStates, createAsyncQueue, fs
 function buildMockCtx(overrides = {}) {
   const calls = { resolveCommand: [], buildPlatformMcpArgs: [], spawn: [], logFlow: [] };
@@ -21,7 +21,7 @@ function buildMockCtx(overrides = {}) {
     },
     addRoot: (arr, root) => { if (arr.indexOf(root) === -1) arr.push(root); },
     pathJoin: (...args) => args.join('/'),
-    isAgentHubWorkspace: () => false,
+    isDiAgentWorkspace: () => false,
     makeSessionId: (conv, agent) => `sess-${conv}-${agent}`,
     logFlow: (level, event, payload) => {
       calls.logFlow.push({ level, event, payload });
@@ -70,8 +70,8 @@ test('claude.resolveCommand returns literal "claude" (no delegation to avoid rec
 });
 
 test('claude buildCommand adds configured overload fallback model', () => {
-  const original = process.env.AGENTHUB_CLAUDE_FALLBACK_MODEL;
-  process.env.AGENTHUB_CLAUDE_FALLBACK_MODEL = 'glm-4.7';
+  const original = process.env.DI_AGENT_CLAUDE_FALLBACK_MODEL;
+  process.env.DI_AGENT_CLAUDE_FALLBACK_MODEL = 'glm-4.7';
   try {
     const { ctx } = buildMockCtx();
     const spec = createClaudeCliSpec(ctx);
@@ -87,8 +87,8 @@ test('claude buildCommand adds configured overload fallback model', () => {
     assert.strictEqual(command.args[index + 1], 'glm-4.7');
     assert.strictEqual(command.args[command.args.indexOf('--thinking') + 1], 'disabled');
   } finally {
-    if (original === undefined) delete process.env.AGENTHUB_CLAUDE_FALLBACK_MODEL;
-    else process.env.AGENTHUB_CLAUDE_FALLBACK_MODEL = original;
+    if (original === undefined) delete process.env.DI_AGENT_CLAUDE_FALLBACK_MODEL;
+    else process.env.DI_AGENT_CLAUDE_FALLBACK_MODEL = original;
   }
 });
 
@@ -665,8 +665,8 @@ test('claude.spawnPersistent: includes stream-json flags and --dangerously-skip-
 });
 
 test('claude.spawnPersistent adds configured overload fallback model', () => {
-  const original = process.env.AGENTHUB_CLAUDE_FALLBACK_MODEL;
-  process.env.AGENTHUB_CLAUDE_FALLBACK_MODEL = 'glm-4.7';
+  const original = process.env.DI_AGENT_CLAUDE_FALLBACK_MODEL;
+  process.env.DI_AGENT_CLAUDE_FALLBACK_MODEL = 'glm-4.7';
   try {
     const { ctx, calls } = buildMockCtx();
     const spec = createClaudeCliSpec(ctx);
@@ -681,8 +681,8 @@ test('claude.spawnPersistent adds configured overload fallback model', () => {
     assert.notStrictEqual(index, -1);
     assert.strictEqual(args[index + 1], 'glm-4.7');
   } finally {
-    if (original === undefined) delete process.env.AGENTHUB_CLAUDE_FALLBACK_MODEL;
-    else process.env.AGENTHUB_CLAUDE_FALLBACK_MODEL = original;
+    if (original === undefined) delete process.env.DI_AGENT_CLAUDE_FALLBACK_MODEL;
+    else process.env.DI_AGENT_CLAUDE_FALLBACK_MODEL = original;
   }
 });
 

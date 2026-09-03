@@ -1,24 +1,25 @@
 services:
   postgres:
     image: pgvector/pgvector:pg15-trixie
-    container_name: agenthub-db
+    container_name: di-agent-db
     environment:
-      POSTGRES_USER: agenthub
-      POSTGRES_PASSWORD: agenthub
-      POSTGRES_DB: agenthub
+      POSTGRES_USER: di_agent
+      POSTGRES_PASSWORD: di_agent
+      POSTGRES_DB: di_agent
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agenthub"]
+      # 新卷使用 canonical 角色；旧卷仍可在完成独立数据库迁移前保持健康。
+      test: ["CMD-SHELL", "pg_isready -U di_agent -q || pg_isready -U agenthub -q"] # [brand-compat]
       interval: 5s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
-    container_name: agenthub-redis
+    container_name: di-agent-redis
     ports:
       - "6379:6379"
     volumes:
@@ -33,7 +34,7 @@ services:
   # 启动完整 RAG 依赖：docker compose --profile rag up -d ollama reranker
   ollama:
     image: ollama/ollama:latest
-    container_name: agenthub-ollama
+    container_name: di-agent-ollama
     profiles: ["rag"]
     ports:
       - "11434:11434"
@@ -43,7 +44,7 @@ services:
   # BGE Cross-Encoder 精排服务。checkpoint 需预先下载到项目 model-cache。
   reranker:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.9
-    container_name: agenthub-reranker
+    container_name: di-agent-reranker
     profiles: ["rag"]
     command: ["--model-id", "/data/bge-reranker-v2-m3", "--port", "80"]
     ports:

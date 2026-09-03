@@ -3,7 +3,7 @@ WORKDIR /app
 COPY src/backend/go.mod src/backend/go.sum ./
 RUN go mod download
 COPY src/backend/ .
-RUN CGO_ENABLED=0 go build -o /agenthub-server ./cmd/server/
+RUN CGO_ENABLED=0 go build -o /di-agent-server ./cmd/server/
 
 FROM node:20-alpine AS frontend-builder
 WORKDIR /app
@@ -15,7 +15,7 @@ RUN npm run build
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
-COPY --from=backend-builder /agenthub-server /app/server
+COPY --from=backend-builder /di-agent-server /app/server
 COPY --from=frontend-builder /app/dist /app/dist
 COPY src/backend/migrations /app/migrations
 # Config must be provided via volume mount or environment variables.

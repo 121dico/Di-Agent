@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/internal/repository"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/repository"
 )
 
 func (s *ConversationCheckpointService) List(ctx context.Context, conversationID, userID string, limit int) ([]model.ConversationCheckpoint, error) {

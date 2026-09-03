@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agent-hub/backend/internal/middleware"
+	"github.com/121dico/Di-Agent/src/backend/internal/middleware"
 	"github.com/gin-gonic/gin"
 )
 
@@ -227,7 +227,7 @@ try {
   if ($pp -ne $null) { $pp.Quit() }
 }
 `
-	scriptFile, err := os.CreateTemp("", "agenthub-ppt-preview-*.ps1")
+	scriptFile, err := os.CreateTemp("", "di-agent-ppt-preview-*.ps1")
 	if err != nil {
 		return fmt.Errorf("create powerpoint script: %w", err)
 	}

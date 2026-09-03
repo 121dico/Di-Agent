@@ -253,7 +253,7 @@ card.files   = ["App.tsx"]           → fileDiff(agentId, workDir, filePath)
 
 **⚠️ 字段名契约**：后端 `SendToMachine` 必须用 `task_id`（不是 `id`）。daemon 读 `data.task_id`，字段名不匹配会导致 daemon 静默返回 → 后端超时 → 文件浏览器空白。
 
-### daemon browseFiles action 路由（`agenthub-daemon.js` L692）
+### daemon browseFiles action 路由（`di-agent-daemon.js` L692）
 
 | action | 输入 | 输出 | 备注 |
 |--------|------|------|------|

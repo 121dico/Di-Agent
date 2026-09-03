@@ -25,7 +25,7 @@
 
 ## Forbidden Patterns
 
-- Do not commit local backend build outputs such as `src/backend/agenthub-server`, `src/backend/main`, or files under `src/backend/tmp/`.
+- Do not commit local backend build outputs such as `src/backend/di-agent-server`, `src/backend/main`, or files under `src/backend/tmp/`.
 - Do not leave merge conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`) in committed files.
 
 ---
@@ -37,21 +37,25 @@
 #### 1. Scope / Trigger
 
 - Applies when changing `scripts/install.sh`, the served `src/backend/downloads/install.sh`, or the daemon bundle layout extracted by those scripts.
-- The installer is an infrastructure boundary: it updates a user-level installation and registers `com.agenthub.daemon` without administrator privileges.
+- The installer is an infrastructure boundary: it updates a user-level installation and registers `com.diagent.daemon` without administrator privileges.
 
 #### 2. Signatures
 
 - Command: `install.sh --server-url <URL> --api-key <KEY>`.
-- Default install root: `$HOME/.agenthub`.
-- Default LaunchAgent plist: `$HOME/Library/LaunchAgents/com.agenthub.daemon.plist`.
-- Test/advanced overrides: `AGENTHUB_INSTALL_DIR` and `AGENTHUB_LAUNCH_AGENT_PLIST`.
-- Daemon package root: `<install-root>/node_modules/@hust-agenthub/daemon`.
+- Default install root: `$HOME/.di-agent`.
+- Default LaunchAgent plist: `$HOME/Library/LaunchAgents/com.diagent.daemon.plist`.
+- Canonical overrides: `DI_AGENT_INSTALL_DIR` and `DI_AGENT_LAUNCH_AGENT_PLIST`.
+- Read-only migration overrides: `DI_AGENT_LEGACY_INSTALL_DIR` and `DI_AGENT_LEGACY_LAUNCH_AGENT_PLIST`.
+- Daemon package root: `<install-root>/node_modules/di-agent-daemon`.
 
 #### 3. Contracts
 
-- The daemon bundle is downloaded from `<server-url>/downloads/agenthub-daemon-bundle.tar.gz`; it must not silently switch to npm or another server.
+- The daemon bundle is downloaded from `<server-url>/downloads/di-agent-daemon-bundle.tar.gz`; it must not silently switch to npm or another server.
 - `scripts/install.sh` and `src/backend/downloads/install.sh` must remain byte-for-byte identical.
-- When the daemon package root is an existing symbolic link, move the link itself to a unique `daemon.local-dev-link[.N]` sibling before extraction. Keeping the same parent preserves relative-link resolution.
+- A retired installation is moved to the canonical home only when the canonical home does not already exist. Its session map must survive the move.
+- Before starting the canonical daemon, archive the previous log, start script, plist, and retired package/bin so a failed health check can restore the previous service.
+- Health may be accepted only from a fresh `stage=daemon.ready` line written after the new service starts; a line copied from an earlier log must never commit the migration.
+- When the canonical daemon package root is an existing symbolic link, move the link itself to a unique `di-agent-daemon.local-dev-link[.N]` sibling before extraction. Keeping the same parent preserves relative-link resolution.
 - Never recursively delete or overwrite the symbolic-link target. After success, the extracted daemon root is a real directory and the preserved development link remains recoverable.
 - If extraction fails before a new daemon root exists, restore the original link to its original path.
 - The default paths remain unchanged when the override environment variables are absent.
@@ -62,6 +66,9 @@
 |---|---|
 | Missing `--server-url` or `--api-key` | Fail before downloading or changing the installation. |
 | Bundle download fails | Fail with the server URL in the diagnostic and leave the existing daemon root unchanged. |
+| Canonical home already exists | Do not merge or overwrite it with the retired home. |
+| Fresh daemon never reports ready | Unload the canonical service and restore the previous log, start script, plist, package/bin, home, and retired service. |
+| Old log already contains `stage=daemon.ready` | Archive it before launch; it does not satisfy the new health check. |
 | Existing daemon root is a symbolic link | Move it to the first unused sibling backup name, then extract. |
 | Link backup move fails | Fail before extraction; do not touch the link target. |
 | Extraction fails and no new daemon root exists | Restore the original link, then fail. |
@@ -69,14 +76,16 @@
 
 #### 5. Good / Base / Bad Cases
 
-- Good: a local checkout link at the daemon package root is preserved as `daemon.local-dev-link`, the server bundle extracts into a normal directory, and the linked source remains unchanged.
-- Base: a clean installation has no daemon package root and extracts normally under `$HOME/.agenthub`.
-- Bad: `tar` writes through an existing daemon link, producing `Cannot extract through symlink`, or cleanup follows the link and deletes the checkout.
+- Good: the retired home moves to `~/.di-agent`, sessions are retained, a fresh ready event commits the switch, and retired package/bin paths leave active `node_modules`.
+- Base: a clean installation has no daemon package root and extracts normally under `$HOME/.di-agent`.
+- Bad: a stale ready line commits a broken daemon, `tar` writes through an existing link, or an installer test reads the real user's default retired paths.
 
 #### 6. Tests Required
 
-- Run `bash scripts/test-install.sh` through the public installer interface with isolated install/plist overrides.
+- Run `/bin/bash scripts/test-install.sh` through the public installer interface with isolated canonical and retired home/plist overrides.
+- Every installer invocation in the test suite must override all four paths. A before/after identity guard must prove the real default retired home and plist were not touched.
 - Assert a normal install writes the daemon entrypoint, start script, and plist only under the isolated paths.
+- Assert an existing retired home keeps its sessions, old active package/bin paths are removed after health, and a stale ready log causes a complete rollback.
 - Assert a relative daemon link is preserved at a unique sibling name, its target content is unchanged, and the installed daemon root is not a link.
 - Assert a broken archive restores the original link and returns an extraction error.
 - Assert both distributed installer copies compare equal and pass `/bin/bash -n` on macOS Bash 3.2.
@@ -87,7 +96,13 @@
 # Wrong: macOS tar refuses to extract through the existing package link.
 tar xzf "$DIR/bundle.tar.gz" -C "$DIR" || fail "daemon 包解压失败"
 
-# Correct: preserve the link itself in the same parent before extracting.
+# Correct: isolate every stateful path in tests and preserve a real link before extracting.
+DI_AGENT_INSTALL_DIR="$install_dir" \
+DI_AGENT_LAUNCH_AGENT_PLIST="$plist" \
+DI_AGENT_LEGACY_INSTALL_DIR="$legacy_dir" \
+DI_AGENT_LEGACY_LAUNCH_AGENT_PLIST="$legacy_plist" \
+bash "$INSTALL_SCRIPT" --server-url "$server_url" --api-key "$api_key"
+
 if [ -L "$DAEMON_PACKAGE_DIR" ]; then
   mv "$DAEMON_PACKAGE_DIR" "$DAEMON_LINK_BACKUP" || fail "无法备份已有 daemon 开发链接"
 fi
@@ -156,7 +171,7 @@ NewStreamingWatchdog(repo, logger, service.DefaultStreamingWatchdogMaxAge, 10*ti
 - Applies when changing daemon CLI execution, backend Agent waits, async mention/orchestrator dispatch, or streaming cleanup.
 
 #### 2. Signatures
-- Daemon environment: `AGENTHUB_AGENT_TIMEOUT_MS=<positive integer milliseconds>`.
+- Daemon environment: `DI_AGENT_AGENT_TIMEOUT_MS=<positive integer milliseconds>`.
 - Backend constant: `service.DefaultAgentTaskTimeout`.
 - Watchdog constant: `service.DefaultStreamingWatchdogMaxAge`.
 
@@ -235,15 +250,15 @@ WHERE c.id = $1 AND m.user_id = $2 AND c.cli_tool = $5
 **Scope / Trigger**: Applies when changing backend static serving, Electron desktop packaging, or production SPA routing.
 
 **Signatures**:
-- Environment: `AGENTHUB_CONFIG` overrides the backend config file path.
-- Environment: `AGENTHUB_FRONTEND_DIST` points the backend to a built Vite `dist` directory.
+- Environment: `DI_AGENT_CONFIG` overrides the backend config file path.
+- Environment: `DI_AGENT_FRONTEND_DIST` points the backend to a built Vite `dist` directory.
 - Backend helper: `registerSPARoutes(router, distDir)` registers a fallback only when `index.html` exists.
 
 **Contracts**:
 - `/api/*`, `/ws`, `/daemon/*`, and `/mcp/*` must not be served by the SPA fallback.
 - Browser-history routes such as `/settings` and `/tasks` must serve `index.html`.
 - Static assets must be served only when the resolved file exists inside the frontend dist directory.
-- Electron production mode should pass `AGENTHUB_CONFIG` and `AGENTHUB_FRONTEND_DIST` instead of relying on process cwd.
+- Electron production mode should pass `DI_AGENT_CONFIG` and `DI_AGENT_FRONTEND_DIST` instead of relying on process cwd.
 
 **Validation & Error Matrix**:
 - Missing `dist/index.html` -> skip SPA fallback registration.
@@ -403,10 +418,10 @@ definitions := handler.definitionsFromRegistry()
 
 ```go
 // Wrong: all MCP tools are always exposed.
-server := mcp.NewServer("agenthub", "0.1.0", mcp.AllTools(), handler, logger)
+server := mcp.NewServer("di-agent", "0.1.0", mcp.AllTools(), handler, logger)
 
 // Correct: server list/call is constrained by the current Agent's tool config.
-server := mcp.NewServer("agenthub", "0.1.0", mcp.AllTools(), handler, logger).WithAllowedTools(allowed)
+server := mcp.NewServer("di-agent", "0.1.0", mcp.AllTools(), handler, logger).WithAllowedTools(allowed)
 ```
 
 ```typescript
@@ -611,7 +626,7 @@ agent.SystemPrompt = strings.TrimSpace(req.SystemPrompt)
 - Knowledge file without permission -> `ErrKBNoPermission` / 403.
 
 **Good/Base/Bad Cases**:
-- Good: Production sets `upload.dir: "/root/agenthub-data/uploads"` and `upload.public_base_url: "https://agenthub.example.com"`; responses carry absolute URLs while DB paths remain relative.
+- Good: Production sets `upload.dir: "/root/di-agent-data/uploads"` and `upload.public_base_url: "https://di-agent.example.com"`; responses carry absolute URLs while DB paths remain relative.
 - Base: Local dev leaves `upload.public_base_url` empty; frontend uses relative `/api/...` URLs.
 - Bad: Code stores `http://server-ip/...` in `message_attachments.file_path`, making server migration require database rewrites.
 - Bad: Offline queued messages return stale or empty URLs because enrichment only happens in repository reads.
@@ -638,18 +653,18 @@ attachment.URL = fileURLs.UploadURL(attachment.FilePath)
 
 **Signatures**:
 - Codex command: `codex exec --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox --ephemeral --color never --output-last-message <file> <prompt>`.
-- Codex config: `$CODEX_HOME/config.toml` section `[mcp_servers.agenthub-platform]`.
-- One-shot env: `AGENTHUB_CONVERSATION_ID`, `AGENTHUB_USER_ID`, `AGENTHUB_AGENT_ID`, and `AGENTHUB_TASK_ID`.
-- Daemon MCP command args: `node <agenthub-daemon.js> --server-url <url> --api-key <key> --mcp --conversation-id <id> --user-id <id> --agent-id <id> --task-id <id>`.
+- Codex config: `$CODEX_HOME/config.toml` section `[mcp_servers.di-agent-platform]`.
+- One-shot env: `DI_AGENT_CONVERSATION_ID`, `DI_AGENT_USER_ID`, `DI_AGENT_AGENT_ID`, and `DI_AGENT_TASK_ID`.
+- Daemon MCP command args: `node <di-agent-daemon.js> --server-url <url> --api-key <key> --mcp --conversation-id <id> --user-id <id> --agent-id <id> --task-id <id>`.
 
 **Contracts**:
 - Codex must default to the user's normal `CODEX_HOME` (`$CODEX_HOME` if set, otherwise `~/.codex`) so daemon scan-time login detection and task execution use the same auth store.
-- `AGENTHUB_CODEX_HOME` is an explicit override for isolated Codex homes; do not silently switch to `~/.agenthub/codex`.
-- Codex/OpenCode one-shot env must include `AGENTHUB_TASK_ID` when a task ID is available so MCP subprocesses can emit task-scoped cards.
+- `DI_AGENT_CODEX_HOME` is an explicit override for isolated Codex homes; do not silently switch to `~/.di-agent/codex`.
+- Codex/OpenCode one-shot env must include `DI_AGENT_TASK_ID` when a task ID is available so MCP subprocesses can emit task-scoped cards.
 - Codex per-task MCP config must pass `--task-id` to the daemon MCP subprocess, matching Claude Code's `buildPlatformMcpArgs(..., taskId)` behavior.
-- Codex `agenthub-platform` MCP config must set `default_tools_approval_mode = "approve"` because one-shot automation cannot surface interactive tool approval prompts reliably.
+- Codex `di-agent-platform` MCP config must set `default_tools_approval_mode = "approve"` because one-shot automation cannot surface interactive tool approval prompts reliably.
 - Codex and OpenCode remain one-shot unless their spec explicitly implements and tests `spawnPersistent`; do not route them into the Claude persistent slot by changing only dispatcher conditions.
-- Tests that call Codex `commandForTask` must set `AGENTHUB_CODEX_HOME` to a temp directory to avoid mutating the developer's real `~/.codex/config.toml`.
+- Tests that call Codex `commandForTask` must set `DI_AGENT_CODEX_HOME` to a temp directory to avoid mutating the developer's real `~/.codex/config.toml`.
 
 **Validation & Error Matrix**:
 - Missing daemon server URL/API key while building MCP config -> skip writing the MCP server section; command construction still succeeds.
@@ -659,23 +674,23 @@ attachment.URL = fileURLs.UploadURL(attachment.FilePath)
 
 **Good/Base/Bad Cases**:
 - Good: `codex login status` is true for `~/.codex`, daemon Codex task executes with `CODEX_HOME=~/.codex`, and platform MCP receives conversation/user/agent/task IDs.
-- Base: Operator sets `AGENTHUB_CODEX_HOME=/secure/codex-home`; scan and execution must be checked against that same home.
-- Bad: scan uses default `~/.codex` and execution uses empty `~/.agenthub/codex`, so the UI shows Codex online but tasks fail as not logged in.
+- Base: Operator sets `DI_AGENT_CODEX_HOME=/secure/codex-home`; scan and execution must be checked against that same home.
+- Bad: scan uses default `~/.codex` and execution uses empty `~/.di-agent/codex`, so the UI shows Codex online but tasks fail as not logged in.
 - Bad: Codex one-shot MCP config omits `--task-id`, so deployment/card-producing tools complete without attaching cards to the task.
 
 **Tests Required**:
-- Codex spec unit test asserts `buildCommand` passes task ID to `ensureAgentHubCodexMcpConfig` and `buildAgentHubContextEnv`.
-- Daemon command test asserts Codex one-shot env contains `CODEX_HOME` and all `AGENTHUB_*` context keys, including `AGENTHUB_TASK_ID`.
-- Daemon MCP config test asserts `[mcp_servers.agenthub-platform]` includes `--task-id` and `default_tools_approval_mode = "approve"`.
-- OpenCode command test asserts one-shot env includes `AGENTHUB_TASK_ID` when task context exists.
+- Codex spec unit test asserts `buildCommand` passes task ID to `ensureDiAgentCodexMcpConfig` and `buildDiAgentContextEnv`.
+- Daemon command test asserts Codex one-shot env contains `CODEX_HOME` and all `DI_AGENT_*` context keys, including `DI_AGENT_TASK_ID`.
+- Daemon MCP config test asserts `[mcp_servers.di-agent-platform]` includes `--task-id` and `default_tools_approval_mode = "approve"`.
+- OpenCode command test asserts one-shot env includes `DI_AGENT_TASK_ID` when task context exists.
 
 **Wrong vs Correct**:
 ```js
 // Wrong: execution uses an empty isolated home even though scan saw ~/.codex login.
-const codexHome = path.join(os.homedir(), '.agenthub', 'codex');
+const codexHome = path.join(os.homedir(), '.di-agent', 'codex');
 
 // Correct: reuse the same Codex auth/config home by default; allow explicit override.
-const codexHome = process.env.AGENTHUB_CODEX_HOME || process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+const codexHome = process.env.DI_AGENT_CODEX_HOME || process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
 ```
 
 ---

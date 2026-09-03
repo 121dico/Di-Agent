@@ -14,11 +14,12 @@ const {
   turnEndEvent,
   errorEvent,
 } = require('./events');
+const { readDiAgentEnvironment } = require('./environment');
 
 // 智谱等 Anthropic 兼容网关可能在主模型过载时返回 529。fallback 由环境变量
 // 显式开启，避免给使用 Claude 官方接口的部署注入不认识的模型名。
 function fallbackModelArgs() {
-  const model = String(process.env.AGENTHUB_CLAUDE_FALLBACK_MODEL || '').trim();
+  const model = String(readDiAgentEnvironment(process.env, 'CLAUDE_FALLBACK_MODEL') || '').trim();
   return model ? ['--fallback-model', model] : [];
 }
 
@@ -107,7 +108,7 @@ function createClaudeCliSpec(ctx) {
     // 返回相对/绝对路径数组（已去重，由调用方维护顺序）。
     skillRoots(cwd, home) {
       const roots = [];
-      const includeProjectRoots = !ctx.isAgentHubWorkspace(cwd);
+      const includeProjectRoots = !ctx.isDiAgentWorkspace(cwd);
       if (includeProjectRoots) ctx.addRoot(roots, ctx.pathJoin(cwd, '.claude', 'skills'));
       if (home) {
         ctx.addRoot(roots, ctx.pathJoin(home, '.claude', 'skills'));

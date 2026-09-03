@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agent-hub/backend/internal/domain"
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/pkg/ws"
+	"github.com/121dico/Di-Agent/src/backend/internal/domain"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/pkg/ws"
 )
 
 // === Router 单测 ===

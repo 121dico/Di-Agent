@@ -16,18 +16,18 @@ import { randomUUID } from 'node:crypto';
  *      - 点击文件后打开 DiffViewer(Modal)，展示前后内容
  */
 
-const FRONTEND_URL = process.env.AGENTHUB_E2E_BASE_URL || 'http://127.0.0.1:5173';
-const BACKEND_URL = process.env.AGENTHUB_E2E_BACKEND_URL || 'http://127.0.0.1:8080';
-const USERNAME = process.env.AGENTHUB_E2E_USERNAME || 'wjc';
-const PASSWORD = process.env.AGENTHUB_E2E_PASSWORD || '123456';
-const AGENT_NAME = process.env.AGENTHUB_E2E_AGENT_NAME || '产品经理';
+const FRONTEND_URL = process.env.DI_AGENT_E2E_BASE_URL || 'http://127.0.0.1:5173';
+const BACKEND_URL = process.env.DI_AGENT_E2E_BACKEND_URL || 'http://127.0.0.1:8080';
+const USERNAME = process.env.DI_AGENT_E2E_USERNAME || 'wjc';
+const PASSWORD = process.env.DI_AGENT_E2E_PASSWORD || '123456';
+const AGENT_NAME = process.env.DI_AGENT_E2E_AGENT_NAME || '产品经理';
 // 测试 git 仓库（由测试前置脚本准备：含 modified/deleted/added 三种改动）
-const TEST_WORKDIR = process.env.AGENTHUB_E2E_WORKDIR || '/tmp/agenthub-e2e-test/testrepo';
+const TEST_WORKDIR = process.env.DI_AGENT_E2E_WORKDIR || '/tmp/di-agent-e2e-test/testrepo';
 const TEST_FILES = ['App.tsx', 'style.css', 'newfile.ts'];
 // Postgres 连接（与后端 config.yaml 一致）
-const PG_PASSWORD = process.env.AGENTHUB_E2E_PG_PASSWORD || '123456';
-const PG_HOST = process.env.AGENTHUB_E2E_PG_HOST || 'localhost';
-const PG_USER = process.env.AGENTHUB_E2E_PG_USER || 'shallow';
+const PG_PASSWORD = process.env.DI_AGENT_E2E_PG_PASSWORD || '123456';
+const PG_HOST = process.env.DI_AGENT_E2E_PG_HOST || 'localhost';
+const PG_USER = process.env.DI_AGENT_E2E_PG_USER || 'shallow';
 
 interface APIResponse<T> { code: number; message: string; data: T; }
 
@@ -48,7 +48,7 @@ async function getAgentId(request: APIRequestContext, token: string, name: strin
 
 function psql(sql: string): string {
   // 用 stdin 传 SQL，避免 shell 转义；连接参数与后端 config.yaml 对齐。
-  return execSync(`PGPASSWORD=${PG_PASSWORD} psql -h ${PG_HOST} -U ${PG_USER} -d agenthub -t -A`, {
+  return execSync(`PGPASSWORD=${PG_PASSWORD} psql -h ${PG_HOST} -U ${PG_USER} -d di_agent -t -A`, {
     input: sql,
     env: { ...process.env, PGPASSWORD: PG_PASSWORD },
   }).toString();

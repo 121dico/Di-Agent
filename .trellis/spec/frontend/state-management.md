@@ -6,7 +6,7 @@
 
 ## Overview
 
-AgentHub uses Zustand for shared client state. Stores may cache server data, but
+Di Agent uses Zustand for shared client state. Stores may cache server data, but
 components that only consume global metadata must not be responsible for
 discovering and loading that metadata on their own.
 

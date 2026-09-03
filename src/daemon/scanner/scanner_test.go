@@ -112,7 +112,7 @@ func TestReadSkillsReturnsSkillFiles(t *testing.T) {
 	}
 }
 
-func TestReadSkillsSkipsAgentHubWorkspaceSkills(t *testing.T) {
+func TestReadSkillsSkipsDiAgentWorkspaceSkills(t *testing.T) {
 	dir := t.TempDir()
 	oldWd, err := os.Getwd()
 	if err != nil {
@@ -129,7 +129,7 @@ func TestReadSkillsSkipsAgentHubWorkspaceSkills(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "src", "frontend"), 0o755); err != nil {
 		t.Fatalf("mkdir frontend package: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "src", "daemon-npm", "package.json"), []byte(`{"name":"@agenthub/daemon"}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "src", "daemon-npm", "package.json"), []byte(`{"name":"di-agent-daemon"}`), 0o644); err != nil {
 		t.Fatalf("write package: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "src", "frontend", "package.json"), []byte(`{"name":"frontend"}`), 0o644); err != nil {
@@ -147,7 +147,7 @@ func TestReadSkillsSkipsAgentHubWorkspaceSkills(t *testing.T) {
 	skills := New(nil).readSkills(Candidate{CLITool: "codex"})
 	for _, skill := range skills {
 		if strings.Contains(skill.SourcePath, dir) {
-			t.Fatalf("expected AgentHub workspace skill to be skipped, got %#v", skills)
+			t.Fatalf("expected Di Agent workspace skill to be skipped, got %#v", skills)
 		}
 	}
 }
@@ -210,7 +210,7 @@ func TestScanSkipsMissingCommand(t *testing.T) {
 		{
 			Name:    "Missing",
 			CLITool: "missing",
-			Command: "agenthub-command-that-should-not-exist",
+			Command: "di-agent-command-that-should-not-exist",
 		},
 	})
 

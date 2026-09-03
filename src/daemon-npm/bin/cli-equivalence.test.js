@@ -13,20 +13,20 @@ const path = require('node:path');
 const {
   commandForTask,
   conversationSessions,
-} = require('./agenthub-daemon.js');
+} = require('./di-agent-daemon.js');
 const cliTools = require('../cli');
 
 function withTempCodexHome(fn) {
-  const tempCodexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'agenthub-codex-home-'));
-  const originalCodexHome = process.env.AGENTHUB_CODEX_HOME;
-  process.env.AGENTHUB_CODEX_HOME = tempCodexHome;
+  const tempCodexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'di-agent-codex-home-'));
+  const originalCodexHome = process.env.DI_AGENT_CODEX_HOME;
+  process.env.DI_AGENT_CODEX_HOME = tempCodexHome;
   try {
     return fn(tempCodexHome);
   } finally {
     if (originalCodexHome === undefined) {
-      delete process.env.AGENTHUB_CODEX_HOME;
+      delete process.env.DI_AGENT_CODEX_HOME;
     } else {
-      process.env.AGENTHUB_CODEX_HOME = originalCodexHome;
+      process.env.DI_AGENT_CODEX_HOME = originalCodexHome;
     }
     fs.rmSync(tempCodexHome, { recursive: true, force: true });
   }
@@ -34,9 +34,9 @@ function withTempCodexHome(fn) {
 
 // ─── Registry 基础验证 ───────────────────────────────────────────────────
 
-test('CliToolSpec registry registers all 4 CLIs after daemon require', () => {
+test('CliToolSpec registry registers every supported CLI after daemon require', () => {
   const tools = cliTools.allCliTools().map((s) => s.cliTool).sort();
-  assert.deepEqual(tools, ['claude', 'codex', 'openclaw', 'opencode']);
+  assert.deepEqual(tools, ['claude', 'codex', 'openclaw', 'opencode', 'zcode']);
 });
 
 test('getCliTool returns undefined for unknown cliTool', () => {
@@ -132,6 +132,7 @@ test('codex: exec args order + CODEX_HOME env + outputFile + cwd', () => {
       '--skip-git-repo-check',
       '--dangerously-bypass-approvals-and-sandbox',
       '--ephemeral',
+      '--json',
       '--color',
       'never',
       '--output-last-message',
@@ -141,16 +142,16 @@ test('codex: exec args order + CODEX_HOME env + outputFile + cwd', () => {
     }
     // outputFile 字段
     assert.ok(spec.outputFile);
-    assert.equal(spec.outputFile, path.join(os.tmpdir(), `agenthub-task-${task.id}.txt`));
+    assert.equal(spec.outputFile, path.join(os.tmpdir(), `di-agent-task-${task.id}.txt`));
     // cwd 字段（任务工作目录）
     assert.ok(spec.cwd);
-    assert.ok(spec.cwd.includes('agenthub-cli-tasks'));
-    // env: CODEX_HOME + AgentHub context
+    assert.ok(spec.cwd.includes('di-agent-cli-tasks'));
+    // env: CODEX_HOME + Di Agent context
     assert.equal(spec.env.CODEX_HOME, codexHome);
-    assert.equal(spec.env.AGENTHUB_CONVERSATION_ID, 'c1');
-    assert.equal(spec.env.AGENTHUB_USER_ID, 'u1');
-    assert.equal(spec.env.AGENTHUB_AGENT_ID, 'a1');
-    assert.equal(spec.env.AGENTHUB_TASK_ID, 'codex-eq-1');
+    assert.equal(spec.env.DI_AGENT_CONVERSATION_ID, 'c1');
+    assert.equal(spec.env.DI_AGENT_USER_ID, 'u1');
+    assert.equal(spec.env.DI_AGENT_AGENT_ID, 'a1');
+    assert.equal(spec.env.DI_AGENT_TASK_ID, 'codex-eq-1');
     // codexMcpFallback 文本必须出现在末尾 prompt 中（fallback 末尾有 \n，故 [Codex MCP 适配]\n...）
     // 此 task 无 context_messages，故无 [系统指令]，userPrompt 含默认群聊前缀
     const lastArg = spec.args[spec.args.length - 1];
@@ -238,13 +239,13 @@ test('openclaw: agent --local --session-id <id> --message <prompt> --json --thin
   assert.equal(spec.resultFormat, 'openclaw-json');
 });
 
-test('openclaw: without conv/agent falls back to agenthub-<sanitized id>', () => {
+test('openclaw: without conv/agent falls back to di-agent-<sanitized id>', () => {
   const spec = commandForTask({
     id: 'oclaw-eq-id',
     cli_tool: 'openclaw',
     prompt: 'x',
   });
-  assert.equal(spec.args[3], 'agenthub-oclaw-eq-id');
+  assert.equal(spec.args[3], 'di-agent-oclaw-eq-id');
 });
 
 // ─── Unknown CLI: fallback 分支 ─────────────────────────────────────────

@@ -25,15 +25,15 @@ func TestFileURLBuilderUploadURL(t *testing.T) {
 	})
 
 	t.Run("path without uploads prefix", func(t *testing.T) {
-		builder := NewFileURLBuilder("https://agenthub.example.com")
+		builder := NewFileURLBuilder("https://di-agent.example.com")
 		got := builder.UploadURL("/knowledge/kb-1/file.pdf")
-		if got != "https://agenthub.example.com/api/uploads/knowledge/kb-1/file.pdf" {
+		if got != "https://di-agent.example.com/api/uploads/knowledge/kb-1/file.pdf" {
 			t.Fatalf("UploadURL() = %q", got)
 		}
 	})
 
 	t.Run("reject traversal", func(t *testing.T) {
-		builder := NewFileURLBuilder("https://agenthub.example.com")
+		builder := NewFileURLBuilder("https://di-agent.example.com")
 		if got := builder.UploadURL("uploads/originals/../secret.png"); got != "" {
 			t.Fatalf("UploadURL() traversal = %q", got)
 		}
@@ -41,9 +41,9 @@ func TestFileURLBuilderUploadURL(t *testing.T) {
 }
 
 func TestFileURLBuilderKnowledgeFileURL(t *testing.T) {
-	builder := NewFileURLBuilder("https://agenthub.example.com/")
+	builder := NewFileURLBuilder("https://di-agent.example.com/")
 	got := builder.KnowledgeFileURL("kb-1", "file-1")
-	if got != "https://agenthub.example.com/api/knowledge-bases/kb-1/files/file-1/content" {
+	if got != "https://di-agent.example.com/api/knowledge-bases/kb-1/files/file-1/content" {
 		t.Fatalf("KnowledgeFileURL() = %q", got)
 	}
 }

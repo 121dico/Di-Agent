@@ -1,6 +1,6 @@
 # 交互式卡片系统演进文档
 
-本文记录 AgentHub 交互式卡片（尤其是 plan 方案选择卡）从初始设计到多问题翻页的完整演进过程，作为后续维护与扩展的参考。
+本文记录 Di Agent 交互式卡片（尤其是 plan 方案选择卡）从初始设计到多问题翻页的完整演进过程，作为后续维护与扩展的参考。
 
 ## 目录
 
@@ -206,7 +206,7 @@ const CARD_TYPE_ALIASES = { task_status: 'progress' };  // plan_selection 后续
 
 | 层 | 文件 | 改动 |
 |---|---|---|
-| daemon | `agenthub-daemon.js` | inputSchema `options`→`questions`（嵌套）；run 分支规整化每个 question |
+| daemon | `di-agent-daemon.js` | inputSchema `options`→`questions`（嵌套）；run 分支规整化每个 question |
 | 后端 | `context_agent_config.go` | plan 提示词行改引导 `questions=[...]` |
 | 前端类型 | `types/card.ts` | 新增 `PlanQuestion` 接口；`PlanCard.options`→`questions` |
 | 前端组件 | `PlanCard.tsx` | 重写：翻页 + 统一提交 + 历史只读 |
@@ -263,7 +263,7 @@ const CARD_TYPE_ALIASES = { task_status: 'progress' };  // plan_selection 后续
 
 | # | 层 | 文件 | 位置 | 内容 |
 |---|---|---|---|---|
-| 1 | daemon | `src/daemon-npm/bin/agenthub-daemon.js` | run() 分支（~L3321） | `if (args.card_type === 'xxx')` |
+| 1 | daemon | `src/daemon-npm/bin/di-agent-daemon.js` | run() 分支（~L3321） | `if (args.card_type === 'xxx')` |
 | 2 | 后端提示词 | `src/backend/internal/service/context_agent_config.go` | L66-69 | `render_card(card_type="xxx", ...)` |
 | 3 | 前端类型 | `src/frontend/src/types/card.ts` | L28 CardType union | `'xxx'` 成员 |
 | 4 | 前端注册 | `src/frontend/src/components/chat/cards/CardRegistry.tsx` | registerCard 调用 | `registerCard('xxx', {...})` |
@@ -274,7 +274,7 @@ const CARD_TYPE_ALIASES = { task_status: 'progress' };  // plan_selection 后续
 
 | # | 文件 | 位置 | 改什么 |
 |---|---|---|---|
-| ① | `src/daemon-npm/bin/agenthub-daemon.js` | inputSchema（~L3253）+ run 分支（~L3321）+ description（L3244） | 加新 payload 字段 schema；加 `else if` 填充分支；description 列举新类型 |
+| ① | `src/daemon-npm/bin/di-agent-daemon.js` | inputSchema（~L3253）+ run 分支（~L3321）+ description（L3244） | 加新 payload 字段 schema；加 `else if` 填充分支；description 列举新类型 |
 | ② | `src/backend/internal/service/context_agent_config.go` | L66-69 段 | 加一行 `sb.WriteString("- xxx：render_card(card_type=\"xxx\", ...)\n")` |
 | ③ | `src/frontend/src/types/card.ts` | L28 union + 新接口 + L102 联合 | 加 `'xxx'` 到 CardType；加 `XxxCard extends BaseCard`；加进 InteractiveCard |
 | ④ | `src/frontend/src/components/chat/cards/XxxCard.tsx` | 新文件 | 写组件（文件名=导出名=接口名，见命名约定） |
@@ -331,9 +331,9 @@ Agent 调 render_card(card_type, ...)
 #### daemon（工具协议）
 | 触点 | 文件:行 | 说明 |
 |---|---|---|
-| 工具定义 | `daemon-npm/bin/agenthub-daemon.js:3242-3359` | description + inputSchema + run() 分发 |
-| IPC 通道 | `daemon-npm/bin/agenthub-daemon.js:88-115` | cards collector（临时文件） |
-| 工具名清单 | `daemon-npm/bin/agenthub-daemon.js:3375` | PLATFORM_TOOL_NAMES（强制注入） |
+| 工具定义 | `daemon-npm/bin/di-agent-daemon.js:3242-3359` | description + inputSchema + run() 分发 |
+| IPC 通道 | `daemon-npm/bin/di-agent-daemon.js:88-115` | cards collector（临时文件） |
+| 工具名清单 | `daemon-npm/bin/di-agent-daemon.js:3375` | PLATFORM_TOOL_NAMES（强制注入） |
 
 #### 后端（传输+存储，弱类型透传）
 | 触点 | 文件:行 | 说明 |

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/agent-hub/backend/internal/domain"
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/internal/port"
+	"github.com/121dico/Di-Agent/src/backend/internal/domain"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/port"
 )
 
 // RoleConvRepo 是 RoleService 依赖的会话仓库接口（窄于 ConvRepo）。

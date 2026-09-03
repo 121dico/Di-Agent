@@ -16,7 +16,7 @@ function buildMockCtx() {
     logFlow: () => {},
     pathJoin: (...args) => args.join('/'),
     addRoot: (arr, root) => { if (arr.indexOf(root) === -1) arr.push(root); },
-    isAgentHubWorkspace: () => false,
+    isDiAgentWorkspace: () => false,
     openClawInstallSkillRoots: () => [],
   };
 }

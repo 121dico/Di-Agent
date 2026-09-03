@@ -8,7 +8,7 @@
   background: var(--wb-canvas);
 }
 
-:global(body.ah-maximized) .container { border-radius: 0; }
+:global(body.di-agent-maximized) .container { border-radius: 0; }
 
 .shell {
   min-height: 680px;

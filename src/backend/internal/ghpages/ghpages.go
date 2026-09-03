@@ -92,7 +92,7 @@ func (p *Publisher) waitUntilAvailable(ctx context.Context, url string) error {
 		if err != nil {
 			return err
 		}
-		req.Header.Set("User-Agent", "AgentHub-GitHub-Pages-Publisher")
+		req.Header.Set("User-Agent", "Di-Agent-GitHub-Pages-Publisher")
 		resp, err := p.client.Do(req)
 		if err == nil {
 			lastStatus = resp.StatusCode
@@ -122,7 +122,7 @@ func latestIndexPage(url string) []byte {
 	return []byte(`<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">` +
 		`<meta name="viewport" content="width=device-width, initial-scale=1">` +
 		`<meta http-equiv="refresh" content="0;url=` + url + `">` +
-		`<title>AgentHub Latest Deployment</title></head>` +
+		`<title>Di Agent Latest Deployment</title></head>` +
 		`<body><p>正在打开最新部署：<a href="` + url + `">` + url + `</a></p></body></html>`)
 }
 
@@ -166,7 +166,7 @@ func (p *Publisher) ensureRepo(ctx context.Context) error {
 		"name":        p.repo,
 		"private":     false,
 		"auto_init":   true,
-		"description": "agent-hub 部署产物（GitHub Pages 永久发布）",
+		"description": "di-agent 部署产物（GitHub Pages 永久发布）",
 	}
 	status, respBody, err := p.do(ctx, http.MethodPost, "/user/repos", body)
 	if err != nil {

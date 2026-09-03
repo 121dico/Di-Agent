@@ -1,5 +1,7 @@
 'use strict';
 
+const { readDiAgentEnvironment } = require('./environment');
+
 // OpenCodeCliSpec: OpenCode CLI 的 spec 实现。
 // 对应：
 // - commandForTask opencode 分支（约 :1023-1051）：session 复用 / --fork / persistSessionKey
@@ -90,7 +92,7 @@ function createOpenCodeCliSpec(ctx) {
       ];
       if (savedSessionId) {
         args.push('--session', savedSessionId);
-        // OpenCode 在 session 内缓存可用工具；上下文变化（agent/conversation 切换）时 fork 让 AgentHub 工具变化生效。
+        // OpenCode 在 session 内缓存可用工具；上下文变化（agent/conversation 切换）时 fork 让 Di Agent 工具变化生效。
         if (ctx.opencodeContextChanged(task, savedSessionId)) {
           args.push('--fork');
         }
@@ -101,7 +103,7 @@ function createOpenCodeCliSpec(ctx) {
         args,
         resultFormat: 'opencode-json',
         persistSessionKey: sessionKey,
-        env: ctx.buildAgentHubContextEnv(task.conversation_id, task.user_id, task.agent_id, taskId),
+        env: ctx.buildDiAgentContextEnv(task.conversation_id, task.user_id, task.agent_id, taskId),
       };
     },
 
@@ -111,7 +113,7 @@ function createOpenCodeCliSpec(ctx) {
       if (ctx.commandVersion(command) === null) return;
       try {
         const configPath = ctx.ensureOpenCodeMcpConfig(['node', ...mcpArgs]);
-        ctx.logFlow('info', 'mcp_config.opencode_configured', { server: 'agenthub-platform', file: configPath });
+        ctx.logFlow('info', 'mcp_config.opencode_configured', { server: 'di-agent-platform', file: configPath });
       } catch (err) {
         ctx.logFlow('warn', 'mcp_config.opencode_failed', { error: ctx.errorMessage(err) });
       }
@@ -121,7 +123,7 @@ function createOpenCodeCliSpec(ctx) {
     // OpenCode 与 OpenClaw 共享根目录集（保留原行为）。
     skillRoots(cwd, home) {
       const roots = [];
-      const includeProjectRoots = !ctx.isAgentHubWorkspace(cwd);
+      const includeProjectRoots = !ctx.isDiAgentWorkspace(cwd);
       if (includeProjectRoots) {
         ctx.addRoot(roots, ctx.pathJoin(cwd, '.opencode', 'skills'));
         ctx.addRoot(roots, ctx.pathJoin(cwd, '.openclaw', 'skills'));
@@ -147,12 +149,12 @@ function createOpenCodeCliSpec(ctx) {
 
     // resolveCommand：把 daemon.js 中 resolveOpenCodeCommand 的多路径 fallback 搬进来。
     // 等价原行为：
-    //   - AGENTHUB_OPENCODE_COMMAND 环境变量优先
+    //   - DI_AGENT_OPENCODE_COMMAND 环境变量优先
     //   - Windows: APPDATA/npm/node_modules/opencode-ai/bin/opencode.exe
     //   - 'opencode' 字面量兜底
     resolveCommand(_taskOrCtx) {
       const candidates = [
-        ctx.existingFile(process.env.AGENTHUB_OPENCODE_COMMAND),
+        ctx.existingFile(readDiAgentEnvironment(process.env, 'OPENCODE_COMMAND')),
         ctx.existingFile(
           process.platform === 'win32' && process.env.APPDATA
             ? ctx.pathJoin(process.env.APPDATA, 'npm', 'node_modules', 'opencode-ai', 'bin', 'opencode.exe')

@@ -9,13 +9,14 @@ import { bindModal } from './utils/modal';
 import { installChunkRecovery } from './utils/chunkRecovery';
 import { AppErrorFallback } from './components/shell/AppErrorFallback';
 import { installDisplayScale } from './utils/displayScale';
+import { resolveDesktopBridge } from './config/desktopBridge';
 import './styles/globals.css';
 import './styles/workbench-tokens.css';
 
 // 桌面端标记：尽早设置，让 CSS 能据此隐藏 html/body/#root 的实色背景，
 // 使 transparent 窗口 + CSS border-radius 正确裁切圆角
-if (window.agentHubDesktop?.isDesktop) {
-  document.documentElement.classList.add('ah-desktop');
+if (resolveDesktopBridge(window)?.isDesktop) {
+  document.documentElement.classList.add('di-agent-desktop');
 }
 
 installDisplayScale();

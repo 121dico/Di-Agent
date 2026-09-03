@@ -3,8 +3,8 @@ package service
 import (
 	"sync"
 
-	"github.com/agent-hub/backend/internal/port"
-	"github.com/agent-hub/backend/pkg/ws"
+	"github.com/121dico/Di-Agent/src/backend/internal/port"
+	"github.com/121dico/Di-Agent/src/backend/pkg/ws"
 )
 
 // fakeDaemonDispatcher 是 port.DaemonDispatcher 接口的测试替身。

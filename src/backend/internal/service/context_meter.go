@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 var ErrContextMeterInvalidInput = errors.New("invalid context meter input")

@@ -8,7 +8,7 @@ import (
 
 	"log/slog"
 
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 // ConvFriendRepo 好友关系查询接口（仅好友校验所需方法）

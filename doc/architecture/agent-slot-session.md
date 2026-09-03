@@ -1,6 +1,6 @@
 # Agent ID × Slot × Session 三层抽象与交互
 
-> 适合人群：刚接手 AgentHub 项目的工程师，需要理解 daemon 侧的核心数据模型。
+> 适合人群：刚接手 Di Agent 项目的工程师，需要理解 daemon 侧的核心数据模型。
 >
 > 阅读时长：10 分钟。
 >
@@ -10,7 +10,7 @@
 
 ## 一句话总结
 
-AgentHub 在 daemon 侧用三层抽象来管理 AI 助手的进程与上下文：
+Di Agent 在 daemon 侧用三层抽象来管理 AI 助手的进程与上下文：
 
 - **Agent ID**（DB 实体，全局唯一）：标识"是哪个 AI 助手"
 - **Slot**（daemon 内存，易失）：标识"这个 AI 助手的进程槽位"，同 agent 同时只能 1 个
@@ -26,7 +26,7 @@ AgentHub 在 daemon 侧用三层抽象来管理 AI 助手的进程与上下文�
 |---|---|---|---|---|
 | **Agent ID** | 全局 | 全局唯一（UUID） | DB `agents` 表 | 标识"哪个 AI 助手" |
 | **Slot** | agent 维度 | 同 agent 同时 1 个 | daemon 内存（易失） | 进程槽位，复用 CLI 子进程 |
-| **Session ID** | agent × conversation | 每个 conversation 1 个 | 本地文件 `~/.agenthub/sessions.json`（持久） | claude CLI 上下文隔离 |
+| **Session ID** | agent × conversation | 每个 conversation 1 个 | 本地文件 `~/.di-agent/sessions.json`（持久） | claude CLI 上下文隔离 |
 
 ### 关键点
 
@@ -97,7 +97,7 @@ AgentHub 在 daemon 侧用三层抽象来管理 AI 助手的进程与上下文�
                               │ 启动加载 / 变更写回
                               │
 ╔══════════════════════════════════════════════════════════════════╗
-║  位置 3：用户本地文件 ~/.agenthub/sessions.json（持久化）        ║
+║  位置 3：用户本地文件 ~/.di-agent/sessions.json（持久化）        ║
 ║  ─────────────────────────────────────────────                   ║
 ║  {                                                               ║
 ║    "46f93269:conv-aaa": "2a57ab1c-09ab-4631-9dcf-d61a8925ce70", ║
@@ -168,7 +168,7 @@ UUID 格式校验
     ↓
 写回 conversationSessions[`${agentId}:${conversationId}`] = sessionId
     ↓
-saveSessionMap() → 全量覆盖写 ~/.agenthub/sessions.json
+saveSessionMap() → 全量覆盖写 ~/.di-agent/sessions.json
 ```
 
 ### 决策表
@@ -188,7 +188,7 @@ saveSessionMap() → 全量覆盖写 ~/.agenthub/sessions.json
 ### 读 sessions.json
 ```
 daemon 启动时（loadSessionMap）：
-  读 ~/.agenthub/sessions.json
+  读 ~/.di-agent/sessions.json
   → 解析为 conversationSessions Map
   → 之后整个生命周期都在内存用这个 Map
 ```
@@ -400,7 +400,7 @@ runningAgents 表（同时 3 个槽位）：
 机器 A（公司）                              机器 B（家）
 ─────────                                  ─────────
 daemon A                                   daemon B
-~/.agenthub/sessions.json                  ~/.agenthub/sessions.json
+~/.di-agent/sessions.json                  ~/.di-agent/sessions.json
 { "agent:conv-X": "session-aaa" }          { "agent:conv-X": "session-bbb" }
 
 ~/.claude/sessions/                        ~/.claude/sessions/
@@ -441,12 +441,12 @@ daemon A                                   daemon B
 
 | 关注点 | 文件 |
 |---|---|
-| SESSIONS_FILE 路径定义 | `src/daemon-npm/bin/agenthub-daemon.js:62` |
-| `loadSessionMap()` 启动加载 | `src/daemon-npm/bin/agenthub-daemon.js:1055` |
-| `saveSessionMap()` 写回文件 | `src/daemon-npm/bin/agenthub-daemon.js:1065` |
-| Resume vs session-id 决策 | `src/daemon-npm/bin/agenthub-daemon.js:2513-2598` |
+| SESSIONS_FILE 路径定义 | `src/daemon-npm/bin/di-agent-daemon.js:62` |
+| `loadSessionMap()` 启动加载 | `src/daemon-npm/bin/di-agent-daemon.js:1055` |
+| `saveSessionMap()` 写回文件 | `src/daemon-npm/bin/di-agent-daemon.js:1065` |
+| Resume vs session-id 决策 | `src/daemon-npm/bin/di-agent-daemon.js:2513-2598` |
 | args 拼装（--resume / --session-id） | `src/daemon-npm/cli/claude.js:309-331` |
-| 2 秒 resume 失败检测 | `src/daemon-npm/bin/agenthub-daemon.js:2585-2598` |
+| 2 秒 resume 失败检测 | `src/daemon-npm/bin/di-agent-daemon.js:2585-2598` |
 
 ---
 
@@ -768,9 +768,9 @@ T0+8s ~ T0+13s: runY 执行
 | `sendPrompt` 串行化包装 | `src/daemon-npm/cli/claude.js:496-499` |
 | `resultResolver` resolve 触发点（stdout 处理） | `src/daemon-npm/cli/claude.js:409` |
 | turn 超时定时器 | `src/daemon-npm/cli/claude.js:472-484` |
-| `agentStartQueue`（spawn 串行化） | `src/daemon-npm/bin/agenthub-daemon.js:1074` |
-| `START_QUEUE_INTERVAL_MS = 3000` | `src/daemon-npm/bin/agenthub-daemon.js:60` |
-| `enqueueAgentStart` | `src/daemon-npm/bin/agenthub-daemon.js:2655` |
+| `agentStartQueue`（spawn 串行化） | `src/daemon-npm/bin/di-agent-daemon.js:1074` |
+| `START_QUEUE_INTERVAL_MS = 3000` | `src/daemon-npm/bin/di-agent-daemon.js:60` |
+| `enqueueAgentStart` | `src/daemon-npm/bin/di-agent-daemon.js:2655` |
 
 ### 14.11 一句话总结
 

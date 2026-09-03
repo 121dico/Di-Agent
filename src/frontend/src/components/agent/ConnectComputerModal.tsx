@@ -217,7 +217,7 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
       </div>
       <div className={styles.launcherNote}>
         Mac：点按钮复制安装命令 → 打开「终端」(Terminal) → 粘贴 (⌘V) → 回车，之后全自动；
-        Windows：双击下载的 AgentHub-Setup.bat 运行，若弹出蓝色 SmartScreen 提示：点「更多信息」→「仍要运行」。
+        Windows：双击下载的 Di-Agent-Setup.bat 运行，若弹出蓝色 SmartScreen 提示：点「更多信息」→「仍要运行」。
         安装是幂等的，重复运行只会更新密钥并重启服务。
       </div>    </div>
   );
@@ -395,7 +395,7 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
             {safeCandidates.length === 0 ? (
               <div className={styles.candidateEmpty}>
                 {hasConnectedMachine
-                  ? '电脑已连接，暂无可用 CLI。请重新运行上方 npx 命令扫描 Claude、Codex、OpenClaw。'
+                  ? '电脑已连接，暂无可用 CLI。请重新运行上方安装命令扫描 Claude、Codex、OpenClaw。'
                   : '电脑连接成功后，会在这里显示可用 CLI。你可以基于同一个 CLI 添加多个 Agent。'}
               </div>
             ) : (

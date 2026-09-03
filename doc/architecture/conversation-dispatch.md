@@ -1,6 +1,6 @@
 # 会话类型与消息派发分流
 
-> 适合人群：刚接手 AgentHub 项目的工程师，需要理解用户消息如何触发 Agent 调用。
+> 适合人群：刚接手 Di Agent 项目的工程师，需要理解用户消息如何触发 Agent 调用。
 >
 > 阅读时长：6 分钟。
 >
@@ -10,7 +10,7 @@
 
 ## 一句话总结
 
-AgentHub 用 **`conversation.type` 字段**决定消息派发路径，而不是用 @mention：
+Di Agent 用 **`conversation.type` 字段**决定消息派发路径，而不是用 @mention：
 
 - `type=single`（人 ↔ 人）→ **不派发**，只持久化 + 推送
 - `type=agent`（人 ↔ 单个 Agent）→ **直接派给该会话绑定的 Agent**，不需要 @
@@ -237,7 +237,7 @@ conversation_id | agent_id | role           | ...
 2. **type=agent 会话"默认全派"**——因为会话只为一个 Agent 存在，没别的选择
 3. **type=group 会话"默认不派"**——因为群里多个 Agent，必须显式指定
 4. **@mention 是"群聊选择器"，不是"派发开关"**——这个语义区分理解了，整个分流逻辑就通了
-5. **type=single（人单聊）完全不派发**——AgentHub 是 IM 框架，人与人对话也支持，只是不调 Agent
+5. **type=single（人单聊）完全不派发**——Di Agent 是 IM 框架，人与人对话也支持，只是不调 Agent
 
 ---
 

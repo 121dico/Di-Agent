@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/agent-hub/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 // OrchSender 包含 Orch agent 的身份信息，在创建任务卡片时写入。

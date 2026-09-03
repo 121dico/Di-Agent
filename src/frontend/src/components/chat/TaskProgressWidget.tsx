@@ -37,9 +37,9 @@ import {
 } from './taskPanelPosition';
 import styles from './TaskProgressWidget.module.css';
 
-const COLLAPSE_KEY = 'agenthub:process-panel-collapsed';
-const POSITION_KEY = 'agenthub:process-panel-position';
-const SIZE_KEY = 'agenthub:process-panel-size';
+const COLLAPSE_KEY = 'di_agent:process-panel-collapsed';
+const POSITION_KEY = 'di_agent:process-panel-position';
+const SIZE_KEY = 'di_agent:process-panel-size';
 
 function getComposerExclusionRect() {
   const bounds = document.querySelector<HTMLElement>('[data-chat-composer]')?.getBoundingClientRect();

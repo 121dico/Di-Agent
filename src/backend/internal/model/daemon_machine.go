@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// DaemonMachine 表示一台接入 AgentHub 的本地或远端电脑
+// DaemonMachine 表示一台接入 Di Agent 的本地或远端电脑
 type DaemonMachine struct {
 	ID         string     `json:"id" db:"id"`
 	UserID     string     `json:"user_id" db:"user_id"`

@@ -20,27 +20,27 @@ function buildMockCtx(overrides = {}) {
     spawnSync: () => ({ status: 0, stdout: '', stderr: '' }),
     sessionKeyForTask: (task) => `${task.conversation_id}:${task.agent_id}`,
     opencodeContextChanged: () => false,
-    buildAgentHubContextEnv: () => ({}),
+    buildDiAgentContextEnv: () => ({}),
     ensureOpenCodeMcpConfig: () => '/tmp/opencode.json',
     addRoot: (arr, root) => { if (arr.indexOf(root) === -1) arr.push(root); },
-    isAgentHubWorkspace: () => false,
+    isDiAgentWorkspace: () => false,
     openClawInstallSkillRoots: () => [],
   };
 }
 
-test('opencode.resolveCommand returns AGENTHUB_OPENCODE_COMMAND when valid', () => {
-  process.env.AGENTHUB_OPENCODE_COMMAND = '/custom/opencode';
+test('opencode.resolveCommand returns DI_AGENT_OPENCODE_COMMAND when valid', () => {
+  process.env.DI_AGENT_OPENCODE_COMMAND = '/custom/opencode';
   const ctx = buildMockCtx({
     existingFile: (v) => v || null,
     commandVersion: () => '1.0.0',
   });
   const spec = createOpenCodeCliSpec(ctx);
   assert.strictEqual(spec.resolveCommand(), '/custom/opencode');
-  delete process.env.AGENTHUB_OPENCODE_COMMAND;
+  delete process.env.DI_AGENT_OPENCODE_COMMAND;
 });
 
 test('opencode.resolveCommand returns "opencode" literal when nothing matches', () => {
-  delete process.env.AGENTHUB_OPENCODE_COMMAND;
+  delete process.env.DI_AGENT_OPENCODE_COMMAND;
   const ctx = buildMockCtx({
     existingFile: () => null,
     commandVersion: () => null,

@@ -45,12 +45,12 @@
 
 * 使用现有 `agents.tools_config` 字段存储 MVP 工具集配置，格式为 `{"toolset": string, "allowed_tools": string[]}`。
 * npm daemon 通过 `--agent-id` 将当前 Agent 身份传入 MCP 子进程，并在 `tools/list` 与 `tools/call` 过滤授权工具。
-* Go daemon 支持 `AGENTHUB_AGENT_ID`，同样过滤 `tools/list` 与 `tools/call`。
+* Go daemon 支持 `DI_AGENT_AGENT_ID`，同样过滤 `tools/list` 与 `tools/call`。
 * 前端 Agent Profile 的 Tools Config tab 已改为模板 + 工具勾选，保存 JSON 配置。
 * 验证命令：
   * `go test ./internal/service ./internal/handler ./internal/repository`
   * `go test ./...` in `src/daemon`
   * `npm run build` in `src/frontend`
-  * `node --check src/daemon-npm/bin/agenthub-daemon.js`
+  * `node --check src/daemon-npm/bin/di-agent-daemon.js`
   * npm daemon MCP mock E2E script
   * Playwright page smoke check for `http://127.0.0.1:5173/`

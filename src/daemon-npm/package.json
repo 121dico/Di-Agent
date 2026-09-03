@@ -1,12 +1,12 @@
 {
-  "name": "@hust-agenthub/daemon",
+  "name": "di-agent-daemon",
   "version": "0.3.0",
-  "description": "AgentHub daemon — connects to an AgentHub backend over HTTP/WebSocket and spawns local agent CLIs (Claude Code, Codex, OpenCode, OpenClaw).",
+  "description": "Di Agent daemon — connects to a Di Agent backend over HTTP/WebSocket and spawns local agent CLIs (Claude Code, Codex, OpenCode, OpenClaw).",
   "bin": {
-    "agenthub-daemon": "./bin/agenthub-daemon.js"
+    "di-agent-daemon": "./bin/di-agent-daemon.js"
   },
   "files": [
-    "bin/agenthub-daemon.js",
+    "bin/di-agent-daemon.js",
     "cli/*.js",
     "README.md"
   ],
@@ -14,12 +14,9 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node --test test cli/__tests__/*.test.js"
+    "test": "node --test test bin/*.test.js cli/__tests__/*.test.js"
   },
   "dependencies": {
     "ws": "^8.21.0"
-  },
-  "publishConfig": {
-    "access": "public"
   }
 }

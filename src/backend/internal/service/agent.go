@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/internal/port"
-	"github.com/agent-hub/backend/pkg/ws"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/port"
+	"github.com/121dico/Di-Agent/src/backend/pkg/ws"
 )
 
 // AgentRepo Agent 服务所需仓库接口
@@ -670,8 +670,8 @@ func (s *AgentService) StopAgent(ctx context.Context, agentID, userID string) er
 }
 
 // GetMachineConnectCommand 获取电脑连接命令。需要重新生成 API Key（原始密钥只存储哈希）。
-// 返回 npx 命令（command）与 curl|bash 一键安装命令（installCommand，脚本由服务器
-// /downloads/install.sh 托管，用于绕开 macOS Gatekeeper 对下载脚本的拦截）。
+// command 与 installCommand 均返回服务器托管的一键安装命令。保留两个字段是为了兼容
+// 已发布的 API 结构，但新客户端不依赖未发布的 npm 包。
 func (s *AgentService) GetMachineConnectCommand(ctx context.Context, machineID, userID string) (string, string, *model.DaemonMachine, string, error) {
 	machine, apiKey, err := s.regenerateMachineAPIKey(ctx, machineID, userID)
 	if err != nil {
@@ -681,10 +681,9 @@ func (s *AgentService) GetMachineConnectCommand(ctx context.Context, machineID, 
 	if serverURL == "" {
 		serverURL = "http://127.0.0.1:8080" // 未配置时生成可直接运行的本机命令。
 	}
-	// daemon 已发布到 npm（@hust-agenthub/daemon），固定到 0.3.0 以保证行为可重现。
-	command := fmt.Sprintf("npx @hust-agenthub/daemon@0.3.0 --server-url %s --api-key %s", serverURL, apiKey)
 	installCommand := fmt.Sprintf("curl -fsSL %s/downloads/install.sh | bash -s -- --server-url %s --api-key %s",
 		serverURL, serverURL, apiKey)
+	command := installCommand
 	return command, installCommand, machine, apiKey, nil
 }
 
@@ -744,8 +743,7 @@ func hashMachineAPIKey(apiKey string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// resolveDaemonNPMPath 查找本地 daemon-npm 目录的绝对路径。
-// @agenthub/daemon 未发布到 npm，必须用 file: 协议指向本地包。
+// resolveDaemonNPMPath 查找本地 daemon-npm 目录的绝对路径，仅供开发与 E2E 使用。
 func resolveDaemonNPMPath() string {
 	wd, err := os.Getwd()
 	if err != nil {

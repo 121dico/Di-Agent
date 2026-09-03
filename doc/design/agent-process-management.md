@@ -70,10 +70,10 @@ Daemon 收到 start 指令
     ├── 构建 CLI 启动命令:
     │   claude --dangerously-skip-permissions
     │         --output-format text
-    │         --mcp-config { agenthub-platform: ... }
-    │         --allowedTools mcp__agenthub-platform
+    │         --mcp-config { di-agent-platform: ... }
+    │         --allowedTools mcp__di-agent-platform
     │         --system-prompt "..."
-    │         --session-id "agenthub-{agentID}"
+    │         --session-id "di-agent-{agentID}"
     │
     ├── spawn CLI 进程（detached, stdin=pipe, stdout/stderr=pipe）
     ├── 记录到 runningAgents: Map<agentID, ChildProcess>
@@ -86,10 +86,10 @@ Daemon 收到 start 指令
 claude \
   --dangerously-skip-permissions \   # 自动批准所有工具，不阻塞
   --output-format text \
-  --mcp-config '{"mcpServers":{"agenthub-platform":{...}}}' \
-  --allowedTools 'mcp__agenthub-platform' \
+  --mcp-config '{"mcpServers":{"di-agent-platform":{...}}}' \
+  --allowedTools 'mcp__di-agent-platform' \
   --system-prompt "系统指令..." \
-  --session-id "agenthub-{agentID}"
+  --session-id "di-agent-{agentID}"
 ```
 
 **关键变更：** `--permission-mode dontAsk` → `--dangerously-skip-permissions`
@@ -110,7 +110,7 @@ async function startAgent(agentID, config) {
   // 如果已有进程，先停掉
   await stopAgent(agentID);
 
-  const sessionId = `agenthub-${agentID}`;
+  const sessionId = `di-agent-${agentID}`;
   const { command, args } = buildAgentCommand(config);
   const child = spawn(command, args, {
     detached: true,
@@ -146,11 +146,11 @@ async function restartAgent(agentID) {
 Daemon 启动时（npx 连接 server）自动 fork MCP 子进程：
 
 ```
-npx @agenthub/daemon --server-url ... --api-key ...
+npx @di-agent/daemon --server-url ... --api-key ...
     │
     ├── 主进程: 注册机器 → 轮询/WS → 任务分发 → 进程管理
     │
-    └── MCP 子进程: node agenthub-daemon.js --mcp
+    └── MCP 子进程: node di-agent-daemon.js --mcp
          （常驻 stdio MCP server，供本机 Agent 调用平台工具）
 ```
 

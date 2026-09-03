@@ -10,7 +10,7 @@ build/
 # === Go 构建产物 ===
 src/backend/bin/
 src/backend/server
-src/backend/agenthub-server
+src/backend/di-agent-server
 src/backend/main
 src/backend/tmp/
 src/daemon/bin/

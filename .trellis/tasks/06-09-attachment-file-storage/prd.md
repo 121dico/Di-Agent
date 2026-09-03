@@ -6,7 +6,7 @@
 
 ## What I Already Know
 
-- 用户提供的目标服务器为一台 2C2G 云主机，项目远端工作目录为 `/root/rep/agent-hub`。
+- 用户提供的目标服务器为一台 2C2G 云主机，项目远端工作目录为 `/root/rep/di-agent`。
 - 当前聊天附件链路已经不是把文件二进制存入数据库：`UploadService` 写入 `upload.dir/originals` 和 `upload.dir/thumbnails`，`message_attachments` 表存 `file_path`、`thumbnail_path`、大小、MIME、宽高等元信息。
 - 当前知识库文件链路同样写入 `upload.dir/knowledge/<kbID>`，数据库保存 `knowledge_files.file_path`、预览文本和元信息。
 - 现有静态访问路径是鉴权路由 `/api/uploads/*filepath`，前端手动拼 `/api` + `file_path`，并通过 query token 给 `<img>/<a>` 使用。
@@ -22,7 +22,7 @@
 ## Requirements
 
 - 后端上传配置支持：
-  - `upload.dir`：本地文件根目录，例如生产环境可设置为 `/root/agenthub-data/uploads`。
+  - `upload.dir`：本地文件根目录，例如生产环境可设置为 `/root/di-agent-data/uploads`。
   - `upload.public_base_url`：可选公网基址，用于拼接绝对文件访问 URL；为空时返回相对 URL。
 - 聊天上传接口 `/api/upload` 返回原有字段之外，还返回：
   - `url`：原文件访问 URL。

@@ -52,7 +52,7 @@ function createZcodeCliSpec(ctx) {
 
     skillRoots(cwd, home) {
       const roots = [];
-      const includeProjectRoots = !ctx.isAgentHubWorkspace(cwd);
+      const includeProjectRoots = !ctx.isDiAgentWorkspace(cwd);
       if (includeProjectRoots) ctx.addRoot(roots, ctx.pathJoin(cwd, '.zcode', 'skills'));
       if (home) ctx.addRoot(roots, ctx.pathJoin(home, '.zcode', 'skills'));
       return roots;

@@ -17,9 +17,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agent-hub/backend/internal/model"
-	"github.com/agent-hub/backend/internal/port"
-	"github.com/agent-hub/backend/pkg/ws"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+	"github.com/121dico/Di-Agent/src/backend/internal/port"
+	"github.com/121dico/Di-Agent/src/backend/pkg/ws"
 )
 
 // fakeStreamingNotifier 是测试用的最小 MessageNotifier 实现。
