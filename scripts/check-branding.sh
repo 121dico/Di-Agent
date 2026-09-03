@@ -17,7 +17,7 @@ cd "$REPO_ROOT"
 while IFS= read -r file; do
   [ -e "$file" ] || continue
   case "$file" in
-    docs/adr/0001-di-agent-canonical-brand.md|.trellis/tasks/09-03-di-agent-canonical-brand/prd.md)
+    docs/adr/0001-di-agent-canonical-brand.md|.trellis/tasks/09-03-di-agent-canonical-brand/prd.md|.trellis/tasks/archive/*/09-03-di-agent-canonical-brand/prd.md)
       continue
       ;;
   esac
