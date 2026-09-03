@@ -36,6 +36,7 @@ import { searchUsers as searchUsersApi } from '@/api/friend';
 import type { User } from '@/types/auth';
 import { Checkbox } from 'antd';
 import { useConversationAgents } from '@/hooks/useConversationAgents';
+import { getAgentRuntimeIdentity } from '@/components/agent/agentPresentation';
 
 interface GroupMemberPanelProps {
   open: boolean;
@@ -653,7 +654,7 @@ const GroupMemberPanel: React.FC<GroupMemberPanelProps> = ({
                             <Avatar size="small" style={{ backgroundColor: '#52c41a' }} icon={<RobotOutlined />} />
                           }
                           title={agent.name}
-                          description={`${agent.cli_tool} · ${agent.status === 'online' ? '在线' : '离线'}`}
+                          description={`${getAgentRuntimeIdentity(agent).variantLabel} · ${agent.status === 'online' ? '在线' : '离线'}`}
                         />
                       </List.Item>
                     )}

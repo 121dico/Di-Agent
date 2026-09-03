@@ -3,6 +3,7 @@ import { Checkbox, Empty, Input, Modal, Tabs } from 'antd';
 import { RobotOutlined, UserOutlined } from '@ant-design/icons';
 import { useFriendStore } from '@/store/friendStore';
 import { useAgentStore } from '@/store/agentStore';
+import { getAgentRuntimeIdentity } from '@/components/agent/agentPresentation';
 import styles from './NewConversationModal.module.css';
 
 interface NewConversationModalProps {
@@ -138,7 +139,9 @@ const NewConversationModal: React.FC<NewConversationModalProps> = ({
                       {filteredAgents.map((agent) => (
                         <Checkbox key={agent.id} value={agent.id}>
                           <RobotOutlined /> {agent.name}
-                          <span className={styles.optionMeta}>{agent.cli_tool}</span>
+                          <span className={styles.optionMeta}>
+                            {getAgentRuntimeIdentity(agent).variantLabel}
+                          </span>
                         </Checkbox>
                       ))}
                     </Checkbox.Group>

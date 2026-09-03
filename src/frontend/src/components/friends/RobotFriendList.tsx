@@ -3,6 +3,7 @@ import { Avatar, Badge, Input } from 'antd';
 import { RobotOutlined } from '@ant-design/icons';
 import type { Agent } from '@/types/agent';
 import { SimpleList as List } from '@/components/common/SimpleList';
+import { getAgentRuntimeIdentity } from '@/components/agent/agentPresentation';
 
 interface RobotFriendListProps {
   agents: Agent[];
@@ -50,7 +51,7 @@ export const RobotFriendList: React.FC<RobotFriendListProps> = ({
                 </Badge>
               }
               title={agent.name}
-              description={`${agent.cli_tool}${agent.machine_name ? ` · ${agent.machine_name}` : ''}`}
+              description={`${getAgentRuntimeIdentity(agent).variantLabel}${agent.machine_name ? ` · ${agent.machine_name}` : ''}`}
             />
           </List.Item>
         )}

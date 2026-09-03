@@ -1,5 +1,59 @@
 import type { Agent } from '@/types/agent';
 
+export interface AgentRuntimeIdentity {
+  variant: 'cli' | 'desktop';
+  variantLabel: 'CLI 命令行' | 'Desktop 桌面端';
+  shortVariantLabel: 'CLI' | 'Desktop';
+  productLabel: string;
+  version: string;
+  subtitle: string;
+}
+
+const PRODUCT_LABELS: Record<string, string> = {
+  claude: 'Claude Code',
+  codex: 'Codex',
+  opencode: 'OpenCode',
+  zcode: 'ZCode',
+  openclaw: 'OpenClaw',
+};
+
+const VERSION_PREFIXES: Record<string, RegExp> = {
+  claude: /^(?:claude(?:\s+code)?(?:-cli)?)[\s:@-]*/i,
+  codex: /^(?:(?:@openai\/)?codex(?:-cli)?)[\s:@-]*/i,
+  opencode: /^(?:opencode(?:-cli)?)[\s:@-]*/i,
+  zcode: /^(?:zcode(?:-cli)?)[\s:@-]*/i,
+  openclaw: /^(?:openclaw(?:-cli)?)[\s:@-]*/i,
+};
+
+export function normalizeRuntimeVersion(cliTool: string, rawVersion?: string): string {
+  let version = rawVersion?.trim() ?? '';
+  if (!version || /^(?:cli|desktop|unknown)$/i.test(version)) return '';
+
+  const prefix = VERSION_PREFIXES[cliTool.toLowerCase()];
+  if (prefix) version = version.replace(prefix, '').trim();
+  version = version.replace(/^v(?=\d)/i, '');
+
+  return /^(?:cli|desktop|unknown)$/i.test(version) ? '' : version;
+}
+
+/**
+ * 把后端运行时字段整理成统一的用户可见身份。
+ * 桌面应用可能复用内置 CLI 的版本字符串（例如 codex-cli 0.153），
+ * 因此版本中的产品名不能被当作真实运行底座展示。
+ */
+export function getAgentRuntimeIdentity(agent: Agent): AgentRuntimeIdentity {
+  const variant = agent.runtime_variant === 'desktop' ? 'desktop' : 'cli';
+  const variantLabel = variant === 'desktop' ? 'Desktop 桌面端' : 'CLI 命令行';
+  const shortVariantLabel = variant === 'desktop' ? 'Desktop' : 'CLI';
+  const cliTool = agent.cli_tool.trim();
+  const productLabel = PRODUCT_LABELS[cliTool.toLowerCase()] ?? cliTool;
+  const version = normalizeRuntimeVersion(cliTool, agent.version);
+  const handle = cliTool ? `@${cliTool}` : productLabel;
+  const subtitle = `${handle} · ${variantLabel}${version ? ` · ${version}` : ''}`;
+
+  return { variant, variantLabel, shortVariantLabel, productLabel, version, subtitle };
+}
+
 export interface Skill {
   name: string;
   category?: string;
@@ -178,7 +232,11 @@ export function autoGenerateSkills(agent: Agent): Skill[] {
   }
 
   if (skills.length === 0) {
-    skills.push({ name: agent.name, description: `${agent.cli_tool} CLI 工具`, auto: true });
+    skills.push({
+      name: agent.name,
+      description: `${agent.cli_tool} ${getAgentRuntimeIdentity(agent).variantLabel}工具`,
+      auto: true,
+    });
   }
 
   const seen = new Set<string>();
@@ -192,42 +250,29 @@ export function autoGenerateSkills(agent: Agent): Skill[] {
 export function getAgentDescription(agent: Agent): string {
   if (agent.system_prompt) return agent.system_prompt;
 
+  const runtime = getAgentRuntimeIdentity(agent);
+  const runtimeAgentLabel = runtime.variant === 'desktop' ? '桌面端 Agent' : '本地 CLI Agent';
+
   switch (agent.cli_tool) {
     case 'claude':
-      return 'Claude Code 本地 CLI Agent，适合代码生成、项目理解、重构、评审与 Orchestrator 意图拆解。';
+      return `Claude Code ${runtimeAgentLabel}，适合代码生成、项目理解、重构、评审与 Orchestrator 意图拆解。`;
     case 'codex':
-      return 'Codex 本地 CLI Agent，适合代码实现、补丁生成、测试修复和工程化任务。';
+      return `Codex ${runtimeAgentLabel}，适合代码实现、补丁生成、测试修复和工程化任务。`;
     case 'opencode':
-      return 'OpenCode 本地 CLI Agent，适合通用代码任务和命令行开发工作流。';
+      return `OpenCode ${runtimeAgentLabel}，适合通用代码任务和开发工作流。`;
     default:
       return '通过本地守护进程或用户配置接入的 Agent，可在后续对话链路中承担任务执行。';
   }
 }
 
 export function getRuntimeLabel(agent: Agent): string {
-  switch (agent.cli_tool) {
-    case 'claude':
-      return 'Claude Code CLI';
-    case 'codex':
-      return 'Codex CLI';
-    case 'opencode':
-      return 'OpenCode CLI';
-    default:
-      return agent.cli_tool;
-  }
+  const runtime = getAgentRuntimeIdentity(agent);
+  return `${runtime.productLabel} ${runtime.shortVariantLabel}`;
 }
 
 export function getModelLabel(agent: Agent): string {
-  switch (agent.cli_tool) {
-    case 'claude':
-      return 'Claude Code Default';
-    case 'codex':
-      return 'Codex CLI Default';
-    case 'opencode':
-      return 'OpenCode Default';
-    default:
-      return 'CLI Default';
-  }
+  const runtime = getAgentRuntimeIdentity(agent);
+  return `${runtime.productLabel} ${runtime.shortVariantLabel} Default`;
 }
 
 export function formatDateTime(value?: string): string {

@@ -14,7 +14,7 @@ import { useAgents } from '@/hooks/useAgents';
 import type { Agent, AgentStatus, DaemonMachine } from '@/types/agent';
 import { ConnectComputerModal } from './ConnectComputerModal';
 import { AvatarPickerModal } from './AvatarPickerModal';
-import { resolveAgentAvatar } from './agentPresentation';
+import { getAgentRuntimeIdentity, resolveAgentAvatar } from './agentPresentation';
 import { StatusBadge, type StatusBadgeStatus } from '@/components/common/StatusBadge';
 import styles from './AgentList.module.css';
 
@@ -301,6 +301,7 @@ export const AgentList: React.FC<AgentListProps> = ({
                       <div className={styles.machineEmpty}>暂无 Agent</div>
                     ) : (
                       machineAgents.map((agent) => {
+                        const runtime = getAgentRuntimeIdentity(agent);
                         const menuItems: MenuProps['items'] = [
                           ...(agent.user_id
                             ? [
@@ -346,10 +347,7 @@ export const AgentList: React.FC<AgentListProps> = ({
                                 />
                               </div>
                               {agent.cli_tool ? (
-                                <span className={styles.agentTool}>
-                                  @{agent.cli_tool}
-                                  {agent.version ? ` · v${agent.version}` : ''}
-                                </span>
+                                <span className={styles.agentTool}>{runtime.subtitle}</span>
                               ) : (
                                 <span className={styles.agentTool} style={{ visibility: 'hidden' }}>&nbsp;</span>
                               )}

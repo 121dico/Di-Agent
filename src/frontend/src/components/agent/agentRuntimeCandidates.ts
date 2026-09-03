@@ -1,4 +1,5 @@
 import type { AgentCandidate } from '@/types/agent';
+import { normalizeRuntimeVersion } from './agentPresentation';
 
 export interface AgentRuntimeCandidateGroup {
   key: string;
@@ -15,7 +16,8 @@ export function runtimeVariant(candidate: AgentCandidate): 'cli' | 'desktop' {
 
 export function runtimeCandidateLabel(candidate: AgentCandidate): string {
   const label = runtimeVariant(candidate) === 'desktop' ? 'Desktop 桌面端' : 'CLI 命令行';
-  return candidate.version ? `${label} · ${candidate.version}` : label;
+  const version = normalizeRuntimeVersion(candidate.cli_tool, candidate.version);
+  return version ? `${label} · ${version}` : label;
 }
 
 export function groupAgentRuntimeCandidates(candidates: AgentCandidate[]): AgentRuntimeCandidateGroup[] {

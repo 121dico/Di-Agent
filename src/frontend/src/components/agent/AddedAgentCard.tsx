@@ -10,7 +10,7 @@ import {
   RobotOutlined,
 } from '@ant-design/icons';
 import type { Agent, AgentStatus } from '@/types/agent';
-import { resolveAgentAvatar } from './agentPresentation';
+import { getAgentRuntimeIdentity, resolveAgentAvatar } from './agentPresentation';
 import { StatusBadge, type StatusBadgeStatus } from '@/components/common/StatusBadge';
 import styles from './AddedAgentCard.module.css';
 
@@ -70,6 +70,7 @@ export const AddedAgentCard: React.FC<AddedAgentCardProps> = ({
   const isRunning = agent.status === 'online' || agent.status === 'busy';
   const canStart = agent.status === 'stopped' || agent.status === 'offline' || agent.status === 'error';
   const isBuiltinSystem = agent.type === 'system' && !agent.user_id;
+  const runtime = getAgentRuntimeIdentity(agent);
 
   const handleCardClick = () => {
     onSelect?.(agent);
@@ -106,10 +107,7 @@ export const AddedAgentCard: React.FC<AddedAgentCardProps> = ({
               />
             </div>
           </div>
-          <div className={styles.sub}>
-            @{agent.cli_tool}
-            {agent.version ? ` · v${agent.version}` : ''}
-          </div>
+          <div className={styles.sub}>{runtime.subtitle}</div>
           {agent.system_prompt ? (
             <div className={styles.desc}>{agent.system_prompt}</div>
           ) : (

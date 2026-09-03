@@ -43,8 +43,10 @@ describe('agent runtime candidate grouping', () => {
 
   it('formats runtime option labels with their version', () => {
     expect(runtimeCandidateLabel(candidate({ variant: 'cli', version: 'codex-cli 1.0.0' })))
-      .toBe('CLI 命令行 · codex-cli 1.0.0');
+      .toBe('CLI 命令行 · 1.0.0');
+    expect(runtimeCandidateLabel(candidate({ variant: 'desktop', version: 'codex-cli 1.0.0' })))
+      .toBe('Desktop 桌面端 · 1.0.0');
     expect(runtimeCandidateLabel(candidate({ variant: 'desktop', version: 'Codex 2.0.0' })))
-      .toBe('Desktop 桌面端 · Codex 2.0.0');
+      .toBe('Desktop 桌面端 · 2.0.0');
   });
 });

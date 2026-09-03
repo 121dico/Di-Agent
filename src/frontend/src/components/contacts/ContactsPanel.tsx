@@ -7,7 +7,7 @@ import { DeleteOutlined, MoreOutlined, RobotOutlined, SearchOutlined, TeamOutlin
 import { useFriendStore } from '@/store/friendStore';
 import { useConversationStore } from '@/store/conversationStore';
 import { useAgentStore } from '@/store/agentStore';
-import { resolveAgentAvatar, resolveUserAvatar, avatarUrl } from '@/components/agent/agentPresentation';
+import { getAgentRuntimeIdentity, resolveAgentAvatar, resolveUserAvatar, avatarUrl } from '@/components/agent/agentPresentation';
 import type { Conversation } from '@/types/conversation';
 import type { Friend } from '@/types/friend';
 import type { Agent } from '@/types/agent';
@@ -245,7 +245,7 @@ const ContactsPanel: React.FC<ContactsPanelProps> = ({
                             <Avatar className={styles.agentAvatar} size={28} src={resolveAgentAvatar(agent)} icon={<RobotOutlined />} />
                           }
                           title={<span className={styles.contactName}>{agent.name}</span>}
-                          description={<span className={styles.contactMeta}>{agent.cli_tool}</span>}
+                          description={<span className={styles.contactMeta}>{getAgentRuntimeIdentity(agent).variantLabel}</span>}
                         />
                       </List.Item>
                     )}

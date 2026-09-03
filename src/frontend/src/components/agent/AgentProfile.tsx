@@ -25,6 +25,7 @@ import { AvatarPickerModal } from './AvatarPickerModal';
 import {
   formatDateTime,
   getAgentDescription,
+  getAgentRuntimeIdentity,
   parseSkills,
   resolveAgentAvatar,
 } from './agentPresentation';
@@ -246,8 +247,9 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, defaultTab = 
     .slice(1);
 
   const avatarSrc = avatar.trim() ? resolveAgentAvatar({ ...agent, avatar }) : resolveAgentAvatar(agent);
-  const subtitleText = `@${agent.cli_tool}${agent.version ? ` · v${agent.version}` : ''}`;
-  const roleTagText = agent.cli_tool || 'agent';
+  const runtime = getAgentRuntimeIdentity(agent);
+  const subtitleText = runtime.subtitle;
+  const roleTagText = runtime.shortVariantLabel;
   const skillsList = parseSkills(agent.custom_skills).slice(0, 3);
 
   const tabItems = [
@@ -680,7 +682,7 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, defaultTab = 
                 </div>
                 <div>
                   <span className={styles.label}>版本</span>
-                  <div className={styles.value}>{agent.version || '未上报版本'}</div>
+                  <div className={styles.value}>{runtime.version || '未上报版本'}</div>
                 </div>
               </div>
             </section>
