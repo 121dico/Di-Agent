@@ -16,3 +16,11 @@ type AgentCandidate struct {
 	CreatedAt        time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at" db:"updated_at"`
 }
+
+// AgentCandidateRuntime identifies one independently runnable product/runtime
+// reported by a daemon scan. It intentionally excludes the candidate row ID:
+// every scan is a fresh machine-scoped snapshot keyed by CLI tool + variant.
+type AgentCandidateRuntime struct {
+	CLITool string
+	Variant string
+}

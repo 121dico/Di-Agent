@@ -536,7 +536,7 @@ func (r *fakeAgentRepoForHandler) IsAgentInConversation(_ context.Context, _, _,
 	return false, nil
 }
 
-func (r *fakeAgentRepoForHandler) CreateDaemonTask(_ context.Context, _, _, _, _, _, _, _ string) (*model.DaemonTask, error) {
+func (r *fakeAgentRepoForHandler) CreateDaemonTask(_ context.Context, _, _, _, _, _, _, _, _ string) (*model.DaemonTask, error) {
 	return &model.DaemonTask{ID: "task-1", Status: "completed", Result: "ok"}, nil
 }
 

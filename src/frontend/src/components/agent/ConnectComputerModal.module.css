@@ -231,6 +231,22 @@
   white-space: nowrap;
 }
 
+.candidateActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.runtimeSelect {
+  min-width: 210px;
+}
+
+.runtimeStatic {
+  margin: 0;
+  white-space: normal;
+}
+
 @media (max-width: 640px) {
   .nameRow {
     grid-template-columns: 1fr;
@@ -242,6 +258,15 @@
 
   .candidateItem {
     grid-template-columns: 1fr;
+  }
+
+  .candidateActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .runtimeSelect {
+    width: 100%;
   }
 
 }

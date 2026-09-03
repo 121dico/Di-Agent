@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Button, Input, Modal, Popconfirm, Tag, Tooltip } from 'antd';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Button, Input, Modal, Popconfirm, Select, Tag, Tooltip } from 'antd';
 import { message } from '@/utils/message';
 import { copyText } from '@/utils/clipboard';
 import {
@@ -21,6 +21,11 @@ import type {
   DaemonMachine,
 } from '@/types/agent';
 import { AgentCreateModal } from './AgentCreateModal';
+import {
+  groupAgentRuntimeCandidates,
+  runtimeCandidateLabel,
+  runtimeVariant,
+} from './agentRuntimeCandidates';
 import { DAEMON_VERSION } from '@/utils/connectCommand';
 import { downloadMachineLauncher, getMachineConnectCommand } from '@/api/agent';
 import styles from './ConnectComputerModal.module.css';
@@ -106,8 +111,13 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
   const [created, setCreated] = useState<CreateDaemonMachineResponse | null>(null);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [launcherBusy, setLauncherBusy] = useState<string | null>(null);
+  const [selectedRuntimeCandidates, setSelectedRuntimeCandidates] = useState<Record<string, string>>({});
   const safeMachines = machines ?? [];
   const safeCandidates = candidates ?? [];
+  const candidateGroups = useMemo(
+    () => groupAgentRuntimeCandidates(safeCandidates),
+    [candidates],
+  );
   const hasConnectedMachine = safeMachines.some((machine) => machine.status === 'connected');
   const machinePanelTitle = hasConnectedMachine
     ? 'Connected computers'
@@ -141,6 +151,18 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
     }, 3000);
     return () => window.clearInterval(timer);
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    setSelectedRuntimeCandidates((current) => {
+      const next: Record<string, string> = {};
+      for (const group of candidateGroups) {
+        const selected = group.candidates.find((candidate) => candidate.id === current[group.key]);
+        next[group.key] = (selected ?? group.defaultCandidate).id;
+      }
+      return next;
+    });
+  }, [candidateGroups, open]);
 
   const handleCreate = async () => {
     if (!name.trim()) return;
@@ -388,26 +410,28 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
 
         <div className={styles.candidatePanel}>
           <div className={styles.candidateTitle}>
-            <span>DETECTED CLI TOOLS</span>
-            <span>{safeCandidates.length} Agents</span>
+            <span>DETECTED AGENT RUNTIMES</span>
+            <span>{candidateGroups.length} Tools</span>
           </div>
           <div className={styles.candidateList}>
-            {safeCandidates.length === 0 ? (
+            {candidateGroups.length === 0 ? (
               <div className={styles.candidateEmpty}>
                 {hasConnectedMachine
-                  ? '电脑已连接，暂无可用 CLI。请重新运行上方安装命令扫描 Claude、Codex、OpenClaw。'
-                  : '电脑连接成功后，会在这里显示可用 CLI。你可以基于同一个 CLI 添加多个 Agent。'}
+                  ? '电脑已连接，暂无可用 Agent 运行时。请重新运行上方安装命令扫描 CLI 和桌面应用。'
+                  : '电脑连接成功后，会在这里显示可用 CLI 和桌面端运行时。你可以基于同一个工具添加多个 Agent。'}
               </div>
             ) : (
-              safeCandidates.map((candidate) => {
-                      const capabilities = parseCapabilities(candidate.capabilities_json);
-                      return (
-                  <div className={styles.candidateItem} key={candidate.id}>
+              candidateGroups.map((group) => {
+                const candidate = group.candidates.find(
+                  (item) => item.id === selectedRuntimeCandidates[group.key],
+                ) ?? group.defaultCandidate;
+                const capabilities = parseCapabilities(candidate.capabilities_json);
+                return (
+                  <div className={styles.candidateItem} key={group.key}>
                     <div className={styles.candidateMeta}>
-                      <strong>{candidate.name}</strong>
+                      <strong>{group.name}</strong>
                       <span>
                         {candidate.cli_tool} · {candidate.machine_name}
-                        {candidate.version ? ` · ${candidate.version}` : ''}
                       </span>
                       {capabilities.length > 0 && (
                         <div className={styles.candidateTags}>
@@ -418,17 +442,42 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
                         </div>
                       )}
                     </div>
-                    <Button
-                      icon={<PlusOutlined />}
-                      loading={addingID === candidate.id}
-                      disabled={addingID !== null && addingID !== candidate.id}
-                      type="primary"
-                      onClick={() => setCreateCandidate(candidate)}
-                    >
-                      添加 Agent
-                    </Button>
+                    <div className={styles.candidateActions}>
+                      {group.candidates.length > 1 ? (
+                        <Select
+                          aria-label={`${group.name} 运行时`}
+                          className={styles.runtimeSelect}
+                          value={candidate.id}
+                          options={group.candidates.map((option) => ({
+                            value: option.id,
+                            label: runtimeCandidateLabel(option),
+                          }))}
+                          onChange={(candidateId) => setSelectedRuntimeCandidates((current) => ({
+                            ...current,
+                            [group.key]: candidateId,
+                          }))}
+                        />
+                      ) : (
+                        <Tag
+                          aria-label={`${group.name} 运行时：${runtimeCandidateLabel(candidate)}`}
+                          color={runtimeVariant(candidate) === 'desktop' ? 'purple' : 'green'}
+                          className={styles.runtimeStatic}
+                        >
+                          {runtimeCandidateLabel(candidate)}
+                        </Tag>
+                      )}
+                      <Button
+                        icon={<PlusOutlined />}
+                        loading={addingID === candidate.id}
+                        disabled={addingID !== null && addingID !== candidate.id}
+                        type="primary"
+                        onClick={() => setCreateCandidate(candidate)}
+                      >
+                        添加 Agent
+                      </Button>
+                    </div>
                   </div>
-              );
+                );
               })
             )}
           </div>

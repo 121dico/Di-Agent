@@ -25,6 +25,7 @@ func (h *DaemonHandler) DispatchTask(task *model.DaemonTask) {
 		Data: map[string]interface{}{
 			"task_id":          task.ID,
 			"cli_tool":         task.CLITool,
+			"runtime_variant":  task.RuntimeVariant,
 			"prompt":           task.Prompt,
 			"context_messages": task.ContextMessages,
 			"agent_id":         task.AgentID,

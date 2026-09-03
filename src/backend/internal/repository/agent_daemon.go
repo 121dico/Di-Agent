@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
@@ -249,7 +250,7 @@ func (r *AgentRepo) UpsertMachineAgentCandidate(ctx context.Context, machineID, 
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO daemon_agent_candidates (machine_id, name, cli_tool, variant, version, capabilities_json, last_seen_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, NOW())
-		 ON CONFLICT (machine_id, cli_tool) DO UPDATE
+		 ON CONFLICT (machine_id, cli_tool, variant) DO UPDATE
 		 SET name = EXCLUDED.name,
 		     variant = EXCLUDED.variant,
 		     version = EXCLUDED.version,
@@ -268,8 +269,8 @@ func (r *AgentRepo) UpsertMachineAgentCandidate(ctx context.Context, machineID, 
 		     status = 'online',
 		     last_seen_at = NOW(),
 		     updated_at = NOW()
-		 WHERE machine_id = $1 AND cli_tool = $2 AND source = 'daemon'`,
-		machineID, cliTool, capabilitiesJSON, version,
+		 WHERE machine_id = $1 AND cli_tool = $2 AND runtime_variant = $5 AND source = 'daemon'`,
+		machineID, cliTool, capabilitiesJSON, version, variant,
 	); err != nil {
 		return fmt.Errorf("sync machine agent capabilities: %w", err)
 	}
@@ -278,6 +279,34 @@ func (r *AgentRepo) UpsertMachineAgentCandidate(ctx context.Context, machineID, 
 		return fmt.Errorf("commit upsert machine agent candidate: %w", err)
 	}
 	return nil
+}
+
+// PruneMachineAgentCandidates removes candidate rows that disappeared from the
+// latest complete scan of one machine. It never deletes rows from agents.
+func (r *AgentRepo) PruneMachineAgentCandidates(ctx context.Context, machineID string, active []model.AgentCandidateRuntime) error {
+	query, args := pruneMachineAgentCandidatesQuery(machineID, active)
+	if _, err := r.db.ExecContext(ctx, query, args...); err != nil {
+		return fmt.Errorf("prune machine agent candidates: %w", err)
+	}
+	return nil
+}
+
+func pruneMachineAgentCandidatesQuery(machineID string, active []model.AgentCandidateRuntime) (string, []interface{}) {
+	query := `DELETE FROM daemon_agent_candidates WHERE machine_id = $1`
+	args := make([]interface{}, 0, 1+len(active)*2)
+	args = append(args, machineID)
+	if len(active) > 0 {
+		clauses := make([]string, 0, len(active))
+		for _, candidate := range active {
+			cliIndex := len(args) + 1
+			args = append(args, candidate.CLITool)
+			variantIndex := len(args) + 1
+			args = append(args, candidate.Variant)
+			clauses = append(clauses, fmt.Sprintf("(cli_tool = $%d AND variant = $%d)", cliIndex, variantIndex))
+		}
+		query += " AND NOT (" + strings.Join(clauses, " OR ") + ")"
+	}
+	return query, args
 }
 
 // ListAgentCandidates 查询当前用户电脑上检测到的候选 Agent。
@@ -289,7 +318,9 @@ func (r *AgentRepo) ListAgentCandidates(ctx context.Context, userID string) ([]m
 		 FROM daemon_agent_candidates c
 		 JOIN daemon_machines m ON m.id = c.machine_id
 		 WHERE m.user_id = $1
-		 ORDER BY m.updated_at DESC, c.updated_at DESC`,
+		 ORDER BY m.updated_at DESC, c.cli_tool ASC,
+		          CASE WHEN c.variant = 'cli' THEN 0 ELSE 1 END,
+		          c.updated_at DESC`,
 		userID,
 	)
 	if err != nil {
@@ -308,10 +339,10 @@ func (r *AgentRepo) AddCandidateAgent(ctx context.Context, userID, candidateID, 
 		     JOIN daemon_machines m ON m.id = c.machine_id
 		     WHERE c.id = $1 AND m.user_id = $2 AND c.cli_tool = $5
 		 )
-		 INSERT INTO agents (user_id, name, type, cli_tool, system_prompt, tools_config, capabilities_json, custom_skills, enable_management_tools, source, status, version, machine_id, machine_name, last_seen_at)
-		 SELECT user_id, $3, 'custom', cli_tool, $4, $6, capabilities_json, $7, $8, 'daemon', 'online', version, machine_id, machine_name, NOW()
+		 INSERT INTO agents (user_id, name, type, cli_tool, runtime_variant, system_prompt, tools_config, capabilities_json, custom_skills, enable_management_tools, source, status, version, machine_id, machine_name, last_seen_at)
+		 SELECT user_id, $3, 'custom', cli_tool, variant, $4, $6, capabilities_json, $7, $8, 'daemon', 'online', version, machine_id, machine_name, NOW()
 		 FROM candidate
-		 RETURNING id, user_id, name, type, cli_tool, system_prompt, tools_config, avatar,
+		 RETURNING id, user_id, name, type, cli_tool, runtime_variant, system_prompt, tools_config, avatar,
 		           capabilities_json, custom_skills, tags, source, status, version, machine_id, machine_name, enable_management_tools, last_seen_at,
 		           created_at, updated_at`,
 		candidateID, userID, displayName, systemPrompt, expectedCLITool, toolsConfig, customSkills, enableManagementTools,

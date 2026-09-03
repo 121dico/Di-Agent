@@ -57,7 +57,7 @@ func (r *fakeDaemonAgentRepo) GetDaemonTask(_ context.Context, _ string) (*model
 	defer r.mu.Unlock()
 	return r.daemonTask, nil
 }
-func (r *fakeDaemonAgentRepo) CreateDaemonTask(_ context.Context, _, _, _, _, _, _, _ string) (*model.DaemonTask, error) {
+func (r *fakeDaemonAgentRepo) CreateDaemonTask(_ context.Context, _, _, _, _, _, _, _, _ string) (*model.DaemonTask, error) {
 	return &model.DaemonTask{ID: "task-1", Status: "pending"}, nil
 }
 func (r *fakeDaemonAgentRepo) ClaimDaemonTask(_ context.Context, _ string) (*model.DaemonTask, error) {
@@ -94,6 +94,9 @@ func (r *fakeDaemonAgentRepo) MarkDaemonMachineConnected(_ context.Context, _, _
 	return nil
 }
 func (r *fakeDaemonAgentRepo) UpsertMachineAgentCandidate(_ context.Context, _, _, _, _, _, _ string) error {
+	return nil
+}
+func (r *fakeDaemonAgentRepo) PruneMachineAgentCandidates(_ context.Context, _ string, _ []model.AgentCandidateRuntime) error {
 	return nil
 }
 func (r *fakeDaemonAgentRepo) ListAgentCandidates(_ context.Context, _ string) ([]model.AgentCandidate, error) {

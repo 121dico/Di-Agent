@@ -1,4 +1,4 @@
--- 底座类型标注：cli（终端命令行，可自动执行）| desktop（桌面端应用，暂不支持自动执行）
+-- 底座运行时标注：cli（独立命令行）| desktop（桌面应用内置运行时）
 ALTER TABLE daemon_agent_candidates
     ADD COLUMN IF NOT EXISTS variant VARCHAR(16) NOT NULL DEFAULT 'cli';
 

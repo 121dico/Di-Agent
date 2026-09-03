@@ -110,6 +110,7 @@ func (s *AgentService) BrowseAgentFiles(ctx context.Context, userID, agentID str
 		Data: map[string]interface{}{
 			"task_id":         taskID,
 			"cli_tool":        daemonBrowseFilesTool,
+			"runtime_variant": agent.RuntimeVariant,
 			"prompt":          string(payload),
 			"agent_id":        agentID,
 			"conversation_id": "",

@@ -63,7 +63,7 @@ export const AgentCreateModal: React.FC<AgentCreateModalProps> = ({
   const options = useMemo(
     () => candidates.map((candidate) => ({
       value: candidate.id,
-      label: `${candidate.name} · ${candidate.cli_tool}${candidate.variant === 'desktop' ? '（Desktop）' : ''}`,
+      label: `${candidate.name} · ${candidate.cli_tool} · ${candidate.variant === 'desktop' ? 'Desktop' : 'CLI'}${candidate.version ? ` · ${candidate.version}` : ''}`,
     })),
     [candidates],
   );
@@ -242,7 +242,7 @@ export const AgentCreateModal: React.FC<AgentCreateModalProps> = ({
                 </Tag>
                 <span className={styles.baseMetaText}>
                   {selectedCandidate.variant === 'desktop'
-                    ? '桌面端底座暂不支持自动执行任务，仅作标注与预留'
+                    ? '通过已安装桌面应用的 app-server 执行任务、实时流式输出与工具调用'
                     : '可自动执行任务、流式输出与工具调用'}
                   {selectedCandidate.version ? ` · ${selectedCandidate.version}` : ''}
                 </span>

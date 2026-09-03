@@ -4,7 +4,7 @@
 //
 // 主 daemon 文件（di-agent-daemon.js）只需 require 此模块即可：
 //   const cliTools = require('../cli');
-//   cliTools.initCliTools(depsCtx);  // 注入 daemon 辅助函数后注册 4 个 spec
+//   cliTools.initCliTools(depsCtx);  // 注入 daemon 辅助函数后注册全部 spec
 //
 // 这样新增 CLI（如 gemini-cli）只需：
 //   1. 新建 cli/gemini.js 导出 createXxxCliSpec(ctx) 工厂

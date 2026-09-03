@@ -46,6 +46,7 @@ func (s *AgentService) OpenDaemonSkillLocation(ctx context.Context, userID, agen
 		Data: map[string]interface{}{
 			"task_id":         taskID,
 			"cli_tool":        daemonOpenPathTool,
+			"runtime_variant": agent.RuntimeVariant,
 			"prompt":          string(payload),
 			"agent_id":        agentID,
 			"conversation_id": "",

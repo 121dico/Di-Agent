@@ -283,7 +283,7 @@ type ConvRepoForDaemon interface {
 type AgentRepoForMsg interface {
 	GetByID(ctx context.Context, id string) (*model.Agent, error)
 	IsAgentInConversation(ctx context.Context, conversationID, agentID, userID string) (bool, error)
-	CreateDaemonTask(ctx context.Context, userID, conversationID, agentID, machineID, cliTool, prompt, contextMessages string) (*model.DaemonTask, error)
+	CreateDaemonTask(ctx context.Context, userID, conversationID, agentID, machineID, cliTool, runtimeVariant, prompt, contextMessages string) (*model.DaemonTask, error)
 	GetDaemonTask(ctx context.Context, id string) (*model.DaemonTask, error)
 }
 
@@ -1208,7 +1208,7 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 		return nil, fmt.Errorf("agent %q 已被用户停止", agent.Name)
 	}
 
-	task, err := s.agentRepo.CreateDaemonTask(ctx, userID, convID, agent.ID, *agent.MachineID, agent.CLITool, userContent, contextMessages)
+	task, err := s.agentRepo.CreateDaemonTask(ctx, userID, convID, agent.ID, *agent.MachineID, agent.CLITool, agent.RuntimeVariant, userContent, contextMessages)
 	if err != nil {
 		return nil, fmt.Errorf("create daemon task: %w", err)
 	}
@@ -1251,6 +1251,7 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 		Data: map[string]interface{}{
 			"task_id":          task.ID,
 			"cli_tool":         agent.CLITool,
+			"runtime_variant":  agent.RuntimeVariant,
 			"prompt":           userContent,
 			"context_messages": contextMessages,
 			"agent_id":         agent.ID,

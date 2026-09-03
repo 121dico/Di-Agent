@@ -105,6 +105,7 @@ func (h *AgentHandler) MCPList(c *gin.Context) {
 			"machine_name":            a.MachineName,
 			"version":                 a.Version,
 			"cli_tool":                a.CLITool,
+			"runtime_variant":         a.RuntimeVariant,
 			"tools_config":            a.ToolsConfig,
 			"enable_management_tools": a.EnableManagementTools,
 			"tags":                    a.Tags,

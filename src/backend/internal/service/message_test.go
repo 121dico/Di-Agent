@@ -260,7 +260,7 @@ func (r *fakeAgentRepoForMsg) IsAgentInConversation(ctx context.Context, convers
 	return r.inConversation, nil
 }
 
-func (r *fakeAgentRepoForMsg) CreateDaemonTask(ctx context.Context, userID, conversationID, agentID, machineID, cliTool, prompt, contextMessages string) (*model.DaemonTask, error) {
+func (r *fakeAgentRepoForMsg) CreateDaemonTask(ctx context.Context, userID, conversationID, agentID, machineID, cliTool, runtimeVariant, prompt, contextMessages string) (*model.DaemonTask, error) {
 	r.task = &model.DaemonTask{
 		ID:              "task-1",
 		UserID:          userID,
@@ -268,6 +268,7 @@ func (r *fakeAgentRepoForMsg) CreateDaemonTask(ctx context.Context, userID, conv
 		AgentID:         agentID,
 		MachineID:       machineID,
 		CLITool:         cliTool,
+		RuntimeVariant:  runtimeVariant,
 		Prompt:          prompt,
 		ContextMessages: contextMessages,
 		Status:          "pending",

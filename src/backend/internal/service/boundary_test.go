@@ -258,7 +258,7 @@ func (r *slowConcurrentAgentRepo) GetByID(_ context.Context, _ string) (*model.A
 	return r.agent, nil
 }
 
-func (r *slowConcurrentAgentRepo) CreateDaemonTask(_ context.Context, _, _, _, _, _, _, _ string) (*model.DaemonTask, error) {
+func (r *slowConcurrentAgentRepo) CreateDaemonTask(_ context.Context, _, _, _, _, _, _, _, _ string) (*model.DaemonTask, error) {
 	if r.onCreate != nil {
 		r.onCreate()
 	}

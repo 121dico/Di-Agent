@@ -22,7 +22,62 @@ const {
   resolveAgentTimeoutMs,
   runtimeAgentKey,
   runningAgents,
+  scanAgents,
 } = require('./di-agent-daemon.js');
+const cliTools = require('../cli');
+
+test('daemon scan reports CLI and Desktop variants without duplicating physical paths', () => {
+  const originalSpecs = cliTools.allCliTools();
+  try {
+    cliTools.registerCliTool({
+      cliTool: 'desktop-scan-test',
+      name: 'Desktop Scan Test',
+      defaultCapabilities: [],
+      resolveCommands: () => [
+        { command: process.execPath, variant: 'cli', version: 'cli 1.0.0' },
+        { command: process.execPath, variant: 'desktop', version: 'desktop duplicate' },
+        { command: '/bin/sh', variant: 'desktop', version: 'desktop 2.0.0' },
+      ],
+    });
+    const matches = scanAgents().filter((candidate) => candidate.cli_tool === 'desktop-scan-test');
+    assert.deepEqual(matches.map(({ variant, version }) => ({ variant, version })), [
+      { variant: 'cli', version: 'cli 1.0.0' },
+      { variant: 'desktop', version: 'desktop 2.0.0' },
+    ]);
+  } finally {
+    cliTools.clearCliTools();
+    for (const spec of originalSpecs) cliTools.registerCliTool(spec);
+  }
+});
+
+test('commandForTask asks an adapter for the selected exact runtime variant', () => {
+  const originalSpecs = cliTools.allCliTools();
+  const selections = [];
+  try {
+    cliTools.registerCliTool({
+      cliTool: 'variant-dispatch-test',
+      name: 'Variant Dispatch Test',
+      defaultCapabilities: [],
+      resolveCommand: ({ runtimeVariant }) => {
+        selections.push(runtimeVariant);
+        return runtimeVariant === 'desktop' ? '/desktop/runtime' : '/cli/runtime';
+      },
+      buildCommand: (_task, deps) => ({ command: deps.command, args: [] }),
+    });
+    const command = commandForTask({
+      id: 'task-variant',
+      cli_tool: 'variant-dispatch-test',
+      runtime_variant: 'desktop',
+      prompt: 'hello',
+    });
+
+    assert.equal(command.command, '/desktop/runtime');
+    assert.deepEqual(selections, ['desktop']);
+  } finally {
+    cliTools.clearCliTools();
+    for (const spec of originalSpecs) cliTools.registerCliTool(spec);
+  }
+});
 
 test('governed report hooks are built in for existing agents', async () => {
   const names = MCP_TOOLS.map((tool) => tool.name);

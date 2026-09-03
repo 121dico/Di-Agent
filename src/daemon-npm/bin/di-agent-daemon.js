@@ -13,6 +13,7 @@ const path = require('node:path');
 // 收敛为 spec 对象。新增 CLI 只需在 cli/index.js 加一个工厂，零修改分发函数。
 const cliTools = require('../cli');
 const { readDiAgentEnvironment } = require('../cli/environment');
+const runtime = require('../cli/runtime');
 const { StreamBuffer } = require('../cli/stream_adapter');
 
 // ===========================================================================
@@ -1299,10 +1300,7 @@ function processSpec(command, args) {
   if (wrapperScript) {
     return { command: 'node', args: [wrapperScript, ...args] };
   }
-  if (process.platform === 'win32' && !command.toLowerCase().endsWith('.exe')) {
-    return { command: 'cmd.exe', args: ['/d', '/s', '/c', command, ...args] };
-  }
-  return { command, args };
+  return runtime.normalizeProcessSpec(command, args);
 }
 
 function readArg(name) {
@@ -1376,6 +1374,27 @@ function existingFile(value) {
   return value && fs.existsSync(value) ? value : null;
 }
 
+// Resolve aliases/symlinks so the scanner never reports the same executable as
+// both a CLI and Desktop option. Failures intentionally fall back to the raw
+// command; discovery must remain best-effort across macOS and Windows.
+function canonicalCommand(command) {
+  let resolved = command;
+  try {
+    if (!path.isAbsolute(resolved)) {
+      const locator = process.platform === 'win32' ? 'where.exe' : '/usr/bin/which';
+      const located = execFileSync(locator, [resolved], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        timeout: 3000,
+        windowsHide: true,
+      }).trim().split(/\r?\n/, 1)[0];
+      if (located) resolved = located;
+    }
+    if (fs.existsSync(resolved)) return fs.realpathSync(resolved);
+  } catch { /* use the unresolved command */ }
+  return resolved;
+}
+
 function codexLocalInstallPaths() {
   if (process.platform !== 'win32') return [];
   const root = process.env.LOCALAPPDATA;
@@ -1418,7 +1437,23 @@ function codexExtensionPath() {
   return null;
 }
 
-function resolveCommand(cliTool) {
+function codexDesktopRuntimePaths() {
+  return runtime.codexDesktopRuntimePaths({
+    platform: process.platform,
+    env: process.env,
+    home: os.homedir(),
+  }).filter((candidate) => fs.existsSync(candidate));
+}
+
+function zcodeDesktopRuntimePaths() {
+  return runtime.zcodeDesktopRuntimePaths({
+    platform: process.platform,
+    env: process.env,
+    home: os.homedir(),
+  }).filter((candidate) => fs.existsSync(candidate));
+}
+
+function resolveCommand(cliTool, runtimeVariant) {
   // Switch 1: 委托给 CliToolSpec.resolveCommand（每个 spec 内部实现多路径 fallback）。
   // 未注册的 cli_tool 退化为字面量，与原 if-else 链未匹配分支行为一致。
   // 注：codexLocalInstallPaths / codexExtensionPath / existingFile / commandVersion 等
@@ -1427,39 +1462,43 @@ function resolveCommand(cliTool) {
   // （spec.resolveCommand 自己负责多路径 fallback）。
   const spec = cliTools.getCliTool(cliTool);
   if (spec && typeof spec.resolveCommand === 'function') {
-    return spec.resolveCommand(initCliToolsCtx);
+    return spec.resolveCommand({ runtimeVariant });
   }
   return cliTool;
 }
 
 function scanAgents() {
   return getCandidates()
-    .map((candidate) => {
+    .flatMap((candidate) => {
       const spec = cliTools.getCliTool(candidate.cli_tool);
-      const command = resolveCommand(candidate.cli_tool);
-      // 保留原 codex 调试日志（onResolvedCommand 钩子，仅 codex 实现）。
-      if (spec && typeof spec.onResolvedCommand === 'function') {
-        spec.onResolvedCommand(command);
-      }
-      let version = commandVersion(command);
-      // desktop 底座（如 zcode）没有可执行 CLI：通过 App 安装路径判定存在性。
-      if (version === null
-        && spec && spec.variant === 'desktop'
-        && typeof spec.desktopAppInstalled === 'function'
-        && spec.desktopAppInstalled()) {
-        version = 'desktop';
-      }
-      if (version === null) return null;
-      // 登录态检测委托给 spec.isAuthenticated（仅 codex 实现 isCodexAuthenticated）。
-      if (spec && typeof spec.isAuthenticated === 'function' && !spec.isAuthenticated(command)) return null;
       const skills = scanSkills(candidate.cli_tool);
-      return {
-        name: candidate.name,
-        cli_tool: candidate.cli_tool,
-        variant: (spec && spec.variant) || 'cli',
-        version,
-        capabilities: skills.length > 0 ? skills : candidate.capabilities,
-      };
+      const runtimes = spec && typeof spec.resolveCommands === 'function'
+        ? spec.resolveCommands()
+        : [{ command: resolveCommand(candidate.cli_tool) }];
+      const seenPaths = new Set();
+      return runtimes.flatMap((runtimeCandidate) => {
+        const command = runtimeCandidate.command;
+        const canonical = process.platform === 'win32'
+          ? canonicalCommand(command).toLowerCase()
+          : canonicalCommand(command);
+        if (seenPaths.has(canonical)) return [];
+        seenPaths.add(canonical);
+        // 保留原 codex 调试日志（onResolvedCommand 钩子，仅 codex 实现）。
+        if (spec && typeof spec.onResolvedCommand === 'function') spec.onResolvedCommand(command);
+        const version = runtimeCandidate.version || commandVersion(command);
+        if (version === null) return [];
+        // 登录态检测委托给 spec.isAuthenticated（仅 codex 实现 isCodexAuthenticated）。
+        if (spec && typeof spec.isAuthenticated === 'function' && !spec.isAuthenticated(command)) return [];
+        return [{
+          name: candidate.name,
+          cli_tool: candidate.cli_tool,
+          variant: runtimeCandidate.variant || (spec && typeof spec.variantForCommand === 'function'
+            ? spec.variantForCommand(command)
+            : ((spec && spec.variant) || 'cli')),
+          version,
+          capabilities: skills.length > 0 ? skills : candidate.capabilities,
+        }];
+      });
     })
     .filter(Boolean);
 }
@@ -2024,12 +2063,15 @@ const initCliToolsCtx = {
   // 通用工具
   pathJoin: path.join,
   tmpdir: os.tmpdir,
+  homedir: os.homedir,
+  nodeCommand: process.execPath,
   addRoot,
   errorMessage,
   firstLine,
   logFlow,
   // 命令解析 / 版本检测
   resolveCommand,
+  canonicalCommand,
   commandVersion,
   processSpec,
   spawnSync,
@@ -2047,6 +2089,8 @@ const initCliToolsCtx = {
   // step2: codex 路径辅助（spec.codex.resolveCommand 用）
   codexLocalInstallPaths,
   codexExtensionPath,
+  codexDesktopRuntimePaths,
+  zcodeDesktopRuntimePaths,
   // step2: saveSessionMap（spec.opencode.parseResult 持久化 session 用）
   saveSessionMap,
   // step2: agentTurnStates（spec.claude.spawnPersistent 同步 turn 状态）
@@ -2081,7 +2125,7 @@ cliTools.initCliTools(initCliToolsCtx);
 
 function commandForTask(task, taskCtx) {
   const { systemPrompt, userPrompt } = buildPromptParts(task);
-  const command = resolveCommand(task.cli_tool);
+  const command = resolveCommand(task.cli_tool, task.runtime_variant);
   // 委托给 CliToolSpec.buildCommand。未知 cli_tool 走 fallback（保留原 default 分支行为）。
   const spec = cliTools.getCliTool(task.cli_tool);
   if (spec && typeof spec.buildCommand === 'function') {
@@ -2118,8 +2162,8 @@ async function executeTask(task, taskCtx, onEvent) {
     agent_id: task.agent_id,
     conversation_id: task.conversation_id,
   };
-  // 桌面端等不支持自动执行的底座：spec.buildCommand 返回 error 标记，
-  // 此处拦截并作为任务结果回传（用户在聊天中直接看到原因，而非晦涩的 spawn 失败）。
+  // 适配器若不支持当前执行模式，会用 spec.buildCommand.error 返回可操作提示；
+  // Codex/ZCode Desktop 走上方 persistent app-server 路径，不会进入这个分支。
   if (spec && spec.error) {
     logFlow('warn', 'task.unsupported_base', { ...taskMeta, error: spec.error });
     return spec.error;
@@ -2713,7 +2757,9 @@ function stopRuntimeSlot(slotKey) {
   const entry = runningAgents.get(slotKey);
   if (!entry) return;
   try {
-    if (process.platform === 'win32') {
+    if (typeof entry.close === 'function') {
+      void Promise.resolve(entry.close()).catch(() => {});
+    } else if (process.platform === 'win32') {
       spawn('taskkill', ['/pid', String(entry.process.pid), '/T', '/F'], { windowsHide: true });
     } else {
       process.kill(-entry.process.pid, 'SIGKILL');
@@ -2737,22 +2783,22 @@ function stopAgentProcess(agent_id) {
 }
 
 /**
- * Spawn a Claude Code process with stream-json transport.
+ * Spawn a persistent CLI/app-server process through its registered adapter.
  * Returns { child, sessionId, sendPrompt, events }.
- * If resume=true, uses --resume <sessionId>; otherwise --session-id <sessionId>.
+ * Session resume semantics are owned by each adapter.
  *
  * Switch 4 落地：函数体从 Claude-specific 的 stream-json 实现改为 thin wrapper，
  * 委托给 ClaudeCliSpec.spawnPersistent。事件流通过 AsyncIterable<AgentEvent> 暴露给
  * 未来 dispatcher 翻译成 WS 消息（本次不切换 WS 消息路径）。函数名暂保留，因 callsite
  * 仍在用（改名是 Switch 5 的事）。
  */
-function spawnStreamJsonProcess(agentId, sessionId, systemPrompt, resume, conversationId, userId, taskCtx, eventRef, cliTool = 'claude') {
+function spawnStreamJsonProcess(agentId, sessionId, systemPrompt, resume, conversationId, userId, taskCtx, eventRef, cliTool = 'claude', runtimeVariant) {
   const spec = cliTools.getCliTool(cliTool);
   if (!spec || typeof spec.spawnPersistent !== 'function') {
     throw new Error(`CLI "${cliTool}" does not support spawnPersistent`);
   }
   return spec.spawnPersistent(
-    { agentId, sessionId, systemPrompt, resume, conversationId, userId, taskCtx, eventRef },
+    { agentId, sessionId, systemPrompt, resume, conversationId, userId, taskCtx, eventRef, runtimeVariant },
     initCliToolsCtx,
   );
 }
@@ -2766,17 +2812,16 @@ function spawnStreamJsonProcess(agentId, sessionId, systemPrompt, resume, conver
  * taskCtx 随调用链传入，承载本任务的执行上下文（含 daemon 内部卡片队列等）。
  *
  * Switch 4 已落地：spawnStreamJsonProcess 是 thin wrapper，委托给 spec.spawnPersistent
- * （目前仅 ClaudeCliSpec 实现，其它 spec 加上 spawnPersistent 即自动接入）。
+ * （Claude、Codex、ZCode 已实现，后续 spec 加上 spawnPersistent 即自动接入）。
  *
  * Switch 5 落地：函数从 `dispatchToClaudeSlot` 改名为 `dispatchToPersistentSlot`，语义
  * 去 Claude 化——任何实现了 spawnPersistent 的 spec 都能通过本函数 dispatch。当前
- * 仅 Claude 实现 spawnPersistent，但函数内部不再 hardcode 假设只有 Claude（slot 内
- * cliTool 字段从 task.cli_tool 提取，便于将来扩展）。
+ * slot 内只保留通用 process/sendPrompt/close 接口，不依赖具体协议。
  *
  * 注：WS event name（agent.*）是前端约定的对外协议，保持原样不动；只改函数名和内部
  * 通用性。前端不会感知到这个函数改名。
  */
-async function dispatchToPersistentSlot(ws, agentId, conversationId, userId, prompt, systemPrompt, taskCtx, cliTool = 'claude', onEvent = null, forceFresh = false) {
+async function dispatchToPersistentSlot(ws, agentId, conversationId, userId, prompt, systemPrompt, taskCtx, cliTool = 'claude', onEvent = null, forceFresh = false, runtimeVariant) {
   const sessionKey = `${agentId}:${conversationId}`;
   const slotKey = runtimeAgentKey(agentId, conversationId);
   if (forceFresh) {
@@ -2800,6 +2845,15 @@ async function dispatchToPersistentSlot(ws, agentId, conversationId, userId, pro
       runningAgents.set(slotKey, legacySlot);
       slot = legacySlot;
     }
+  }
+  if (runtimeVariant && slot && slot.runtimeVariant !== runtimeVariant) {
+    logFlow('info', 'agent.runtime_variant_changed', {
+      agent_id: agentId,
+      previous_variant: slot.runtimeVariant || 'unspecified',
+      runtime_variant: runtimeVariant,
+    });
+    stopRuntimeSlot(slotKey);
+    slot = null;
   }
 
   // Fast path: same conversation or unbound agent (null = accept any), process running
@@ -2871,7 +2925,7 @@ async function dispatchToPersistentSlot(ws, agentId, conversationId, userId, pro
   let result;
   if (validSessionId) {
     try {
-      result = spawnStreamJsonProcess(agentId, validSessionId, systemPrompt, true, conversationId, userId, taskCtx, eventRef, cliTool);
+      result = spawnStreamJsonProcess(agentId, validSessionId, systemPrompt, true, conversationId, userId, taskCtx, eventRef, cliTool, runtimeVariant);
       // Wait briefly to detect immediate resume failure
       await sleep(2000);
       if (result.child.exitCode !== null) {
@@ -2884,13 +2938,13 @@ async function dispatchToPersistentSlot(ws, agentId, conversationId, userId, pro
         conversation_id: conversationId,
         session_id: validSessionId,
       });
-      result = spawnStreamJsonProcess(agentId, null, systemPrompt, false, conversationId, userId, taskCtx, eventRef, cliTool);
+      result = spawnStreamJsonProcess(agentId, null, systemPrompt, false, conversationId, userId, taskCtx, eventRef, cliTool, runtimeVariant);
     }
   } else {
-    result = spawnStreamJsonProcess(agentId, null, systemPrompt, false, conversationId, userId, taskCtx, eventRef, cliTool);
+    result = spawnStreamJsonProcess(agentId, null, systemPrompt, false, conversationId, userId, taskCtx, eventRef, cliTool, runtimeVariant);
   }
 
-  const { child, sessionId, sendPrompt } = result;
+  const { child, sessionId, sendPrompt, close } = result;
 
   // Handle process exit
   child.on('close', (code) => {
@@ -2916,10 +2970,12 @@ async function dispatchToPersistentSlot(ws, agentId, conversationId, userId, pro
     sessionId,
     currentConversationId: conversationId,
     cliTool,
+    runtimeVariant,
     sendPrompt,
+    close,
     eventRef,
   });
-  idleAgentConfigs.set(agentId, { cliTool, sessionId, systemPrompt: systemPrompt || '' });
+  idleAgentConfigs.set(agentId, { cliTool, runtimeVariant, sessionId, systemPrompt: systemPrompt || '' });
   agentTurnStates.set(agentId, 'idle');
 
   // Persist session mapping
@@ -2972,19 +3028,19 @@ function processStartQueue() {
 }
 
 async function handleAgentStart(ws, payload) {
-  const { agent_id, cli_tool, system_prompt } = payload;
+  const { agent_id, cli_tool, system_prompt, runtime_variant } = payload;
   if (!agent_id || !cli_tool) return;
 
   logFlow('info', 'agent.start_requested', {
     agent_id,
     cli_tool,
+    runtime_variant,
     system_prompt_len: typeof system_prompt === 'string' ? system_prompt.length : 0,
   });
   stopAgentProcess(agent_id);
 
   // Switch 6: 泛化 persistent-mode 检查 —— 任何实现了 spawnPersistent 的 spec 都允许启动。
-  // 当前只有 claude spec 实现，所以语义与原 `cli_tool !== 'claude'` 等价，但不再 hardcode 字符串。
-  // 未来给其它 spec 加上 spawnPersistent 即自动支持 persistent 模式。
+  // 任一 spec 实现 spawnPersistent 即自动支持 persistent 模式。
   const startSpec = cliTools.getCliTool(cli_tool);
   if (!startSpec || typeof startSpec.spawnPersistent !== 'function') {
     logFlow('warn', 'agent.start_unsupported', { agent_id, cli_tool });
@@ -2997,8 +3053,8 @@ async function handleAgentStart(ws, payload) {
     // slot.eventRef.current = onEvent 注入失败 → Claude CLI 的 thinking/text/tool_use
     // delta 全部丢弃，用户看到"一次性出结果"而非流式。
     const eventRef = { current: null };
-    const result = spawnStreamJsonProcess(agent_id, null, system_prompt, false, null, null, null, eventRef, cli_tool);
-    const { child, sessionId, sendPrompt } = result;
+    const result = spawnStreamJsonProcess(agent_id, null, system_prompt, false, null, null, null, eventRef, cli_tool, runtime_variant);
+    const { child, sessionId, sendPrompt, close } = result;
 
     // Wait briefly to detect immediate startup failure (same pattern as dispatchToPersistentSlot)
     await sleep(2000);
@@ -3031,11 +3087,13 @@ async function handleAgentStart(ws, payload) {
       process: child,
       sessionId,
       cliTool: cli_tool,
+      runtimeVariant: runtime_variant,
       sendPrompt,
+      close,
       currentConversationId: null,
       eventRef,
     });
-    idleAgentConfigs.set(agent_id, { cliTool: cli_tool, sessionId, systemPrompt: system_prompt || '' });
+    idleAgentConfigs.set(agent_id, { cliTool: cli_tool, runtimeVariant: runtime_variant, sessionId, systemPrompt: system_prompt || '' });
     agentTurnStates.set(agent_id, 'idle');
 
     logFlow('info', 'agent.started', { agent_id, cli_tool, session_id: sessionId, pid: child.pid });
@@ -3070,6 +3128,7 @@ async function handleTaskDispatch(ws, data) {
   const task = {
     id: data.task_id,
     cli_tool: data.cli_tool,
+    runtime_variant: data.runtime_variant,
     prompt: data.prompt,
     context_messages: data.context_messages,
     agent_id: data.agent_id,
@@ -3184,7 +3243,7 @@ async function handleTaskDispatch(ws, data) {
         conversation_id: task.conversation_id,
         mode: 'persistent_slot',
       });
-      result = await dispatchToPersistentSlot(ws, task.agent_id, task.conversation_id, task.user_id, userPrompt, systemPrompt, taskCtx, task.cli_tool, onEvent, task.force_fresh_session);
+      result = await dispatchToPersistentSlot(ws, task.agent_id, task.conversation_id, task.user_id, userPrompt, systemPrompt, taskCtx, task.cli_tool, onEvent, task.force_fresh_session, task.runtime_variant);
     } else {
       logFlow('info', 'task.execution_start', {
         task_id: task.id,
@@ -4569,8 +4628,8 @@ async function runMcpServer(serverURL, apiKey) {
 }
 
 async function main() {
-  const serverURL = readArg('--server-url');
-  const apiKey = readArg('--api-key');
+  const serverURL = readArg('--server-url') || readDiAgentEnvironment(process.env, 'SERVER_URL');
+  const apiKey = readArg('--api-key') || readDiAgentEnvironment(process.env, 'API_KEY');
   if (!serverURL || !apiKey) {
     logFlow('error', 'cli.usage_error', { usage: 'di-agent-daemon --server-url <url> --api-key <key> [--mcp]' });
     process.exit(2);
@@ -4619,4 +4678,5 @@ module.exports = {
   resolveAgentTimeoutMs,
   runtimeAgentKey,
   runningAgents,
+  scanAgents,
 };

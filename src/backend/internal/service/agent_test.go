@@ -11,22 +11,24 @@ import (
 )
 
 type fakeAgentRepo struct {
-	updateResult  *model.Agent
-	currentAgent  *model.Agent
-	daemonTask    *model.DaemonTask
-	deleted       bool
-	registered    []string
-	machines      []model.DaemonMachine
-	machineAgent  []string
-	candidates    []string
-	addedPrompt   string
-	addedCLITool  string
-	addedTools    string
-	addedSkills   string
-	updatedUser   string
-	updatedTools  string
-	updatedSkills string
-	completeOK    *bool
+	updateResult   *model.Agent
+	currentAgent   *model.Agent
+	daemonTask     *model.DaemonTask
+	deleted        bool
+	registered     []string
+	machines       []model.DaemonMachine
+	machineAgent   []string
+	candidates     []string
+	prunedMachine  string
+	activeRuntimes []model.AgentCandidateRuntime
+	addedPrompt    string
+	addedCLITool   string
+	addedTools     string
+	addedSkills    string
+	updatedUser    string
+	updatedTools   string
+	updatedSkills  string
+	completeOK     *bool
 }
 
 func (r *fakeAgentRepo) ListAvailable(ctx context.Context, userID string) ([]model.Agent, error) {
@@ -44,16 +46,17 @@ func (r *fakeAgentRepo) GetDaemonTask(ctx context.Context, id string) (*model.Da
 	return nil, nil
 }
 
-func (r *fakeAgentRepo) CreateDaemonTask(ctx context.Context, userID, conversationID, agentID, machineID, cliTool, prompt, contextMessages string) (*model.DaemonTask, error) {
+func (r *fakeAgentRepo) CreateDaemonTask(ctx context.Context, userID, conversationID, agentID, machineID, cliTool, runtimeVariant, prompt, contextMessages string) (*model.DaemonTask, error) {
 	r.daemonTask = &model.DaemonTask{
-		ID:        "task-1",
-		UserID:    userID,
-		AgentID:   agentID,
-		MachineID: machineID,
-		CLITool:   cliTool,
-		Prompt:    prompt,
-		Status:    "completed",
-		Result:    "ok",
+		ID:             "task-1",
+		UserID:         userID,
+		AgentID:        agentID,
+		MachineID:      machineID,
+		CLITool:        cliTool,
+		RuntimeVariant: runtimeVariant,
+		Prompt:         prompt,
+		Status:         "completed",
+		Result:         "ok",
 	}
 	return r.daemonTask, nil
 }
@@ -174,7 +177,13 @@ func (r *fakeAgentRepo) UpsertMachineAgent(ctx context.Context, userID, machineI
 }
 
 func (r *fakeAgentRepo) UpsertMachineAgentCandidate(ctx context.Context, machineID, name, cliTool, variant, version, capabilitiesJSON string) error {
-	r.candidates = append(r.candidates, machineID+":"+cliTool)
+	r.candidates = append(r.candidates, machineID+":"+cliTool+":"+variant)
+	return nil
+}
+
+func (r *fakeAgentRepo) PruneMachineAgentCandidates(_ context.Context, machineID string, active []model.AgentCandidateRuntime) error {
+	r.prunedMachine = machineID
+	r.activeRuntimes = append([]model.AgentCandidateRuntime(nil), active...)
 	return nil
 }
 
@@ -337,17 +346,70 @@ func TestRegisterMachineAgentsMarksMachineConnected(t *testing.T) {
 	}
 
 	err = svc.RegisterMachineAgents(context.Background(), machine, "DESKTOP-1", []DiscoveredAgent{
-		{Name: "Codex", CLITool: "codex", Capabilities: []DiscoveredSkill{{Name: "coding"}}},
+		{Name: "Codex", CLITool: "codex", Variant: "cli", Capabilities: []DiscoveredSkill{{Name: "coding"}}},
+		{Name: "Codex", CLITool: "codex", Variant: "desktop", Capabilities: []DiscoveredSkill{{Name: "coding"}}},
 		{Name: "", CLITool: "broken"},
 	})
 	if err != nil {
 		t.Fatalf("register machine agents failed: %v", err)
 	}
-	if len(repo.candidates) != 1 || repo.candidates[0] != "machine-1:codex" {
-		t.Fatalf("expected codex saved as candidate, got %#v", repo.candidates)
+	if len(repo.candidates) != 2 || repo.candidates[0] != "machine-1:codex:cli" || repo.candidates[1] != "machine-1:codex:desktop" {
+		t.Fatalf("expected both codex runtime variants saved as candidates, got %#v", repo.candidates)
 	}
 	if repo.machines[0].Status != "connected" || repo.machines[0].MachineID != "DESKTOP-1" {
 		t.Fatalf("expected connected machine, got %#v", repo.machines[0])
+	}
+	if repo.prunedMachine != "machine-1" {
+		t.Fatalf("expected candidate prune scoped to registering machine, got %q", repo.prunedMachine)
+	}
+	wantActive := []model.AgentCandidateRuntime{{CLITool: "codex", Variant: "cli"}, {CLITool: "codex", Variant: "desktop"}}
+	if len(repo.activeRuntimes) != len(wantActive) || repo.activeRuntimes[0] != wantActive[0] || repo.activeRuntimes[1] != wantActive[1] {
+		t.Fatalf("unexpected active runtime snapshot: %#v", repo.activeRuntimes)
+	}
+}
+
+func TestRegisterMachineAgentsTreatsMissingVariantAsLegacyCLIAndRejectsUnknownVariant(t *testing.T) {
+	machine := &model.DaemonMachine{ID: "machine-1", UserID: "user-1"}
+	repo := &fakeAgentRepo{}
+	svc := NewAgentService(repo, nil)
+
+	if err := svc.RegisterMachineAgents(context.Background(), machine, "host", []DiscoveredAgent{{Name: "Codex", CLITool: "codex"}}); err != nil {
+		t.Fatalf("register legacy daemon scan: %v", err)
+	}
+	if len(repo.activeRuntimes) != 1 || repo.activeRuntimes[0].Variant != "cli" {
+		t.Fatalf("missing variant must remain compatible with legacy CLI, got %#v", repo.activeRuntimes)
+	}
+
+	if err := svc.RegisterMachineAgents(context.Background(), machine, "host", []DiscoveredAgent{{Name: "Codex", CLITool: "codex", Variant: "mobile"}}); err == nil {
+		t.Fatal("unknown runtime variant must not silently fall back to CLI")
+	}
+}
+
+func TestAgentLifecyclePropagatesSelectedRuntimeVariant(t *testing.T) {
+	userID := "user-1"
+	machineID := "machine-1"
+	repo := &fakeAgentRepo{currentAgent: &model.Agent{
+		ID: "agent-1", UserID: &userID, MachineID: &machineID,
+		CLITool: "codex", RuntimeVariant: "desktop", SystemPrompt: "Be concise",
+	}}
+	hub := &fakeDaemonDispatcher{isConnected: func(string) bool { return true }}
+	svc := NewAgentService(repo, nil)
+	svc.SetDaemonHub(hub)
+
+	if err := svc.StartAgent(context.Background(), "agent-1", userID); err != nil {
+		t.Fatalf("start agent: %v", err)
+	}
+	startData := hub.Calls().LastSendMsg.Data.(map[string]interface{})
+	if startData["runtime_variant"] != "desktop" {
+		t.Fatalf("start runtime_variant = %#v", startData["runtime_variant"])
+	}
+
+	if err := svc.RestartAgent(context.Background(), "agent-1", userID); err != nil {
+		t.Fatalf("restart agent: %v", err)
+	}
+	restartData := hub.Calls().LastSendMsg.Data.(map[string]interface{})
+	if restartData["runtime_variant"] != "desktop" {
+		t.Fatalf("restart runtime_variant = %#v", restartData["runtime_variant"])
 	}
 }
 

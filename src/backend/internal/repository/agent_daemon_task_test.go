@@ -11,11 +11,26 @@ import (
 // 内存版 daemon 任务队列：不依赖 DB，db 字段保持 nil。
 func newTaskRepo() *AgentRepo { return NewAgentRepo(nil) }
 
+func TestCreateDaemonTaskRejectsUnknownRuntimeVariantWithoutSilentFallback(t *testing.T) {
+	r := newTaskRepo()
+	if _, err := r.CreateDaemonTask(context.Background(), "u1", "c1", "a1", "m1", "codex", "mobile", "hi", ""); err == nil {
+		t.Fatal("unknown runtime variant must not silently execute the CLI runtime")
+	}
+
+	legacy, err := r.CreateDaemonTask(context.Background(), "u1", "c1", "a1", "m1", "codex", "", "hi", "")
+	if err != nil {
+		t.Fatalf("legacy empty runtime variant: %v", err)
+	}
+	if legacy.RuntimeVariant != "cli" {
+		t.Fatalf("legacy empty variant = %q, want cli", legacy.RuntimeVariant)
+	}
+}
+
 func TestDaemonTask_Lifecycle(t *testing.T) {
 	r := newTaskRepo()
 	ctx := context.Background()
 
-	created, err := r.CreateDaemonTask(ctx, "u1", "c1", "a1", "m1", "openclaw", "hi", "ctx")
+	created, err := r.CreateDaemonTask(ctx, "u1", "c1", "a1", "m1", "openclaw", "desktop", "hi", "ctx")
 	if err != nil || created == nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -24,6 +39,9 @@ func TestDaemonTask_Lifecycle(t *testing.T) {
 	}
 	if created.ContextMessages != "ctx" || created.Prompt != "hi" {
 		t.Fatalf("context/prompt not preserved: %+v", created)
+	}
+	if created.RuntimeVariant != "desktop" {
+		t.Fatalf("runtime variant not preserved: %+v", created)
 	}
 
 	got, _ := r.GetDaemonTask(ctx, created.ID)
@@ -57,7 +75,7 @@ func TestDaemonTask_DispatcherCalledAfterCreate(t *testing.T) {
 		called <- task.ID
 	})
 
-	created, err := r.CreateDaemonTask(ctx, "u1", "c1", "a1", "m1", "claude", "hi", "")
+	created, err := r.CreateDaemonTask(ctx, "u1", "c1", "a1", "m1", "claude", "cli", "hi", "")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -75,10 +93,10 @@ func TestDaemonTask_DispatcherCalledAfterCreate(t *testing.T) {
 func TestDaemonTask_FIFOPerMachine(t *testing.T) {
 	r := newTaskRepo()
 	ctx := context.Background()
-	t1, _ := r.CreateDaemonTask(ctx, "u", "", "a", "m1", "claude", "first", "")
-	t2, _ := r.CreateDaemonTask(ctx, "u", "", "a", "m1", "claude", "second", "")
+	t1, _ := r.CreateDaemonTask(ctx, "u", "", "a", "m1", "claude", "cli", "first", "")
+	t2, _ := r.CreateDaemonTask(ctx, "u", "", "a", "m1", "claude", "cli", "second", "")
 	// 另一台机器的任务不应被 m1 领走
-	_, _ = r.CreateDaemonTask(ctx, "u", "", "a", "m2", "claude", "other", "")
+	_, _ = r.CreateDaemonTask(ctx, "u", "", "a", "m2", "claude", "cli", "other", "")
 
 	c1, _ := r.ClaimDaemonTask(ctx, "m1")
 	c2, _ := r.ClaimDaemonTask(ctx, "m1")
@@ -97,12 +115,12 @@ func TestDaemonTask_ClaimEmptyAndGuards(t *testing.T) {
 		t.Fatalf("claim empty should be nil")
 	}
 	// WS-dispatched tasks can complete directly from pending status
-	wsTask, _ := r.CreateDaemonTask(ctx, "u", "", "a", "m1", "claude", "x", "")
+	wsTask, _ := r.CreateDaemonTask(ctx, "u", "", "a", "m1", "claude", "cli", "x", "")
 	if ok, _ := r.CompleteDaemonTask(ctx, wsTask.ID, "m1", "r", ""); !ok {
 		t.Fatalf("complete on pending should succeed for WS-dispatched tasks")
 	}
 	// Polling path: claim then complete
-	created, _ := r.CreateDaemonTask(ctx, "u", "", "a", "m1", "claude", "x", "")
+	created, _ := r.CreateDaemonTask(ctx, "u", "", "a", "m1", "claude", "cli", "x", "")
 	_, _ = r.ClaimDaemonTask(ctx, "m1")
 	// 机器不匹配应失败
 	if ok, _ := r.CompleteDaemonTask(ctx, created.ID, "wrong", "r", ""); ok {
@@ -121,7 +139,7 @@ func TestDaemonTask_ClaimEmptyAndGuards(t *testing.T) {
 func TestDaemonTask_FailedStatus(t *testing.T) {
 	r := newTaskRepo()
 	ctx := context.Background()
-	created, _ := r.CreateDaemonTask(ctx, "u", "", "a", "m1", "claude", "x", "")
+	created, _ := r.CreateDaemonTask(ctx, "u", "", "a", "m1", "claude", "cli", "x", "")
 	_, _ = r.ClaimDaemonTask(ctx, "m1")
 	_, _ = r.CompleteDaemonTask(ctx, created.ID, "m1", "", "boom")
 	got, _ := r.GetDaemonTask(ctx, created.ID)
@@ -137,7 +155,7 @@ func TestDaemonTask_ConcurrentClaimNoDuplicate(t *testing.T) {
 	const n = 50
 	ids := make(map[string]bool, n)
 	for i := 0; i < n; i++ {
-		task, _ := r.CreateDaemonTask(ctx, "u", "", "a", "m1", "claude", "x", "")
+		task, _ := r.CreateDaemonTask(ctx, "u", "", "a", "m1", "claude", "cli", "x", "")
 		ids[task.ID] = true
 	}
 

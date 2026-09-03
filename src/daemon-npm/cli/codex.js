@@ -35,6 +35,7 @@ const {
   createAsyncQueue,
 } = require('./events');
 const { readDiAgentEnvironment } = require('./environment');
+const { resolveRuntimeCandidates, resolveRuntimeCandidate, runtimeVariant } = require('./runtime');
 
 const LOCAL_PROXY_PORTS = [7897, 7890, 1087];
 let cachedLocalProxy = undefined; // undefined=未探测 null=无 string=代理地址
@@ -74,6 +75,19 @@ const CODEX_MCP_FALLBACK = [
 ].join('\n');
 
 function createCodexCliSpec(ctx) {
+  const desktopPaths = () => [
+    ...ctx.codexLocalInstallPaths(),
+    ctx.codexExtensionPath(),
+    ...(typeof ctx.codexDesktopRuntimePaths === 'function' ? ctx.codexDesktopRuntimePaths() : []),
+  ].filter(Boolean);
+  const resolveCommands = () => resolveRuntimeCandidates({
+    override: readDiAgentEnvironment(process.env, 'CODEX_COMMAND'),
+    cliCommand: 'codex',
+    desktopPaths: desktopPaths(),
+    existingFile: ctx.existingFile,
+    commandVersion: ctx.commandVersion,
+    canonicalCommand: ctx.canonicalCommand,
+  });
   return {
     cliTool: 'codex',
     name: 'Codex',
@@ -167,17 +181,31 @@ function createCodexCliSpec(ctx) {
     //   - 本地安装路径（codexLocalInstallPaths）
     //   - Windows VSCode 扩展路径
     //   - 'codex' 字面量兜底
-    resolveCommand(_taskOrCtx) {
-      const candidates = [
-        ctx.existingFile(readDiAgentEnvironment(process.env, 'CODEX_COMMAND')),
-        ...ctx.codexLocalInstallPaths(),
-        ctx.codexExtensionPath(),
-        'codex',
-      ].filter(Boolean);
-      for (const candidate of candidates) {
-        if (ctx.commandVersion(candidate) !== null) return candidate;
+    resolveCommands,
+
+    resolveCommand(taskOrCtx = {}) {
+      const requestedVariant = taskOrCtx && taskOrCtx.runtimeVariant;
+      const candidates = resolveCommands();
+      if (requestedVariant === 'cli' || requestedVariant === 'desktop') {
+        const selected = candidates.find((candidate) => candidate.variant === requestedVariant);
+        if (!selected) {
+          const label = requestedVariant === 'desktop' ? 'Desktop' : 'CLI';
+          throw new Error(`Codex ${label} runtime is not available on this computer. Reconnect the computer to rescan installed runtimes.`);
+        }
+        return selected.command;
       }
-      return 'codex';
+      if (candidates.length > 0) return candidates[0].command;
+      return resolveRuntimeCandidate({
+        override: readDiAgentEnvironment(process.env, 'CODEX_COMMAND'),
+        cliCommand: 'codex',
+        desktopPaths: desktopPaths(),
+        existingFile: ctx.existingFile,
+        commandVersion: ctx.commandVersion,
+      }).command;
+    },
+
+    variantForCommand(command) {
+      return runtimeVariant(command, desktopPaths());
     },
 
     // parseResult：codex 优先读 outputFile（--output-last-message 已经把 last message
@@ -224,8 +252,9 @@ function createCodexCliSpec(ctx) {
       userId,
       taskCtx,
       eventRef,
+      runtimeVariant,
     } = {}, daemonCtx = ctx) {
-      const command = daemonCtx.resolveCommand('codex');
+      const command = daemonCtx.resolveCommand('codex', runtimeVariant);
       const taskId = (taskCtx && taskCtx.taskId) || null;
       const codexHome = daemonCtx.ensureDiAgentCodexHome();
       daemonCtx.ensureDiAgentCodexMcpConfig(codexHome, conversationId, userId, agentId, taskId);
@@ -236,7 +265,9 @@ function createCodexCliSpec(ctx) {
         agent_id: agentId,
       });
 
-      const child = daemonCtx.spawn(command, ['app-server', '-c', 'model_reasoning_summary=detailed'], {
+      const appServerArgs = ['app-server', '-c', 'model_reasoning_summary=detailed'];
+      const launch = daemonCtx.processSpec(command, appServerArgs);
+      const child = daemonCtx.spawn(launch.command, launch.args, {
         detached: process.platform !== 'win32',
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
@@ -252,8 +283,8 @@ function createCodexCliSpec(ctx) {
         agent_id: agentId,
         conversation_id: conversationId,
         user_id: userId,
-        command,
-        args: ['app-server', '-c', 'model_reasoning_summary=detailed'],
+        command: launch.command,
+        args: launch.args,
         cwd,
         session_mode: 'codex_app_server',
         pid: child.pid,
@@ -265,17 +296,33 @@ function createCodexCliSpec(ctx) {
 
       // --- JSON-RPC 状态 ---
       let nextRpcId = 1;
-      const pendingCalls = new Map(); // rpc id -> resolve
+      const pendingCalls = new Map(); // rpc id -> { resolve }
       let threadId = null;
       let currentTurn = null; // {turnId, resolve, timer, text}
       let firstTurn = true;
+      let processSettled = false;
 
       const rpcCall = (method, params) => new Promise((resolve) => {
         const id = nextRpcId++;
-        pendingCalls.set(id, resolve);
+        const configuredTimeout = Number.isFinite(daemonCtx.PROTOCOL_TIMEOUT_MS)
+          ? daemonCtx.PROTOCOL_TIMEOUT_MS
+          : 15000;
+        const timeoutMs = Math.min(daemonCtx.EXEC_TIMEOUT_MS, configuredTimeout);
+        const timer = setTimeout(() => {
+          pendingCalls.delete(id);
+          resolve({ error: { message: `Codex 协议 ${method} 超时，桌面运行时可能不兼容。` } });
+        }, timeoutMs);
+        timer.unref();
+        pendingCalls.set(id, {
+          resolve: (response) => {
+            clearTimeout(timer);
+            resolve(response);
+          },
+        });
         try {
           child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
         } catch (err) {
+          clearTimeout(timer);
           pendingCalls.delete(id);
           resolve({ error: { message: err.message } });
         }
@@ -373,9 +420,9 @@ function createCodexCliSpec(ctx) {
           let msg;
           try { msg = JSON.parse(line); } catch { continue; }
           if (msg && msg.id !== undefined && pendingCalls.has(msg.id)) {
-            const resolve = pendingCalls.get(msg.id);
+            const pending = pendingCalls.get(msg.id);
             pendingCalls.delete(msg.id);
-            resolve(msg);
+            pending.resolve(msg);
           } else if (msg && msg.method) {
             handleNotification(msg);
           }
@@ -391,17 +438,33 @@ function createCodexCliSpec(ctx) {
         });
       });
 
-      child.on('close', (code) => {
-        finishTurn({ error: `Agent process exited (code=${code})` });
+      const settleProcess = (exitMessage, { code, error } = {}) => {
+        if (processSettled) return;
+        processSettled = true;
+        for (const pending of pendingCalls.values()) pending.resolve({ error: { message: exitMessage } });
+        pendingCalls.clear();
+        if (currentTurn) {
+          dispatchEvent(turnEndEvent({ error: exitMessage }));
+          finishTurn({ error: exitMessage });
+        }
         daemonCtx.agentTurnStates.delete(agentId);
-        daemonCtx.logFlow(code === 0 ? 'info' : 'warn', 'agent.process_close', {
+        daemonCtx.logFlow(error ? 'error' : (code === 0 ? 'info' : 'warn'), error ? 'agent.process_error' : 'agent.process_close', {
           agent_id: agentId,
           conversation_id: conversationId,
           pid: child.pid,
           exit_code: code,
+          error,
         });
         queue.push(sessionEndEvent({ code }));
         queue.done();
+      };
+
+      child.on('error', (error) => {
+        const message = error?.message || String(error || 'unknown error');
+        settleProcess(`Codex Desktop 运行时启动失败: ${message}`, { error: message });
+      });
+      child.on('close', (code) => {
+        settleProcess(`Agent process exited (code=${code})`, { code });
       });
 
       // --- 启动序列：initialize → thread/start ---

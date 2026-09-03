@@ -90,6 +90,7 @@ func (s *AgentService) InstallGitHubSkill(ctx context.Context, userID, agentID s
 		Data: map[string]interface{}{
 			"task_id":         taskID,
 			"cli_tool":        daemonInstallSkillTool,
+			"runtime_variant": agent.RuntimeVariant,
 			"prompt":          string(payload),
 			"agent_id":        agentID,
 			"conversation_id": "",

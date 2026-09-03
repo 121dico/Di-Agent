@@ -23,7 +23,7 @@ func (s *AgentService) SuggestKnowledgeFilename(ctx context.Context, userID stri
 	}
 
 	prompt := buildKnowledgeFilenamePrompt(file, text)
-	task, err := s.repo.CreateDaemonTask(ctx, userID, "", agent.ID, *agent.MachineID, agent.CLITool, prompt, "")
+	task, err := s.repo.CreateDaemonTask(ctx, userID, "", agent.ID, *agent.MachineID, agent.CLITool, agent.RuntimeVariant, prompt, "")
 	if err != nil {
 		return "", fmt.Errorf("create knowledge rename task: %w", err)
 	}
@@ -36,6 +36,7 @@ func (s *AgentService) SuggestKnowledgeFilename(ctx context.Context, userID stri
 		Data: map[string]interface{}{
 			"task_id":         task.ID,
 			"cli_tool":        agent.CLITool,
+			"runtime_variant": agent.RuntimeVariant,
 			"prompt":          prompt,
 			"agent_id":        agent.ID,
 			"conversation_id": "",

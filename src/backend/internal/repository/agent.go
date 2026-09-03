@@ -46,7 +46,7 @@ func (r *AgentRepo) SetDaemonTaskDispatcher(dispatcher func(*model.DaemonTask)) 
 // ListAvailable 查询系统 Agent 和当前用户自建 Agent。userID 为空时返回所有 Agent。
 func (r *AgentRepo) ListAvailable(ctx context.Context, userID string) ([]model.Agent, error) {
 	list := make([]model.Agent, 0)
-	query := `SELECT id, user_id, name, type, cli_tool, system_prompt, tools_config, avatar,
+	query := `SELECT id, user_id, name, type, cli_tool, runtime_variant, system_prompt, tools_config, avatar,
 		        capabilities_json, custom_skills, tags, source, status, version, machine_id, machine_name, enable_management_tools,
 		        last_seen_at, created_at, updated_at
 		 FROM agents`
@@ -113,7 +113,7 @@ func (r *AgentRepo) IsAgentInConversation(ctx context.Context, conversationID, a
 func (r *AgentRepo) GetByID(ctx context.Context, id string) (*model.Agent, error) {
 	var a model.Agent
 	err := r.db.QueryRowxContext(ctx,
-		`SELECT id, user_id, name, type, cli_tool, system_prompt, tools_config, avatar,
+		`SELECT id, user_id, name, type, cli_tool, runtime_variant, system_prompt, tools_config, avatar,
 		        capabilities_json, custom_skills, tags, source, status, version, machine_id, machine_name, enable_management_tools,
 		        last_seen_at, created_at, updated_at
 		 FROM agents WHERE id = $1`,
@@ -133,7 +133,14 @@ func (r *AgentRepo) GetByID(ctx context.Context, id string) (*model.Agent, error
 const daemonTaskRetention = 10 * time.Minute
 
 // CreateDaemonTask 创建一次等待远端电脑执行的 CLI 任务（内存队列，不落库）。
-func (r *AgentRepo) CreateDaemonTask(_ context.Context, userID, conversationID, agentID, machineID, cliTool, prompt, contextMessages string) (*model.DaemonTask, error) {
+func (r *AgentRepo) CreateDaemonTask(_ context.Context, userID, conversationID, agentID, machineID, cliTool, runtimeVariant, prompt, contextMessages string) (*model.DaemonTask, error) {
+	if runtimeVariant == "" {
+		// Agents created before runtime_variant existed always targeted the CLI.
+		runtimeVariant = "cli"
+	}
+	if runtimeVariant != "cli" && runtimeVariant != "desktop" {
+		return nil, fmt.Errorf("unsupported runtime variant %q", runtimeVariant)
+	}
 	now := time.Now()
 	task := &model.DaemonTask{
 		ID:              uuid.NewString(),
@@ -142,6 +149,7 @@ func (r *AgentRepo) CreateDaemonTask(_ context.Context, userID, conversationID, 
 		AgentID:         agentID,
 		MachineID:       machineID,
 		CLITool:         cliTool,
+		RuntimeVariant:  runtimeVariant,
 		Prompt:          prompt,
 		ContextMessages: contextMessages,
 		Status:          "pending",
@@ -261,7 +269,7 @@ func (r *AgentRepo) CreateCustom(ctx context.Context, userID, name, cliTool, sys
 	err := r.db.QueryRowxContext(ctx,
 		`INSERT INTO agents (user_id, name, type, cli_tool, system_prompt, tools_config, avatar, capabilities_json, custom_skills, enable_management_tools, source, status)
 		 VALUES (NULLIF($1,'')::uuid, $2, 'custom', $3, $4, $5, $6, $7, $8, $9, 'manual', 'offline')
-		 RETURNING id, user_id, name, type, cli_tool, system_prompt, tools_config, avatar,
+		 RETURNING id, user_id, name, type, cli_tool, runtime_variant, system_prompt, tools_config, avatar,
 		           capabilities_json, custom_skills, tags, source, status, version, machine_id, machine_name, enable_management_tools,
 		           last_seen_at, created_at, updated_at`,
 		userID, name, cliTool, systemPrompt, toolsConfig, avatar, capabilitiesJSON, customSkills, enableManagementTools,
@@ -290,7 +298,7 @@ func (r *AgentRepo) UpdateCustom(ctx context.Context, id, userID, name, cliTool,
 		 WHERE id = $1 AND type = 'custom'`
 		args = []interface{}{id, name, cliTool, systemPrompt, toolsConfig, avatar, capabilitiesJSON, customSkills, enableManagementTools}
 	}
-	query += ` RETURNING id, user_id, name, type, cli_tool, system_prompt, tools_config, avatar,
+	query += ` RETURNING id, user_id, name, type, cli_tool, runtime_variant, system_prompt, tools_config, avatar,
 		           capabilities_json, custom_skills, tags, source, status, version, machine_id, machine_name, enable_management_tools,
 		           last_seen_at, created_at, updated_at`
 	err := r.db.QueryRowxContext(ctx, query, args...,
@@ -311,7 +319,7 @@ func (r *AgentRepo) UpdateToolsConfig(ctx context.Context, id, userID, toolsConf
 		`UPDATE agents
 		 SET tools_config = $3, enable_management_tools = $4, updated_at = NOW()
 		 WHERE id = $1 AND (user_id = $2 OR user_id IS NULL)
-		 RETURNING id, user_id, name, type, cli_tool, system_prompt, tools_config, avatar,
+		 RETURNING id, user_id, name, type, cli_tool, runtime_variant, system_prompt, tools_config, avatar,
 		           capabilities_json, custom_skills, tags, source, status, version, machine_id, machine_name, enable_management_tools,
 		           last_seen_at, created_at, updated_at`,
 		id, userID, toolsConfig, enableManagementTools,
@@ -344,7 +352,7 @@ func (r *AgentRepo) UpdateAvatar(ctx context.Context, id, userID, avatar string)
 		`UPDATE agents
 		 SET avatar = $3, updated_at = NOW()
 		 WHERE id = $1 AND user_id = $2 AND type = 'custom'
-		 RETURNING id, user_id, name, type, cli_tool, system_prompt, tools_config, avatar,
+		 RETURNING id, user_id, name, type, cli_tool, runtime_variant, system_prompt, tools_config, avatar,
 		           capabilities_json, custom_skills, tags, source, status, version, machine_id, machine_name, enable_management_tools,
 		           last_seen_at, created_at, updated_at`,
 		id, userID, avatar,
@@ -387,7 +395,7 @@ func (r *AgentRepo) MarkMachineAgentsStopped(ctx context.Context, machineID stri
 func (r *AgentRepo) GetAgentsByMachine(ctx context.Context, machineID string) ([]model.Agent, error) {
 	var list []model.Agent
 	err := r.db.SelectContext(ctx, &list,
-		`SELECT id, user_id, name, type, cli_tool, system_prompt, tools_config, avatar,
+		`SELECT id, user_id, name, type, cli_tool, runtime_variant, system_prompt, tools_config, avatar,
 		        capabilities_json, custom_skills, tags, source, status, version, machine_id, machine_name, enable_management_tools,
 		        last_seen_at, created_at, updated_at
 		 FROM agents WHERE machine_id = $1`,
@@ -427,7 +435,7 @@ func (r *AgentRepo) UpdateTags(ctx context.Context, id, tags string) (*model.Age
 	var a model.Agent
 	err := r.db.QueryRowxContext(ctx,
 		`UPDATE agents SET tags = $2, updated_at = NOW() WHERE id = $1
-		 RETURNING id, user_id, name, type, cli_tool, system_prompt, tools_config, avatar,
+		 RETURNING id, user_id, name, type, cli_tool, runtime_variant, system_prompt, tools_config, avatar,
 		           capabilities_json, custom_skills, tags, source, status, version, machine_id, machine_name, enable_management_tools,
 		           last_seen_at, created_at, updated_at`,
 		id, tags,
@@ -447,7 +455,7 @@ func (r *AgentRepo) UpdateCustomSkills(ctx context.Context, id, userID, customSk
 	err := r.db.QueryRowxContext(ctx,
 		`UPDATE agents SET custom_skills = $3, updated_at = NOW()
 		 WHERE id = $1 AND user_id = $2 AND type = 'custom'
-		 RETURNING id, user_id, name, type, cli_tool, system_prompt, tools_config, avatar,
+		 RETURNING id, user_id, name, type, cli_tool, runtime_variant, system_prompt, tools_config, avatar,
 		           capabilities_json, custom_skills, tags, source, status, version, machine_id, machine_name, enable_management_tools,
 		           last_seen_at, created_at, updated_at`,
 		id, userID, customSkills,

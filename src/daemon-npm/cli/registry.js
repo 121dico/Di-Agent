@@ -26,9 +26,9 @@
 //     meta.persistSessionKey 由调用方传入（opencode 用来持久化 sessionId）。
 //
 //   spawnPersistent({ agentId, sessionId, systemPrompt, resume, conversationId, userId,
-//                     taskCtx }, ctx) -> { child, sessionId, sendPrompt, events }
+//                     taskCtx }, ctx) -> { child, sessionId, sendPrompt, close?, events }
 //     启动 persistent 进程。events 是 AsyncIterable<AgentEvent>，消费者等 TURN_END
-//     即可拿到 turn 结果。目前只有 claude 实现。
+//     即可拿到 turn 结果。close 可在协议支持时先关闭远端 session 再结束子进程。
 //
 //   parseStreamEvent(rawLine, ctx) -> AgentEvent | null
 //     解析 persistent 进程的一行 stdout 为 AgentEvent，spawnPersistent 内部用。
@@ -55,8 +55,7 @@
 //     events 是 AsyncIterable<AgentEvent>（备用观察通道）。
 //
 // 未实现 parseStreamEvent 的 spec 被视为不支持流式（one-shot 模式，走 parseResult 路径）。
-// 目前仅 ClaudeCliSpec 完整实现，Codex/OpenCode/OpenClaw 提供占位（返回 null），
-// 未来接入时改实现即可，零修改 daemon 主流程。
+// Claude、Codex 和 ZCode 已实现 persistent 适配器；其它 CLI 保持 one-shot。
 
 const CLI_TOOL_REGISTRY = new Map();
 

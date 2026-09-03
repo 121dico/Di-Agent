@@ -86,22 +86,24 @@ func (f *fakeOrchAgentRepo) GetByID(_ context.Context, id string) (*model.Agent,
 	return f.agent, f.agentErr
 }
 
-func (f *fakeOrchAgentRepo) CreateDaemonTask(_ context.Context, _, _, agentID, _, _, _, _ string) (*model.DaemonTask, error) {
+func (f *fakeOrchAgentRepo) CreateDaemonTask(_ context.Context, _, _, agentID, _, _, runtimeVariant, _, _ string) (*model.DaemonTask, error) {
 	if len(f.tasks) > 0 {
 		task := f.tasks[0]
 		f.tasks = f.tasks[1:]
+		task.RuntimeVariant = runtimeVariant
 		if f.onCreate != nil {
 			f.onCreate(agentID, task.ID)
 		}
 		return task, nil
 	}
 	if f.task != nil {
+		f.task.RuntimeVariant = runtimeVariant
 		if f.onCreate != nil {
 			f.onCreate(agentID, f.task.ID)
 		}
 		return f.task, nil
 	}
-	task := &model.DaemonTask{ID: "task-default", Status: "pending"}
+	task := &model.DaemonTask{ID: "task-default", Status: "pending", RuntimeVariant: runtimeVariant}
 	if f.onCreate != nil {
 		f.onCreate(agentID, task.ID)
 	}

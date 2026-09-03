@@ -7,6 +7,7 @@ export interface Agent {
   name: string;
   type: AgentType;
   cli_tool: string;
+  runtime_variant?: 'cli' | 'desktop';
   system_prompt?: string;
   tools_config?: string;
   avatar?: string;
@@ -97,7 +98,7 @@ export interface AgentCandidate {
   machine_name: string;
   name: string;
   cli_tool: string;
-  /** 底座类型：cli = 终端命令行（可自动执行）| desktop = 桌面端应用（暂不支持自动执行） */
+  /** 底座运行时：cli = 独立命令行 | desktop = 桌面应用内置 app-server；两者均可执行 */
   variant?: 'cli' | 'desktop';
   version?: string;
   capabilities_json?: string;

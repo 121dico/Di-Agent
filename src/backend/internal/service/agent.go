@@ -25,7 +25,7 @@ type AgentRepo interface {
 	ListAvailable(ctx context.Context, userID string) ([]model.Agent, error)
 	GetByID(ctx context.Context, id string) (*model.Agent, error)
 	GetDaemonTask(ctx context.Context, id string) (*model.DaemonTask, error)
-	CreateDaemonTask(ctx context.Context, userID, conversationID, agentID, machineID, cliTool, prompt, contextMessages string) (*model.DaemonTask, error)
+	CreateDaemonTask(ctx context.Context, userID, conversationID, agentID, machineID, cliTool, runtimeVariant, prompt, contextMessages string) (*model.DaemonTask, error)
 	ClaimDaemonTask(ctx context.Context, machineID string) (*model.DaemonTask, error)
 	CompleteDaemonTask(ctx context.Context, id, machineID, result, taskError string) (bool, error)
 	UpsertSystemAgent(ctx context.Context, name, cliTool, version, capabilitiesJSON, machineID string) error
@@ -39,6 +39,7 @@ type AgentRepo interface {
 	UpdateMachineCapabilities(ctx context.Context, id string, capabilities []string) error
 	FindMachineWithCapability(ctx context.Context, userID, capability string) (*model.DaemonMachine, error)
 	UpsertMachineAgentCandidate(ctx context.Context, machineID, name, cliTool, variant, version, capabilitiesJSON string) error
+	PruneMachineAgentCandidates(ctx context.Context, machineID string, active []model.AgentCandidateRuntime) error
 	ListAgentCandidates(ctx context.Context, userID string) ([]model.AgentCandidate, error)
 	AddCandidateAgent(ctx context.Context, userID, candidateID, displayName, expectedCLITool, systemPrompt, toolsConfig, customSkills string, enableManagementTools bool) (*model.Agent, error)
 	CreateCustom(ctx context.Context, userID, name, cliTool, systemPrompt, toolsConfig, avatar, capabilitiesJSON, customSkills string, enableManagementTools bool) (*model.Agent, error)
@@ -335,11 +336,22 @@ func (s *AgentService) RegisterMachineAgents(ctx context.Context, machine *model
 		return fmt.Errorf("mark daemon machine connected: %w", err)
 	}
 
+	active := make([]model.AgentCandidateRuntime, 0, len(agents))
+	seen := make(map[model.AgentCandidateRuntime]struct{}, len(agents))
 	for _, agent := range agents {
 		name := strings.TrimSpace(agent.Name)
 		cliTool := strings.TrimSpace(agent.CLITool)
 		if name == "" || cliTool == "" {
 			continue
+		}
+		variant := strings.TrimSpace(agent.Variant)
+		if variant == "" {
+			// Daemons predating runtime selection did not report a variant. Their
+			// executable was always the standalone CLI, so preserve compatibility.
+			variant = "cli"
+		}
+		if variant != "cli" && variant != "desktop" {
+			return fmt.Errorf("register machine agents: unsupported runtime variant %q", variant)
 		}
 		// Truncate skill details to keep capabilities_json small.
 		// Full content is available on-demand via get_agent_skill.
@@ -353,10 +365,6 @@ func (s *AgentService) RegisterMachineAgents(ctx context.Context, machine *model
 		if err != nil {
 			return fmt.Errorf("marshal capabilities: %w", err)
 		}
-		variant := strings.TrimSpace(agent.Variant)
-		if variant != "desktop" {
-			variant = "cli"
-		}
 		if err := s.repo.UpsertMachineAgentCandidate(
 			ctx,
 			machine.ID,
@@ -368,6 +376,17 @@ func (s *AgentService) RegisterMachineAgents(ctx context.Context, machine *model
 		); err != nil {
 			return fmt.Errorf("upsert machine agent: %w", err)
 		}
+		key := model.AgentCandidateRuntime{CLITool: cliTool, Variant: variant}
+		if _, exists := seen[key]; !exists {
+			seen[key] = struct{}{}
+			active = append(active, key)
+		}
+	}
+	// Registration is a complete scan snapshot. Prune only candidate rows for
+	// this machine after every accepted row has been persisted; created Agents
+	// are deliberately retained so removal never destroys user configuration.
+	if err := s.repo.PruneMachineAgentCandidates(ctx, machine.ID, active); err != nil {
+		return fmt.Errorf("prune machine agent candidates: %w", err)
 	}
 	return nil
 }
@@ -590,9 +609,10 @@ func (s *AgentService) StartAgent(ctx context.Context, agentID, userID string) e
 	return s.daemonHub.SendToMachine(*agent.MachineID, ws.WSMessage{
 		Type: "agent.start",
 		Data: map[string]interface{}{
-			"agent_id":      agent.ID,
-			"cli_tool":      agent.CLITool,
-			"system_prompt": agent.SystemPrompt,
+			"agent_id":        agent.ID,
+			"cli_tool":        agent.CLITool,
+			"runtime_variant": agent.RuntimeVariant,
+			"system_prompt":   agent.SystemPrompt,
 		},
 	})
 }
@@ -622,15 +642,16 @@ func (s *AgentService) RestartAgent(ctx context.Context, agentID, userID string)
 		return s.daemonHub.SendToMachine(*agent.MachineID, ws.WSMessage{
 			Type: "agent.restart",
 			Data: map[string]interface{}{
-				"agent_id":      agent.ID,
-				"cli_tool":      agent.CLITool,
-				"system_prompt": agent.SystemPrompt,
+				"agent_id":        agent.ID,
+				"cli_tool":        agent.CLITool,
+				"runtime_variant": agent.RuntimeVariant,
+				"system_prompt":   agent.SystemPrompt,
 			},
 		})
 	}
 
 	// Fallback: old task-based restart (for HTTP-only daemons)
-	_, err = s.repo.CreateDaemonTask(ctx, userID, "", agentID, *agent.MachineID, agent.CLITool, "__restart__", "")
+	_, err = s.repo.CreateDaemonTask(ctx, userID, "", agentID, *agent.MachineID, agent.CLITool, agent.RuntimeVariant, "__restart__", "")
 	if err != nil {
 		return fmt.Errorf("create restart task: %w", err)
 	}

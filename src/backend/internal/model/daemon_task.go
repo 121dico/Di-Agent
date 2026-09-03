@@ -10,6 +10,7 @@ type DaemonTask struct {
 	AgentID        string `json:"agent_id" db:"agent_id"`
 	MachineID      string `json:"machine_id" db:"machine_id"`
 	CLITool        string `json:"cli_tool" db:"cli_tool"`
+	RuntimeVariant string `json:"runtime_variant" db:"runtime_variant"`
 	Prompt         string `json:"prompt" db:"prompt"`
 	// ContextMessages 是 Layer 2 上下文：编排调度时为群聊背景+调度指令+依赖输出的纯文本，
 	// 直接 dispatch 时为 agentHandoff 的 JSON 数组（最多 5 条）。

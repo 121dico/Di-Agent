@@ -1,6 +1,6 @@
 {
   "name": "di-agent-daemon",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Di Agent daemon — connects to a Di Agent backend over HTTP/WebSocket and spawns local agent CLIs (Claude Code, Codex, OpenCode, OpenClaw).",
   "bin": {
     "di-agent-daemon": "./bin/di-agent-daemon.js"

@@ -80,7 +80,7 @@ type AgentStore interface {
 	ListAvailable(ctx context.Context, userID string) ([]model.Agent, error)
 	GetByID(ctx context.Context, id string) (*model.Agent, error)
 	GetDaemonTask(ctx context.Context, id string) (*model.DaemonTask, error)
-	CreateDaemonTask(ctx context.Context, userID, conversationID, agentID, machineID, cliTool, prompt, contextMessages string) (*model.DaemonTask, error)
+	CreateDaemonTask(ctx context.Context, userID, conversationID, agentID, machineID, cliTool, runtimeVariant, prompt, contextMessages string) (*model.DaemonTask, error)
 	ClaimDaemonTask(ctx context.Context, machineID string) (*model.DaemonTask, error)
 	CompleteDaemonTask(ctx context.Context, id, machineID, result, taskError string) (bool, error)
 	UpsertSystemAgent(ctx context.Context, name, cliTool, version, capabilitiesJSON, machineID string) error
@@ -94,6 +94,7 @@ type AgentStore interface {
 	UpdateMachineCapabilities(ctx context.Context, id string, capabilities []string) error
 	FindMachineWithCapability(ctx context.Context, userID, capability string) (*model.DaemonMachine, error)
 	UpsertMachineAgentCandidate(ctx context.Context, machineID, name, cliTool, variant, version, capabilitiesJSON string) error
+	PruneMachineAgentCandidates(ctx context.Context, machineID string, active []model.AgentCandidateRuntime) error
 	ListAgentCandidates(ctx context.Context, userID string) ([]model.AgentCandidate, error)
 	AddCandidateAgent(ctx context.Context, userID, candidateID, displayName, expectedCLITool, systemPrompt, toolsConfig, customSkills string, enableManagementTools bool) (*model.Agent, error)
 	CreateCustom(ctx context.Context, userID, name, cliTool, systemPrompt, toolsConfig, avatar, capabilitiesJSON, customSkills string, enableManagementTools bool) (*model.Agent, error)

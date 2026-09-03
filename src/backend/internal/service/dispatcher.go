@@ -28,7 +28,7 @@ var ErrDaemonNotConnected = errors.New("daemon not connected")
 // 仍保留此窄接口（仅 CreateDaemonTask 单方法），把「派发」与「查询」职责分离。
 // repository.AgentStore 自动满足 DaemonTaskCreator（结构化接口）。
 type DaemonTaskCreator interface {
-	CreateDaemonTask(ctx context.Context, userID, conversationID, agentID, machineID, cliTool, prompt, contextMessages string) (*model.DaemonTask, error)
+	CreateDaemonTask(ctx context.Context, userID, conversationID, agentID, machineID, cliTool, runtimeVariant, prompt, contextMessages string) (*model.DaemonTask, error)
 }
 
 // MessagePersister 是 Dispatcher 落库 assistant 消息所需的 msg 仓库子集。
@@ -511,7 +511,7 @@ func (d *Dispatcher) dispatchPlanCore(
 		prompt = p
 	}
 
-	task, err := d.deps.AgentRepo.CreateDaemonTask(ctx, userID, convID, agent.ID, *agent.MachineID, agent.CLITool, prompt, contextMessages)
+	task, err := d.deps.AgentRepo.CreateDaemonTask(ctx, userID, convID, agent.ID, *agent.MachineID, agent.CLITool, agent.RuntimeVariant, prompt, contextMessages)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create daemon task: %w", err)
 	}
@@ -576,6 +576,7 @@ func (d *Dispatcher) dispatchPlanCore(
 	dispatchData := map[string]interface{}{
 		"task_id":          task.ID,
 		"cli_tool":         agent.CLITool,
+		"runtime_variant":  agent.RuntimeVariant,
 		"prompt":           prompt,
 		"context_messages": contextMessages,
 		"agent_id":         agent.ID,

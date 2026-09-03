@@ -121,10 +121,11 @@ func buildStreamingDispatcher(
 func TestDispatcher_StreamingSuccess_PayloadContainsMessageID(t *testing.T) {
 	userID := "u1"
 	agent := &model.Agent{
-		ID:        "agent-s1",
-		Name:      "StreamAgent1",
-		CLITool:   "claude",
-		MachineID: stringPtr("machine-s1"),
+		ID:             "agent-s1",
+		Name:           "StreamAgent1",
+		CLITool:        "claude",
+		RuntimeVariant: "desktop",
+		MachineID:      stringPtr("machine-s1"),
 	}
 
 	promiseCh := make(chan *ws.TaskResult, 1)
@@ -176,6 +177,9 @@ func TestDispatcher_StreamingSuccess_PayloadContainsMessageID(t *testing.T) {
 	}
 	if msgIDStr, ok := msgID.(string); !ok || msgIDStr == "" {
 		t.Fatalf("expected non-empty string message_id, got %v", msgID)
+	}
+	if data["runtime_variant"] != "desktop" {
+		t.Fatalf("dispatch payload runtime_variant = %#v", data["runtime_variant"])
 	}
 	if capturedMachineID != "machine-s1" {
 		t.Fatalf("expected SendToMachine called with machine-s1, got %q", capturedMachineID)
