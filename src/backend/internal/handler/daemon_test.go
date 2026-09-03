@@ -511,6 +511,47 @@ func TestDaemonWS_TaskDispatch_DaemonReceivesAndResolves(t *testing.T) {
 	}
 }
 
+func TestDaemonWS_EmptyTaskIsNotDispatched(t *testing.T) {
+	handler, hub, _ := newTestDaemonHandler(t)
+	machineID := "machine-empty-task"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+			OriginPatterns: []string{"*"},
+		})
+		if err != nil {
+			return
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "done")
+
+		client := ws.NewDaemonClient(conn, machineID)
+		hub.Register(client)
+		clientCtx, clientCancel := context.WithCancel(r.Context())
+		defer clientCancel()
+		go client.WritePump(clientCtx)
+		<-clientCtx.Done()
+	}))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	daemonConn, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatalf("daemon dial failed: %v", err)
+	}
+	defer daemonConn.Close(websocket.StatusNormalClosure, "test done")
+
+	time.Sleep(50 * time.Millisecond)
+	handler.DispatchTask(&model.DaemonTask{MachineID: machineID})
+
+	readCtx, readCancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer readCancel()
+	if _, _, err := daemonConn.Read(readCtx); err == nil {
+		t.Fatal("empty task was dispatched to daemon")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Test 2: Agent started/stopped status updates via WS
 // ---------------------------------------------------------------------------

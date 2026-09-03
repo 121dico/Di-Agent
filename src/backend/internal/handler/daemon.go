@@ -521,7 +521,6 @@ func (h *DaemonHandler) handleRegister(ctx context.Context, client *ws.DaemonCli
 		}
 		h.agentSvc.MarkMachineOnline(machine.ID)
 		h.logger.Info("daemon machine agents registered", "machine_id", req.MachineID, "machine", machine.ID, "count", len(req.Agents))
-		h.DispatchTask(&model.DaemonTask{MachineID: machine.ID})
 		return
 	}
 

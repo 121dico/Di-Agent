@@ -10,7 +10,7 @@ import (
 
 // DispatchTask 由任务队列创建回调触发，在线 daemon 立即收到 task.execute。
 func (h *DaemonHandler) DispatchTask(task *model.DaemonTask) {
-	if task == nil || task.MachineID == "" {
+	if task == nil || task.ID == "" || task.MachineID == "" {
 		return
 	}
 
