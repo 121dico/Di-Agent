@@ -38,6 +38,31 @@ Questions to answer:
 
 ## Styling Patterns
 
+### Convention: Persistent workspace rails
+
+Primary workspace rails use an explicit expanded/collapsed control rather than
+changing layout width when the pointer merely crosses the rail. Keep every
+permitted destination available in the compact state, provide an accessible
+name and a tooltip for icon-only controls, and persist only the user's display
+preference in browser storage. Storage failures must fall back safely without
+disabling the in-session toggle.
+
+```tsx
+const [collapsed, setCollapsed] = useState(readCollapsedPreference);
+
+<button
+  type="button"
+  aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+  aria-expanded={!collapsed}
+  onClick={() => setCollapsed((value) => !value)}
+/>
+```
+
+Animate width and label opacity only for user-triggered changes and disable the
+transition under `prefers-reduced-motion: reduce`. Tests must cover the default
+state, both transitions, persisted restoration, invalid values, and unavailable
+storage.
+
 ### Convention: Draggable floating panels
 
 Floating panels that users reposition must use a dedicated drag handle, Pointer

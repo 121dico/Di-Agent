@@ -8,6 +8,8 @@ import {
   LayoutGrid,
   LogOut,
   MessageSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Search,
   Settings,
@@ -47,6 +49,17 @@ const statusLabel: Record<WsStatus, string> = {
   disconnected: '已断开',
 };
 
+const RAIL_COLLAPSED_STORAGE_KEY = 'di_agent_global_rail_collapsed';
+
+function readRailCollapsed(): boolean {
+  try {
+    return typeof window !== 'undefined'
+      && window.localStorage.getItem(RAIL_COLLAPSED_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 function isRouteActive(pathname: string, path: string): boolean {
   return path === '/' ? pathname === '/' : pathname.startsWith(path);
 }
@@ -64,39 +77,69 @@ export const GlobalRail: React.FC<GlobalRailProps> = ({
   const user = useAuthStore((state) => state.user);
   const avatar = user ? resolveUserAvatar(user) : undefined;
   const visibleNavItems = navItems.filter((item) => canAccessWorkspacePath(item.path, user?.is_admin ?? false));
-  const [showRailTooltips, setShowRailTooltips] = useState(true);
+  const [railCollapsed, setRailCollapsed] = useState(readRailCollapsed);
+
+  const toggleRail = () => {
+    const nextCollapsed = !railCollapsed;
+    setRailCollapsed(nextCollapsed);
+    try {
+      window.localStorage.setItem(RAIL_COLLAPSED_STORAGE_KEY, nextCollapsed ? '1' : '0');
+    } catch {
+      // 本地存储不可用时，当前会话内的收放仍然可用。
+    }
+  };
 
   return (
     <aside
-      className={styles.rail}
+      className={`${styles.rail} ${railCollapsed ? styles.railCollapsed : ''}`}
       aria-label="全局导航"
-      onMouseEnter={() => setShowRailTooltips(false)}
-      onMouseLeave={() => setShowRailTooltips(true)}
-      onFocusCapture={() => setShowRailTooltips(false)}
-      onBlurCapture={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-          setShowRailTooltips(true);
-        }
-      }}
+      data-collapsed={railCollapsed}
     >
       <div className={styles.railSurface}>
         <div className={styles.brandRow}>
-          <span className={styles.brandMark} aria-hidden="true">D</span>
-          <span className={styles.brandLabel}>Di Agent</span>
+          <Tooltip
+            title={railCollapsed ? '展开侧边栏' : '收起侧边栏'}
+            placement="right"
+            mouseEnterDelay={0.5}
+          >
+            <button
+              className={styles.brandToggle}
+              type="button"
+              aria-label={railCollapsed ? '展开侧边栏' : '收起侧边栏'}
+              aria-expanded={!railCollapsed}
+              onClick={toggleRail}
+            >
+              <span className={styles.brandGlyph} aria-hidden="true">D</span>
+              <span className={styles.brandToggleIcon} aria-hidden="true">
+                {railCollapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+              </span>
+            </button>
+          </Tooltip>
+          <span className={styles.brandLabel} aria-hidden={railCollapsed}>Di Agent</span>
         </div>
 
         <div className={styles.primaryActions}>
-          <Tooltip title={showRailTooltips ? '新建对话 · ⌘N' : undefined} placement="right" mouseEnterDelay={0.5}>
-            <button className={styles.createButton} type="button" onClick={onCreate}>
+          <Tooltip title={railCollapsed ? '新建对话 · ⌘N' : undefined} placement="right" mouseEnterDelay={0.5}>
+            <button
+              className={styles.createButton}
+              type="button"
+              aria-label={railCollapsed ? '新建对话' : undefined}
+              onClick={onCreate}
+            >
               <Plus />
-              <span>新建对话</span>
+              <span aria-hidden={railCollapsed}>新建对话</span>
             </button>
           </Tooltip>
-          <Tooltip title={showRailTooltips ? '搜索与命令 · ⌘K' : undefined} placement="right" mouseEnterDelay={0.5}>
-            <button className={styles.commandButton} type="button" onClick={onOpenCommand}>
+          <Tooltip title={railCollapsed ? '搜索与命令 · ⌘K' : undefined} placement="right" mouseEnterDelay={0.5}>
+            <button
+              className={styles.commandButton}
+              type="button"
+              aria-label={railCollapsed ? '搜索与命令' : undefined}
+              onClick={onOpenCommand}
+            >
               <Search />
-              <span>搜索与命令</span>
-              <kbd>⌘K</kbd>
+              <span aria-hidden={railCollapsed}>搜索与命令</span>
+              <kbd aria-hidden={railCollapsed}>⌘K</kbd>
             </button>
           </Tooltip>
         </div>
@@ -104,18 +147,24 @@ export const GlobalRail: React.FC<GlobalRailProps> = ({
         <nav className={styles.nav} aria-label="工作区">
           {visibleNavItems.map((item) => {
             const active = isRouteActive(location.pathname, item.path);
+            const itemLabel = item.key === 'chat' && unreadCount > 0
+              ? `${item.label}，${unreadCount > 99 ? '99+' : unreadCount} 条未读`
+              : item.label;
             return (
-              <Tooltip key={item.key} title={showRailTooltips ? item.label : undefined} placement="right" mouseEnterDelay={0.5}>
+              <Tooltip key={item.key} title={railCollapsed ? item.label : undefined} placement="right" mouseEnterDelay={0.5}>
                 <button
                   className={`${styles.navItem} ${active ? styles.navItemActive : ''}`}
                   type="button"
+                  aria-label={railCollapsed ? itemLabel : undefined}
                   aria-current={active ? 'page' : undefined}
                   onClick={() => navigate(item.path)}
                 >
                   <span className={styles.navIcon}>{item.icon}</span>
-                  <span className={styles.navLabel}>{item.label}</span>
+                  <span className={styles.navLabel} aria-hidden={railCollapsed}>{item.label}</span>
                   {item.key === 'chat' && unreadCount > 0 && (
-                    <span className={styles.badge}>{unreadCount > 99 ? '99+' : unreadCount}</span>
+                    <span className={styles.badge} aria-hidden={railCollapsed}>
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
                   )}
                 </button>
               </Tooltip>
@@ -124,23 +173,47 @@ export const GlobalRail: React.FC<GlobalRailProps> = ({
         </nav>
 
         <div className={styles.footer}>
-          <Tooltip title={showRailTooltips ? '设置' : undefined} placement="right" mouseEnterDelay={0.5}>
-            <button className={styles.navItem} type="button" onClick={() => navigate('/settings')}>
+          <Tooltip title={railCollapsed ? '设置' : undefined} placement="right" mouseEnterDelay={0.5}>
+            <button
+              className={styles.navItem}
+              type="button"
+              aria-label={railCollapsed ? '设置' : undefined}
+              onClick={() => navigate('/settings')}
+            >
               <span className={styles.navIcon}><Settings /></span>
-              <span className={styles.navLabel}>设置</span>
+              <span className={styles.navLabel} aria-hidden={railCollapsed}>设置</span>
             </button>
           </Tooltip>
           <div className={styles.accountRow}>
-            <button className={styles.accountButton} type="button" onClick={() => navigate('/settings')}>
-              <Avatar size={28} src={avatar} icon={<UserRound size={14} />} />
-              <span className={styles.accountMeta}>
-                <strong>{username || '个人账户'}</strong>
-                <small><i className={`${styles.statusDot} ${styles[wsStatus]}`} />{statusLabel[wsStatus]}</small>
-              </span>
-            </button>
-            <button className={styles.logoutButton} type="button" onClick={onLogout} aria-label="退出登录">
-              <LogOut />
-            </button>
+            <Tooltip
+              title={railCollapsed ? `账户设置 · ${statusLabel[wsStatus]}` : undefined}
+              placement="right"
+              mouseEnterDelay={0.5}
+            >
+              <button
+                className={styles.accountButton}
+                type="button"
+                aria-label={railCollapsed ? `账户设置，${statusLabel[wsStatus]}` : undefined}
+                onClick={() => navigate('/settings')}
+              >
+                <span className={styles.avatarWrap}>
+                  <Avatar size={28} src={avatar} icon={<UserRound size={14} />} />
+                  <i
+                    className={`${styles.compactStatusDot} ${styles[wsStatus]}`}
+                    aria-hidden="true"
+                  />
+                </span>
+                <span className={styles.accountMeta} aria-hidden={railCollapsed}>
+                  <strong>{username || '个人账户'}</strong>
+                  <small><i className={`${styles.statusDot} ${styles[wsStatus]}`} />{statusLabel[wsStatus]}</small>
+                </span>
+              </button>
+            </Tooltip>
+            <Tooltip title="退出登录" placement="right" mouseEnterDelay={0.5}>
+              <button className={styles.logoutButton} type="button" onClick={onLogout} aria-label="退出登录">
+                <LogOut />
+              </button>
+            </Tooltip>
           </div>
         </div>
       </div>
