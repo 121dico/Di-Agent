@@ -22,8 +22,8 @@ fail() { printf '\033[31m[AgentHub] 安装失败: %s\033[0m\n' "$*" >&2; exit 1;
 
 [ -n "$SERVER_URL" ] && [ -n "$API_KEY" ] || fail "缺少 --server-url 或 --api-key 参数"
 
-DIR="$HOME/.agenthub"
-PLIST="$HOME/Library/LaunchAgents/com.agenthub.daemon.plist"
+DIR="${AGENTHUB_INSTALL_DIR:-$HOME/.agenthub}"
+PLIST="${AGENTHUB_LAUNCH_AGENT_PLIST:-$HOME/Library/LaunchAgents/com.agenthub.daemon.plist}"
 mkdir -p "$DIR" || fail "无法创建 $DIR"
 
 # --- 1. 定位 Node >= 18（系统有则直接用；没有则装到用户目录，无需管理员）---
@@ -46,8 +46,28 @@ say "Node 就绪: $NODE_BIN"
 
 # --- 2. daemon 离线包（从服务器局域网下载，不依赖 npm 与外网）---
 say "下载 daemon 离线包..."
-curl -fsSL "$SERVER_URL/downloads/agenthub-daemon-bundle.tar.gz" -o "$DIR/bundle.tar.gz" || fail "daemon 包下载失败（请确认能访问 $SERVER_URL）"
-tar xzf "$DIR/bundle.tar.gz" -C "$DIR" || fail "daemon 包解压失败"
+curl -fsSL "$SERVER_URL/downloads/agenthub-daemon-bundle.tar.gz" -o "$DIR/bundle.tar.gz" || fail "daemon 包下载失败（请确认能访问 ${SERVER_URL}）"
+DAEMON_PACKAGE_DIR="$DIR/node_modules/@hust-agenthub/daemon"
+DAEMON_LINK_BACKUP=""
+if [ -L "$DAEMON_PACKAGE_DIR" ]; then
+  # 放在同一父目录，确保相对链接移动后仍指向原开发源码。
+  DAEMON_LINK_BACKUP="$DAEMON_PACKAGE_DIR.local-dev-link"
+  backup_index=1
+  while [ -e "$DAEMON_LINK_BACKUP" ] || [ -L "$DAEMON_LINK_BACKUP" ]; do
+    DAEMON_LINK_BACKUP="$DAEMON_PACKAGE_DIR.local-dev-link.$backup_index"
+    backup_index=$((backup_index + 1))
+  done
+  mv "$DAEMON_PACKAGE_DIR" "$DAEMON_LINK_BACKUP" || fail "无法备份已有 daemon 开发链接"
+  say "已保留原 daemon 开发链接: $DAEMON_LINK_BACKUP"
+fi
+if ! tar xzf "$DIR/bundle.tar.gz" -C "$DIR"; then
+  # 仅在 tar 尚未生成新目标时回滚，避免覆盖部分解压内容。
+  if [ -n "$DAEMON_LINK_BACKUP" ] && [ -L "$DAEMON_LINK_BACKUP" ] && \
+    [ ! -e "$DAEMON_PACKAGE_DIR" ] && [ ! -L "$DAEMON_PACKAGE_DIR" ]; then
+    mv "$DAEMON_LINK_BACKUP" "$DAEMON_PACKAGE_DIR" || fail "daemon 包解压失败，且无法恢复原开发链接"
+  fi
+  fail "daemon 包解压失败"
+fi
 DAEMON_JS="$DIR/node_modules/@hust-agenthub/daemon/bin/agenthub-daemon.js"
 [ -f "$DAEMON_JS" ] || fail "daemon 入口文件缺失"
 

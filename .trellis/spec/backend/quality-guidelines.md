@@ -32,6 +32,74 @@
 
 ## Required Patterns
 
+### macOS Daemon Bundle Installation
+
+#### 1. Scope / Trigger
+
+- Applies when changing `scripts/install.sh`, the served `src/backend/downloads/install.sh`, or the daemon bundle layout extracted by those scripts.
+- The installer is an infrastructure boundary: it updates a user-level installation and registers `com.agenthub.daemon` without administrator privileges.
+
+#### 2. Signatures
+
+- Command: `install.sh --server-url <URL> --api-key <KEY>`.
+- Default install root: `$HOME/.agenthub`.
+- Default LaunchAgent plist: `$HOME/Library/LaunchAgents/com.agenthub.daemon.plist`.
+- Test/advanced overrides: `AGENTHUB_INSTALL_DIR` and `AGENTHUB_LAUNCH_AGENT_PLIST`.
+- Daemon package root: `<install-root>/node_modules/@hust-agenthub/daemon`.
+
+#### 3. Contracts
+
+- The daemon bundle is downloaded from `<server-url>/downloads/agenthub-daemon-bundle.tar.gz`; it must not silently switch to npm or another server.
+- `scripts/install.sh` and `src/backend/downloads/install.sh` must remain byte-for-byte identical.
+- When the daemon package root is an existing symbolic link, move the link itself to a unique `daemon.local-dev-link[.N]` sibling before extraction. Keeping the same parent preserves relative-link resolution.
+- Never recursively delete or overwrite the symbolic-link target. After success, the extracted daemon root is a real directory and the preserved development link remains recoverable.
+- If extraction fails before a new daemon root exists, restore the original link to its original path.
+- The default paths remain unchanged when the override environment variables are absent.
+
+#### 4. Validation & Error Matrix
+
+| Condition | Result |
+|---|---|
+| Missing `--server-url` or `--api-key` | Fail before downloading or changing the installation. |
+| Bundle download fails | Fail with the server URL in the diagnostic and leave the existing daemon root unchanged. |
+| Existing daemon root is a symbolic link | Move it to the first unused sibling backup name, then extract. |
+| Link backup move fails | Fail before extraction; do not touch the link target. |
+| Extraction fails and no new daemon root exists | Restore the original link, then fail. |
+| Extraction succeeds but the daemon entrypoint is absent | Fail before writing/reloading the LaunchAgent. |
+
+#### 5. Good / Base / Bad Cases
+
+- Good: a local checkout link at the daemon package root is preserved as `daemon.local-dev-link`, the server bundle extracts into a normal directory, and the linked source remains unchanged.
+- Base: a clean installation has no daemon package root and extracts normally under `$HOME/.agenthub`.
+- Bad: `tar` writes through an existing daemon link, producing `Cannot extract through symlink`, or cleanup follows the link and deletes the checkout.
+
+#### 6. Tests Required
+
+- Run `bash scripts/test-install.sh` through the public installer interface with isolated install/plist overrides.
+- Assert a normal install writes the daemon entrypoint, start script, and plist only under the isolated paths.
+- Assert a relative daemon link is preserved at a unique sibling name, its target content is unchanged, and the installed daemon root is not a link.
+- Assert a broken archive restores the original link and returns an extraction error.
+- Assert both distributed installer copies compare equal and pass `/bin/bash -n` on macOS Bash 3.2.
+
+#### 7. Wrong vs Correct
+
+```bash
+# Wrong: macOS tar refuses to extract through the existing package link.
+tar xzf "$DIR/bundle.tar.gz" -C "$DIR" || fail "daemon 包解压失败"
+
+# Correct: preserve the link itself in the same parent before extracting.
+if [ -L "$DAEMON_PACKAGE_DIR" ]; then
+  mv "$DAEMON_PACKAGE_DIR" "$DAEMON_LINK_BACKUP" || fail "无法备份已有 daemon 开发链接"
+fi
+if ! tar xzf "$DIR/bundle.tar.gz" -C "$DIR"; then
+  if [ -n "$DAEMON_LINK_BACKUP" ] && [ -L "$DAEMON_LINK_BACKUP" ] && \
+    [ ! -e "$DAEMON_PACKAGE_DIR" ] && [ ! -L "$DAEMON_PACKAGE_DIR" ]; then
+    mv "$DAEMON_LINK_BACKUP" "$DAEMON_PACKAGE_DIR"
+  fi
+  fail "daemon 包解压失败"
+fi
+```
+
 ### Daemon Liveness Timing
 
 **Scope / Trigger**: Applies when changing daemon WebSocket heartbeat, machine liveness tracking, or agent online/offline behavior.
