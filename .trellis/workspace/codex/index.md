@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 5
+- **Total Sessions**: 6
 - **Last Active**: 2026-09-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~186 | Active |
+| `journal-1.md` | ~227 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 6 | 2026-09-03 | 修正侧边栏品牌图标悬停显示 | `9b6750e` | `price_sensitive` |
 | 5 | 2026-09-03 | 完成侧边栏显式收放交互 | `6ee6d6a`, `0217086`, `0424edf` | `price_sensitive` |
 | 4 | 2026-09-03 | Codex 与 ZCode Desktop 运行时适配上线 | `dc49fec`, `3585589` | `price_sensitive` |
 | 3 | 2026-09-03 | 完成 Di Agent 全量品牌迁移与线上部署 | `71a767f`, `b3be08a` | `price_sensitive` |

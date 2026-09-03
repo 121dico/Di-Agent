@@ -192,3 +192,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: 修正侧边栏品牌图标悬停显示
+
+**Date**: 2026-09-03
+**Task**: 修正侧边栏品牌图标悬停显示
+**Branch**: `price_sensitive`
+
+### Summary
+
+修复顶部 D 标识在鼠标点击后因普通 focus 导致收起图标常驻的问题：展开态只在 hover 或键盘 focus-visible 时切换，鼠标移开恢复 D；增加选择器回归测试并完成实际页面验收。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9b6750e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
