@@ -32,11 +32,19 @@ type fakeDaemonDispatcher struct {
 	sendToMachine       func(machineID string, msg ws.WSMessage) error
 	awaitTaskResult     func(taskID string) chan *ws.TaskResult
 	removeTaskPromise   func(taskID string)
+	supportsCapability  func(machineID, capability string) bool
 
 	// calls 记录调用计数与最后一次入参（用于断言）。
 	// 互斥保护，DispatchMany 等并发场景可安全使用。
 	mu    sync.Mutex
 	calls fakeDaemonDispatcherCalls
+}
+
+func (f *fakeDaemonDispatcher) SupportsCapability(machineID, capability string) bool {
+	if f.supportsCapability != nil {
+		return f.supportsCapability(machineID, capability)
+	}
+	return true
 }
 
 // fakeDaemonDispatcherCalls 是 fakeDaemonDispatcher 的调用计数与最近一次入参快照。

@@ -93,3 +93,12 @@ export const ComposerRuntimeControls: React.FC<ComposerRuntimeControlsProps> = (
     </div>
   );
 };
+
+export const ComposerRuntimeFallback: React.FC = () => (
+  <div className={styles.runtimeControls} aria-label="运行设置跟随当前智能体">
+    <Button type="text" className={styles.pillButton} disabled>
+      <ThunderboltOutlined />
+      <span>跟随运行时</span>
+    </Button>
+  </div>
+);

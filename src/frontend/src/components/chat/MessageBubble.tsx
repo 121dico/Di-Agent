@@ -37,6 +37,7 @@ import { ArtifactCard } from './ArtifactCard';
 import { DeployStatusCard } from './DeployStatusCard';
 import { StopButton } from './StopButton';
 import { MessageFooterActions } from './MessageFooterActions';
+import { isCompletedAssistantMessage, messageText } from './conversationActions';
 // blocks/index.ts 触发各 block 组件的 registerBlock 自注册副作用，
 // MessageBubble 只依赖 renderBlock 抽象，不直接 import 具体组件。
 import { renderBlock, type BlockRenderContext } from './blocks';
@@ -611,7 +612,8 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
   }, [parsedCards, message.conversation_id, message.id]);
 
   const handleCopy = () => {
-    copyText(displayContent).then(() => {
+    const copyContent = hasBlocks ? messageText(message) : displayContent;
+    copyText(copyContent).then(() => {
       antMessage.success('已复制');
     }).catch(() => {
       antMessage.error('复制失败');
@@ -932,11 +934,15 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
               )}
             </button>
           )}
-          {!isOwn && !isOptimisticSending && !isOptimisticFailed && (
+          {isCompletedAssistantMessage(message) && !isStreaming && !isOptimisticSending && !isOptimisticFailed && (
             <MessageFooterActions
               onCopy={handleCopy}
               onFork={() => onFork?.(message)}
-              forkDisabled={!onFork || isStreaming}
+              onReply={onReply ? () => onReply(message) : undefined}
+              onTogglePin={onTogglePin ? () => onTogglePin(message) : undefined}
+              pinned={Boolean(message.pinned)}
+              menuItems={contextMenuItems}
+              forkDisabled={!onFork}
               forking={forking}
             />
           )}

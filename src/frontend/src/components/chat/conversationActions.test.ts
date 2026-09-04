@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { Message } from '@/types/message';
 import {
   conversationToMarkdown,
+  isCompletedAssistantMessage,
+  messageText,
   forkConversationFromMessage,
   forkConversationFromLatest,
   hasExportableMessage,
@@ -21,6 +23,26 @@ function createMessage(overrides: Partial<Message>): Message {
     ...overrides,
   };
 }
+
+describe('message-level Agent actions', () => {
+  it('reads displayed text blocks instead of stale message.content', () => {
+    const message = createMessage({
+      role: 'assistant',
+      content: 'stale text',
+      blocks: [
+        { index: 0, kind: 'thinking', text: 'private reasoning' },
+        { index: 1, kind: 'text', text: 'fresh answer' },
+      ],
+    });
+    expect(messageText(message)).toBe('fresh answer');
+  });
+
+  it('allows footer actions only on completed assistant replies', () => {
+    expect(isCompletedAssistantMessage(createMessage({ role: 'assistant', status: 'complete' }))).toBe(true);
+    expect(isCompletedAssistantMessage(createMessage({ role: 'assistant', status: 'error' }))).toBe(false);
+    expect(isCompletedAssistantMessage(createMessage({ role: 'user', status: 'complete' }))).toBe(false);
+  });
+});
 
 describe('conversationToMarkdown', () => {
   it('exports completed messages in chronological order and omits streaming placeholders', () => {

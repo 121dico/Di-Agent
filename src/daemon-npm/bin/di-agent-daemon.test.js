@@ -10,7 +10,9 @@ const {
   commandForTask,
   conversationSessions,
   daemonConn,
+  dispatchToPersistentSlot,
   ensureDiAgentCodexMcpConfig,
+  updateDiAgentCodexTaskContext,
   ensureGitRepoForTask,
   executeTaskOnce,
   ensureOpenCodeMcpConfig,
@@ -195,6 +197,55 @@ test('persistent runtime slots are isolated by conversation', () => {
   assert.equal(runningAgents.get(secondKey).sessionId, 'session-2');
 });
 
+test('persistent slot is rebuilt when the runtime config fingerprint changes', async () => {
+  const originalSpecs = cliTools.allCliTools();
+  runningAgents.clear();
+  let closed = false;
+  let spawned = 0;
+  const key = runtimeAgentKey('agent-fingerprint', 'conv-fingerprint');
+  runningAgents.set(key, {
+    agentId: 'agent-fingerprint',
+    process: { pid: 12, exitCode: null },
+    currentConversationId: 'conv-fingerprint',
+    runtimeVariant: 'cli',
+    runtimeConfigFingerprint: 'old',
+    sendPrompt: async () => ({ result: 'old-result' }),
+    close: () => { closed = true; },
+  });
+  try {
+    cliTools.registerCliTool({
+      cliTool: 'fingerprint-test',
+      name: 'Fingerprint Test',
+      defaultCapabilities: [],
+      runtimeConfigFingerprint: (value) => JSON.stringify(value),
+      spawnPersistent: () => {
+        spawned += 1;
+        const child = new EventEmitter();
+        child.pid = 13;
+        child.exitCode = null;
+        return {
+          child,
+          sessionId: '33333333-3333-4333-8333-333333333333',
+          sendPrompt: async () => ({ result: 'new-result' }),
+          close: () => {},
+        };
+      },
+    });
+    const result = await dispatchToPersistentSlot(
+      null, 'agent-fingerprint', 'conv-fingerprint', 'user-1', 'hello', '',
+      { taskId: 'task-1' }, 'fingerprint-test', null, false, 'cli', { version: 1 },
+    );
+    assert.equal(result, 'new-result');
+    assert.equal(closed, true);
+    assert.equal(spawned, 1);
+  } finally {
+    runningAgents.clear();
+    conversationSessions.delete('agent-fingerprint:conv-fingerprint');
+    cliTools.clearCliTools();
+    for (const spec of originalSpecs) cliTools.registerCliTool(spec);
+  }
+});
+
 test('commandForTask still reuses a legacy prewarmed Claude slot', () => {
   runningAgents.clear();
   runningAgents.set('agent-legacy', { sessionId: 'legacy-session' });
@@ -355,6 +406,17 @@ test('commandForTask runs codex with safe non-interactive MCP-capable execution'
   }
 });
 
+test('daemon rejects unsupported runtime policy instead of changing its meaning', async () => {
+  assert.throws(() => commandForTask({
+    id: 'codex-invalid-runtime', cli_tool: 'codex', prompt: 'hello',
+    runtime_config: { version: 9, model: '', reasoning_effort: 'medium', approval_mode: 'auto' },
+  }), /unsupported version/);
+  await assert.rejects(() => executeTaskOnce({
+    id: 'claude-invalid-runtime', cli_tool: 'claude', prompt: 'hello',
+    runtime_config: { version: 1, model: 'gpt-5.6-sol', reasoning_effort: 'high', approval_mode: 'full' },
+  }), /does not support runtime_config/);
+});
+
 test('ensureDiAgentCodexMcpConfig writes task context and auto-approved platform tools', () => {
   const tempCodexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'di-agent-codex-home-'));
   const original = {
@@ -379,7 +441,11 @@ test('ensureDiAgentCodexMcpConfig writes task context and auto-approved platform
     assert.match(config, /--user-id", "user-1"/);
     assert.match(config, /--agent-id", "agent-1"/);
     assert.match(config, /--task-id", "task-1"/);
+    assert.match(config, /--task-context-file"/);
     assert.match(config, /default_tools_approval_mode = "approve"/);
+
+    const contextFile = updateDiAgentCodexTaskContext(tempCodexHome, 'conv-1', 'user-1', 'agent-1', 'task-2');
+    assert.equal(JSON.parse(fs.readFileSync(contextFile, 'utf8')).task_id, 'task-2');
   } finally {
     daemonConn.serverURL = original.serverURL;
     daemonConn.apiKey = original.apiKey;

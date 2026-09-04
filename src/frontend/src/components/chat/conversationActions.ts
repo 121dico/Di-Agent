@@ -182,7 +182,7 @@ function messageHeading(message: Message): string {
   return author === role ? role : `${role} · ${author}`;
 }
 
-function messageText(message: Message): string {
+export function messageText(message: Message): string {
   let blocks = message.blocks ?? [];
   if (blocks.length === 0 && message.blocks_json) {
     try {
@@ -200,6 +200,10 @@ function messageText(message: Message): string {
       .join('\n\n');
   }
   return stripKnowledgeRefs(message.content ?? '');
+}
+
+export function isCompletedAssistantMessage(message: Message): boolean {
+  return message.role === 'assistant' && (!message.status || message.status === 'complete');
 }
 
 function isMessageBlock(value: unknown): value is MessageBlock {

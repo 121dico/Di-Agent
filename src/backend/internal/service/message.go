@@ -421,9 +421,13 @@ func (s *MessageService) SendMessageWithReply(ctx context.Context, convID, userI
 
 // SendMessageWithRuntime snapshots the selected model, reasoning and approval policy for this turn.
 func (s *MessageService) SendMessageWithRuntime(ctx context.Context, convID, userID, role, content, artifactsJSON string, attachments []model.MessageAttachment, replyTo *string, agentID string, mentions []string, runtimeConfig model.AgentRuntimeConfig) (*SendMessageResult, error) {
-	normalizedRuntime, err := NormalizeAgentRuntimeConfig(runtimeConfig)
-	if err != nil {
-		return nil, err
+	normalizedRuntime := runtimeConfig
+	if runtimeConfig.Version != 0 || runtimeConfig.Model != "" || runtimeConfig.ReasoningEffort != "" || runtimeConfig.ApprovalMode != "" {
+		var err error
+		normalizedRuntime, err = NormalizeAgentRuntimeConfig(runtimeConfig)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if len(content) > maxMessageLen {
 		return nil, ErrMsgTooLong
@@ -1221,6 +1225,20 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 	selectedRuntime := model.AgentRuntimeConfig{}
 	if len(runtimeConfig) > 0 {
 		selectedRuntime = runtimeConfig[0]
+	}
+	if agent.CLITool == "codex" {
+		selectedRuntime, err = NormalizeAgentRuntimeConfig(selectedRuntime)
+		if err != nil {
+			return nil, err
+		}
+		capabilityChecker, ok := s.daemonHub.(interface {
+			SupportsCapability(machineID, capability string) bool
+		})
+		if !ok || !capabilityChecker.SupportsCapability(*agent.MachineID, "agent_runtime_controls_v1") {
+			return nil, fmt.Errorf("%w: 这台电脑的 Di Agent daemon 版本过旧，请重新运行连接命令升级后再试", ErrMsgInvalidRuntime)
+		}
+	} else if selectedRuntime.Version != 0 || selectedRuntime.Model != "" || selectedRuntime.ReasoningEffort != "" || selectedRuntime.ApprovalMode != "" {
+		return nil, fmt.Errorf("%w: %s 暂不支持可配置运行策略", ErrMsgInvalidRuntime, agent.CLITool)
 	}
 	var task *model.DaemonTask
 	if creator, ok := s.agentRepo.(interface {

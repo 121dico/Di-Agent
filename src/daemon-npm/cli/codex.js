@@ -45,13 +45,39 @@ const APPROVAL_MODES = new Set(['request', 'auto', 'full']);
 let cachedLocalProxy = undefined; // undefined=未探测 null=无 string=代理地址
 
 function normalizeRuntimeConfig(value) {
-  const input = value && typeof value === 'object' ? value : {};
+  if (value === undefined || value === null) {
+    return { version: 1, model: '', reasoning_effort: 'medium', approval_mode: 'auto' };
+  }
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Invalid Codex runtime config: expected an object');
+  }
+  const input = value;
+  if (Object.keys(input).length === 0) {
+    return { version: 1, model: '', reasoning_effort: 'medium', approval_mode: 'auto' };
+  }
+  if (input.version !== 1) {
+    throw new Error('Invalid Codex runtime config: unsupported version');
+  }
+  if (!CODEX_MODELS.has(input.model)) {
+    throw new Error('Invalid Codex runtime config: unsupported model');
+  }
+  if (!REASONING_EFFORTS.has(input.reasoning_effort)) {
+    throw new Error('Invalid Codex runtime config: unsupported reasoning effort');
+  }
+  if (!APPROVAL_MODES.has(input.approval_mode)) {
+    throw new Error('Invalid Codex runtime config: unsupported approval mode');
+  }
   return {
     version: 1,
-    model: CODEX_MODELS.has(input.model) ? input.model : '',
-    reasoning_effort: REASONING_EFFORTS.has(input.reasoning_effort) ? input.reasoning_effort : 'medium',
-    approval_mode: APPROVAL_MODES.has(input.approval_mode) ? input.approval_mode : 'auto',
+    model: input.model,
+    reasoning_effort: input.reasoning_effort,
+    approval_mode: input.approval_mode,
   };
+}
+
+function runtimeConfigFingerprint(value) {
+  const config = normalizeRuntimeConfig(value);
+  return JSON.stringify(config);
 }
 
 function codexTurnControls(value) {
@@ -128,6 +154,8 @@ function createCodexCliSpec(ctx) {
     cliTool: 'codex',
     name: 'Codex',
     defaultCapabilities: ctx.defaultSkills(['coding', 'review']),
+
+    runtimeConfigFingerprint,
 
     // buildCommand 等价于原 commandForTask codex 分支。
     buildCommand(task, deps) {
@@ -342,6 +370,7 @@ function createCodexCliSpec(ctx) {
       const pendingCalls = new Map(); // rpc id -> { resolve }
       let threadId = null;
       let currentTurn = null; // {turnId, resolve, timer, text}
+      let pendingTurnApprovalContext = null;
       let firstTurn = true;
       let processSettled = false;
 
@@ -464,7 +493,11 @@ function createCodexCliSpec(ctx) {
         let decision = 'decline';
         if (typeof daemonCtx.requestApproval === 'function') {
           try {
-            const approvalContext = currentTurn?.approvalContext || {};
+            // The app-server may place the turn/start response and an approval request
+            // in the same stdout chunk. Keep the next turn's context synchronously
+            // available before awaiting the turn/start response so the request cannot
+            // fall back to the slot's first task identity.
+            const approvalContext = currentTurn?.approvalContext || pendingTurnApprovalContext || {};
             decision = await daemonCtx.requestApproval({
               kind,
               method,
@@ -597,6 +630,10 @@ function createCodexCliSpec(ctx) {
             firstTurn = false;
           }
           const controls = codexTurnControls(runtimeConfig);
+          pendingTurnApprovalContext = approvalContext || {};
+          if (typeof daemonCtx.updateDiAgentCodexTaskContext === 'function') {
+            daemonCtx.updateDiAgentCodexTaskContext(codexHome, conversationId, userId, agentId, approvalContext?.task_id || null);
+          }
           const res = await rpcCall('turn/start', {
             threadId,
             cwd,
@@ -605,6 +642,7 @@ function createCodexCliSpec(ctx) {
           });
           const turnId = res && res.result && res.result.turn && res.result.turn.id;
           if (!turnId) {
+            pendingTurnApprovalContext = null;
             resolve({ error: `turn/start 失败: ${JSON.stringify((res && res.error) || {}).slice(0, 120)}` });
             return;
           }
@@ -616,6 +654,7 @@ function createCodexCliSpec(ctx) {
             prompt_len: typeof prompt === 'string' ? prompt.length : 0,
           });
           currentTurn = { turnId, resolve, timer: null, text: '', approvalContext };
+          pendingTurnApprovalContext = null;
           currentTurn.timer = setTimeout(() => {
             if (currentTurn && currentTurn.turnId === turnId) {
               daemonCtx.logFlow('error', 'agent.turn_timeout', {
@@ -632,6 +671,7 @@ function createCodexCliSpec(ctx) {
           }, daemonCtx.EXEC_TIMEOUT_MS);
           if (currentTurn) currentTurn.timer.unref();
         }).catch((err) => {
+          pendingTurnApprovalContext = null;
           resolve({ error: err.message });
         });
       });
@@ -704,4 +744,4 @@ function createCodexCliSpec(ctx) {
   };
 }
 
-module.exports = { createCodexCliSpec, normalizeRuntimeConfig, codexTurnControls };
+module.exports = { createCodexCliSpec, normalizeRuntimeConfig, runtimeConfigFingerprint, codexTurnControls };

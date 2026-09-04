@@ -356,6 +356,7 @@
 }
 
 .diffHeader {
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -364,7 +365,16 @@
   font-weight: 600;
   color: var(--color-text);
   border-bottom: 1px solid var(--color-border);
+  border-top: 0;
+  border-right: 0;
+  border-left: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
 }
+
+.diffHeaderTitle { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.diffHeaderTitle :global(.anticon) { color: var(--color-text-secondary); font-size: 11px; }
 
 .diffCount {
   font-weight: 400;
@@ -380,6 +390,24 @@
   font-size: 13px;
   color: var(--color-text-secondary);
 }
+
+.diffSummary {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+.diffSummary span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diffSummary span:last-child { flex: 0 0 auto; color: var(--color-text-tertiary); }
+.diffSummary:hover { background: rgba(22, 119, 255, 0.05); }
 
 .diffList {
   list-style: none;

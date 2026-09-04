@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { dispatchWsEvent } from '@/store/wsStore';
+import { useAgentApprovalStore } from '@/store/agentApprovalStore';
 import { AgentApprovalPrompt } from './AgentApprovalPrompt';
 
 const mounted: Array<{ container: HTMLDivElement; unmount: () => void }> = [];
@@ -12,6 +13,7 @@ afterEach(() => {
     act(() => unmount());
     container.remove();
   });
+  useAgentApprovalStore.getState().clear();
 });
 
 describe('AgentApprovalPrompt', () => {
@@ -51,5 +53,24 @@ describe('AgentApprovalPrompt', () => {
       decision: 'accept',
     }));
     expect(container.querySelector('[aria-label="Agent 审批请求"]')).toBeNull();
+  });
+
+  it('keeps a background conversation request and restores it when switching back', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mounted.push({ container, unmount: () => root.unmount() });
+    act(() => root.render(<AgentApprovalPrompt conversationId="conversation-1" />));
+
+    act(() => dispatchWsEvent('agent.approval_required', {
+      approval_id: 'approval-background', conversation_id: 'conversation-2',
+      task_id: 'task-2', agent_id: 'agent-1', kind: 'file_change',
+      method: 'item/fileChange/requestApproval', details: { description: '修改 app.ts' },
+    }));
+    expect(container.querySelector('[aria-label="Agent 审批请求"]')).toBeNull();
+
+    act(() => root.render(<AgentApprovalPrompt conversationId="conversation-2" />));
+    expect(container.textContent).toContain('Agent 请求修改文件');
+    expect(container.textContent).toContain('允许一次');
   });
 });

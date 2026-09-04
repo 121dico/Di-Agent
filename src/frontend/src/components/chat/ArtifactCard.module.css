@@ -26,7 +26,7 @@
 
 .webPreview {
   position: relative;
-  height: 210px;
+  height: 148px;
   overflow: hidden;
   background: #fff;
   pointer-events: none; /* 缩略预览不可交互，点击落到卡片上展开全屏 */
@@ -84,7 +84,7 @@
 }
 
 @media (max-width: 1100px) {
-  .webPreview { height: 160px; }
+  .webPreview { height: 126px; }
   .webMeta { padding-inline: 8px; }
 }
 

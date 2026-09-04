@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  DownOutlined,
   FileAddOutlined,
   FileExcelOutlined,
   FileExclamationOutlined,
+  RightOutlined,
 } from '@ant-design/icons';
 import { Spin } from 'antd';
 import type { CardProps, DiffCard as DiffCardData } from '@/types/card';
@@ -38,6 +40,7 @@ export const DiffCard: React.FC<CardProps<DiffCardData>> = ({ card, agentId }) =
   const [loading, setLoading] = useState(true);
   const [selectedFile, setSelectedFile] = useState<string>('');
   const [viewerOpen, setViewerOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   // 预取的 diff 缓存：path → 前后内容。ref 不触发重渲染；
   // 用户点击文件时 handleClickFile 会 setSelectedFile 触发渲染，那时从 ref 读最新缓存。
   const diffCacheRef = useRef<Map<string, DiffContent>>(new Map());
@@ -108,15 +111,23 @@ export const DiffCard: React.FC<CardProps<DiffCardData>> = ({ card, agentId }) =
   return (
     <>
       <div className={styles.diffCard}>
-        <div className={styles.diffHeader}>
-          <span>{card.title || '文件变更'}</span>
+        <button
+          type="button"
+          className={styles.diffHeader}
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          <span className={styles.diffHeaderTitle}>
+            {expanded ? <DownOutlined /> : <RightOutlined />}
+            <span>{card.title || '文件变更'}</span>
+          </span>
           <span className={styles.diffCount}>{card.files.length} 个文件</span>
-        </div>
+        </button>
         {loading ? (
           <div className={styles.diffLoading}>
             <Spin size="small" /> 查询改动状态...
           </div>
-        ) : (
+        ) : expanded ? (
           <ul className={styles.diffList}>
             {statuses.map((s, idx) => (
               <li
@@ -133,6 +144,15 @@ export const DiffCard: React.FC<CardProps<DiffCardData>> = ({ card, agentId }) =
               </li>
             ))}
           </ul>
+        ) : (
+          <button
+            type="button"
+            className={styles.diffSummary}
+            onClick={() => setExpanded(true)}
+          >
+            <span>{statuses[0]?.path || '查看文件变更'}</span>
+            {statuses.length > 1 && <span>另有 {statuses.length - 1} 个文件</span>}
+          </button>
         )}
       </div>
       {agentId && selectedFile && (

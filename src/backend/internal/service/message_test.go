@@ -249,6 +249,27 @@ type fakeAgentRepoForMsg struct {
 	inConversation bool
 }
 
+func TestCreateAgentReplyRejectsDaemonWithoutRuntimeControlsCapability(t *testing.T) {
+	userID := "user-1"
+	agentRepo := &fakeAgentRepoForMsg{
+		agent: &model.Agent{
+			ID: "agent-1", UserID: &userID, Name: "Codex Agent", CLITool: "codex",
+			MachineID: stringPtr("machine-1"),
+		},
+		inConversation: true,
+	}
+	svc := NewMessageService(&fakeMsgRepo{}, &fakeConvRepoForMsg{}, agentRepo)
+	hub := ws.NewDaemonHub(slog.Default())
+	hub.RegisterTestClient("machine-1", ws.NewDaemonClient(nil, "machine-1"))
+	svc.SetDaemonHub(hub)
+
+	_, err := svc.createAgentReply(context.Background(), "conv-1", userID, "agent-1", "hello", "", nil,
+		model.AgentRuntimeConfig{Version: 1, ReasoningEffort: "medium", ApprovalMode: "request"})
+	if !errors.Is(err, ErrMsgInvalidRuntime) || !strings.Contains(err.Error(), "daemon 版本过旧") {
+		t.Fatalf("error = %v, want actionable runtime capability failure", err)
+	}
+}
+
 func (r *fakeAgentRepoForMsg) GetByID(ctx context.Context, id string) (*model.Agent, error) {
 	if r.agent != nil && r.agent.ID == id {
 		return r.agent, nil
@@ -320,7 +341,9 @@ func TestSendMessageWithAgentCreatesAssistantReply(t *testing.T) {
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	defer hubCancel()
 	go hub.Run(hubCtx)
-	hub.RegisterTestClient("machine-1", ws.NewDaemonClient(nil, "machine-1"))
+	runtimeClient := ws.NewDaemonClient(nil, "machine-1")
+	runtimeClient.SetCapabilities([]string{"agent_runtime_controls_v1"})
+	hub.RegisterTestClient("machine-1", runtimeClient)
 	svc.SetDaemonHub(hub)
 
 	// Resolve the daemon task in background
@@ -389,7 +412,9 @@ func TestSendMessageAgentChatFallsBackToConversationAgent(t *testing.T) {
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	defer hubCancel()
 	go hub.Run(hubCtx)
-	hub.RegisterTestClient("machine-1", ws.NewDaemonClient(nil, "machine-1"))
+	runtimeClient := ws.NewDaemonClient(nil, "machine-1")
+	runtimeClient.SetCapabilities([]string{"agent_runtime_controls_v1"})
+	hub.RegisterTestClient("machine-1", runtimeClient)
 	svc.SetDaemonHub(hub)
 
 	go func() {
@@ -538,7 +563,9 @@ func TestCreateAgentReplyPersistsArtifacts(t *testing.T) {
 	}
 	svc := NewMessageService(msgRepo, convRepo, agentRepo)
 	daemonHub := ws.NewDaemonHub(slog.Default())
-	daemonHub.RegisterTestClient("machine-1", ws.NewDaemonClient(nil, "machine-1"))
+	runtimeClient := ws.NewDaemonClient(nil, "machine-1")
+	runtimeClient.SetCapabilities([]string{"agent_runtime_controls_v1"})
+	daemonHub.RegisterTestClient("machine-1", runtimeClient)
 	svc.SetDaemonHub(daemonHub)
 
 	go func() {
@@ -821,7 +848,9 @@ func TestCreateAgentReplyMergesDaemonAndTextCards(t *testing.T) {
 	}
 	svc := NewMessageService(msgRepo, convRepo, agentRepo)
 	daemonHub := ws.NewDaemonHub(slog.Default())
-	daemonHub.RegisterTestClient("machine-1", ws.NewDaemonClient(nil, "machine-1"))
+	runtimeClient := ws.NewDaemonClient(nil, "machine-1")
+	runtimeClient.SetCapabilities([]string{"agent_runtime_controls_v1"})
+	daemonHub.RegisterTestClient("machine-1", runtimeClient)
 	svc.SetDaemonHub(daemonHub)
 
 	// daemon 上行的卡片（例如 deploy_project 成功的 info 卡）+ 正文里嵌的 diff 卡

@@ -209,7 +209,9 @@ function detectDocker() {
 
 /** 收集本机能力清单，用于 daemon.register 上报。后端据此选合适的 machine 部署。 */
 function detectCapabilities() {
-  const caps = [];
+  // Protocol capabilities must be explicit: a server must never assume that an
+  // older daemon understands per-turn sandbox or approval semantics.
+  const caps = ['agent_runtime_controls_v1'];
   if (detectDocker()) caps.push('docker');
   return caps;
 }
@@ -1206,7 +1208,7 @@ const daemonConn = { serverURL: '', apiKey: '', daemonToken: '' };
 //
 // taskId 用于 MCP subprocess emit 卡片时回传 task_id 给后端
 // （POST /api/internal/task-cards）。不传则卡片 emit 无效——subprocess 拿不到 task 标识。
-function buildPlatformMcpServerArgs(conversationId, userId, agentId, taskId) {
+function buildPlatformMcpServerArgs(conversationId, userId, agentId, taskId, taskContextFile) {
   if (!daemonConn.serverURL || !daemonConn.apiKey) return [];
   const mcpServerArgs = [__filename, '--server-url', daemonConn.serverURL, '--api-key', daemonConn.apiKey, '--mcp'];
   if (daemonConn.daemonToken) mcpServerArgs.push('--daemon-token', daemonConn.daemonToken);
@@ -1214,6 +1216,7 @@ function buildPlatformMcpServerArgs(conversationId, userId, agentId, taskId) {
   if (userId) mcpServerArgs.push('--user-id', userId);
   if (agentId) mcpServerArgs.push('--agent-id', agentId);
   if (taskId) mcpServerArgs.push('--task-id', taskId);
+  if (taskContextFile) mcpServerArgs.push('--task-context-file', taskContextFile);
   return mcpServerArgs;
 }
 
@@ -2074,6 +2077,27 @@ function tomlArray(values) {
   return `[${values.map(tomlString).join(', ')}]`;
 }
 
+function codexTaskContextFile(codexHome, conversationId, agentId) {
+  if (!codexHome || !conversationId || !agentId) return '';
+  const key = crypto.createHash('sha256').update(`${agentId}:${conversationId}`).digest('hex').slice(0, 32);
+  return path.join(codexHome, 'di-agent-runtime-context', `${key}.json`);
+}
+
+function updateDiAgentCodexTaskContext(codexHome, conversationId, userId, agentId, taskId) {
+  const contextFile = codexTaskContextFile(codexHome, conversationId, agentId);
+  if (!contextFile) return '';
+  fs.mkdirSync(path.dirname(contextFile), { recursive: true, mode: 0o700 });
+  const tempFile = `${contextFile}.${process.pid}.tmp`;
+  fs.writeFileSync(tempFile, `${JSON.stringify({
+    conversation_id: conversationId || '',
+    user_id: userId || '',
+    agent_id: agentId || '',
+    task_id: taskId || '',
+  })}\n`, { encoding: 'utf8', mode: 0o600 });
+  fs.renameSync(tempFile, contextFile);
+  return contextFile;
+}
+
 function ensureDiAgentCodexMcpConfig(codexHome, conversationId, userId, agentId, taskId) {
   const configFile = path.join(codexHome, 'config.toml');
   let content = fs.existsSync(configFile) ? fs.readFileSync(configFile, 'utf8') : '';
@@ -2084,7 +2108,8 @@ function ensureDiAgentCodexMcpConfig(codexHome, conversationId, userId, agentId,
   for (const sectionPattern of sectionPatterns) {
     content = content.replace(sectionPattern, '').trimEnd();
   }
-  const args = buildPlatformMcpServerArgs(conversationId, userId, agentId, taskId);
+  const taskContextFile = updateDiAgentCodexTaskContext(codexHome, conversationId, userId, agentId, taskId);
+  const args = buildPlatformMcpServerArgs(conversationId, userId, agentId, taskId, taskContextFile);
   if (args.length === 0) return configFile;
   const section = [
     '',
@@ -2156,6 +2181,7 @@ const initCliToolsCtx = {
   // codex 专用
   ensureDiAgentCodexHome,
   ensureDiAgentCodexMcpConfig,
+  updateDiAgentCodexTaskContext,
   ensureTaskWorkdir,
   codexLoginStatus,
   // opencode 专用
@@ -2190,6 +2216,26 @@ function commandForTask(task, taskCtx) {
   return { command, args: [userPrompt] };
 }
 
+function hasExplicitRuntimeConfig(value) {
+  return Boolean(value && typeof value === 'object' && (
+    value.version || value.model || value.reasoning_effort || value.approval_mode
+  ));
+}
+
+function validateTaskRuntimeConfig(task) {
+  const spec = cliTools.getCliTool(task.cli_tool);
+  if (task.cli_tool === 'codex') {
+    if (!spec || typeof spec.runtimeConfigFingerprint !== 'function') {
+      throw new Error('Codex runtime controls are unavailable in this daemon');
+    }
+    spec.runtimeConfigFingerprint(task.runtime_config);
+    return;
+  }
+  if (hasExplicitRuntimeConfig(task.runtime_config)) {
+    throw new Error(`CLI "${task.cli_tool}" does not support runtime_config`);
+  }
+}
+
 async function executeTask(task, taskCtx, onEvent) {
   if (task.cli_tool === OPEN_PATH_TOOL) {
     logFlow('info', 'task.open_path_start', { task_id: task.id });
@@ -2204,6 +2250,7 @@ async function executeTask(task, taskCtx, onEvent) {
     logFlow('info', 'task.install_skill_start', { task_id: task.id });
     return installGitHubSkill(task.prompt);
   }
+  validateTaskRuntimeConfig(task);
   const spec = commandForTask(task, taskCtx);
   const taskMeta = {
     task_id: task.id,
@@ -2891,8 +2938,12 @@ async function dispatchToPersistentSlot(ws, agentId, conversationId, userId, pro
   }
   const savedSessionId = conversationSessions.get(sessionKey) || null;
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const validSessionId = savedSessionId && UUID_RE.test(savedSessionId) ? savedSessionId : null;
+  let validSessionId = savedSessionId && UUID_RE.test(savedSessionId) ? savedSessionId : null;
   let slot = runningAgents.get(slotKey);
+  const adapterSpec = cliTools.getCliTool(cliTool);
+  const runtimeConfigFingerprint = typeof adapterSpec?.runtimeConfigFingerprint === 'function'
+    ? adapterSpec.runtimeConfigFingerprint(runtimeConfig)
+    : '';
   if (!slot) {
     const legacySlot = runningAgents.get(agentId);
     if (legacySlot && (legacySlot.currentConversationId === conversationId || legacySlot.currentConversationId == null)) {
@@ -2908,6 +2959,17 @@ async function dispatchToPersistentSlot(ws, agentId, conversationId, userId, pro
       runtime_variant: runtimeVariant,
     });
     stopRuntimeSlot(slotKey);
+    slot = null;
+  }
+  if (slot && slot.runtimeConfigFingerprint !== runtimeConfigFingerprint) {
+    logFlow('info', 'agent.runtime_config_changed', {
+      agent_id: agentId,
+      conversation_id: conversationId,
+    });
+    stopRuntimeSlot(slotKey);
+    conversationSessions.delete(sessionKey);
+    saveSessionMap();
+    validSessionId = null;
     slot = null;
   }
 
@@ -3026,6 +3088,7 @@ async function dispatchToPersistentSlot(ws, agentId, conversationId, userId, pro
     currentConversationId: conversationId,
     cliTool,
     runtimeVariant,
+    runtimeConfigFingerprint,
     sendPrompt,
     close,
     eventRef,
@@ -3285,6 +3348,7 @@ async function handleTaskDispatch(ws, data) {
 
   try {
     let result;
+    validateTaskRuntimeConfig(task);
     const persistentSpec = cliTools.getCliTool(task.cli_tool);
     if (
       persistentSpec && typeof persistentSpec.spawnPersistent === 'function' &&
@@ -4617,6 +4681,7 @@ async function handleMcpMessage(line, toolMap, ctx) {
 
 async function runMcpServer(serverURL, apiKey) {
   const daemonToken = readArg('--daemon-token') || readDiAgentEnvironment(process.env, 'DAEMON_TOKEN') || '';
+  const taskContextFile = readArg('--task-context-file') || '';
   const ctx = {
     conversationId: readArg('--conversation-id') || readDiAgentEnvironment(process.env, 'CONVERSATION_ID') || null,
     userId: readArg('--user-id') || readDiAgentEnvironment(process.env, 'USER_ID') || null,
@@ -4632,18 +4697,27 @@ async function runMcpServer(serverURL, apiKey) {
     // 缺 taskId（CLI 未注入 --task-id）时仅记日志，不抛错，保证工具不因此失败。
     emitCard: async (card) => {
       if (!card) return;
-      if (!ctx.taskId) {
+      let currentTaskId = ctx.taskId;
+      if (taskContextFile) {
+        try {
+          const current = JSON.parse(fs.readFileSync(taskContextFile, 'utf8'));
+          if (current && typeof current.task_id === 'string') currentTaskId = current.task_id;
+        } catch (error) {
+          logFlow('warn', 'card.task_context_read_failed', { error: errorMessage(error) });
+        }
+      }
+      if (!currentTaskId) {
         logFlow('warn', 'card.emit_no_task', { card_type: card.type || 'unknown' });
         return;
       }
       try {
         await callMcpApi(serverURL, daemonToken, 'POST', '/api/internal/task-cards', {
-          body: { task_id: ctx.taskId, card },
+          body: { task_id: currentTaskId, card },
         }, ctx.userId);
       } catch (err) {
         // 上报失败不应让工具失败——卡片是辅助产物，工具主结果仍应返回
         logFlow('warn', 'card.emit_failed', {
-          task_id: ctx.taskId,
+          task_id: currentTaskId,
           card_type: card.type || 'unknown',
           error: errorMessage(err),
         });
@@ -4724,9 +4798,11 @@ module.exports = {
   conversationSessions,
   ensureGitRepoForTask,
   ensureDiAgentCodexMcpConfig,
+  updateDiAgentCodexTaskContext,
   executeTaskOnce,
   ensureOpenCodeMcpConfig,
   daemonConn,
+  dispatchToPersistentSlot,
   onWebSocket,
   installSkillFromDirectory,
   MCP_TOOLS,

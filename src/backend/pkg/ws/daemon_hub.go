@@ -37,12 +37,34 @@ type ArtifactResult struct {
 
 // DaemonClient 封装单个 daemon WebSocket 连接
 type DaemonClient struct {
-	Conn      *websocket.Conn
-	MachineID string // DaemonMachine.ID（DB 主键，非 hostname）
-	sendCh    chan []byte
-	closeOnce sync.Once
-	closed    atomic.Bool
-	mu        sync.Mutex
+	Conn         *websocket.Conn
+	MachineID    string // DaemonMachine.ID（DB 主键，非 hostname）
+	sendCh       chan []byte
+	closeOnce    sync.Once
+	closed       atomic.Bool
+	mu           sync.Mutex
+	capabilities map[string]struct{}
+}
+
+// SetCapabilities replaces the protocol features explicitly advertised by this
+// exact live daemon connection. Missing capabilities are never inferred from a
+// client or CLI version.
+func (dc *DaemonClient) SetCapabilities(capabilities []string) {
+	dc.mu.Lock()
+	defer dc.mu.Unlock()
+	dc.capabilities = make(map[string]struct{}, len(capabilities))
+	for _, capability := range capabilities {
+		if capability != "" {
+			dc.capabilities[capability] = struct{}{}
+		}
+	}
+}
+
+func (dc *DaemonClient) supportsCapability(capability string) bool {
+	dc.mu.Lock()
+	defer dc.mu.Unlock()
+	_, ok := dc.capabilities[capability]
+	return ok
 }
 
 // NewDaemonClient 创建 DaemonClient 实例
@@ -140,7 +162,24 @@ type AgentApprovalContext struct {
 	TaskID         string
 	ConversationID string
 	UserID         string
+	AgentID        string
+	Kind           string
+	Method         string
+	DetailsJSON    string
 	ExpiresAt      time.Time
+}
+
+// AgentApprovalPayload is the replay-safe browser representation of a pending
+// approval. Daemon and user ownership fields remain server-side.
+type AgentApprovalPayload struct {
+	ApprovalID     string          `json:"approval_id"`
+	TaskID         string          `json:"task_id"`
+	ConversationID string          `json:"conversation_id"`
+	AgentID        string          `json:"agent_id"`
+	Kind           string          `json:"kind"`
+	Method         string          `json:"method"`
+	Details        json.RawMessage `json:"details"`
+	ExpiresAt      time.Time       `json:"expires_at"`
 }
 
 // NewDaemonHub 创建 DaemonHub 实例
@@ -220,6 +259,35 @@ func (dh *DaemonHub) RegisterAgentApproval(value AgentApprovalContext) {
 		// Compare protects a newer request in the improbable event of ID reuse.
 		dh.agentApprovals.CompareAndDelete(value.ApprovalID, value)
 	})
+}
+
+// PendingAgentApprovals returns still-valid requests for one authenticated
+// conversation. It supports browser reconnect, refresh, and conversation switch.
+func (dh *DaemonHub) PendingAgentApprovals(userID, conversationID string) []AgentApprovalPayload {
+	now := time.Now()
+	result := make([]AgentApprovalPayload, 0)
+	dh.agentApprovals.Range(func(key, raw any) bool {
+		approval := raw.(AgentApprovalContext)
+		if now.After(approval.ExpiresAt) {
+			dh.agentApprovals.CompareAndDelete(key, approval)
+			return true
+		}
+		if approval.UserID != userID || approval.ConversationID != conversationID {
+			return true
+		}
+		details := json.RawMessage(`{}`)
+		if json.Valid([]byte(approval.DetailsJSON)) {
+			details = json.RawMessage(approval.DetailsJSON)
+		}
+		result = append(result, AgentApprovalPayload{
+			ApprovalID: approval.ApprovalID, TaskID: approval.TaskID,
+			ConversationID: approval.ConversationID, AgentID: approval.AgentID,
+			Kind: approval.Kind, Method: approval.Method, Details: details,
+			ExpiresAt: approval.ExpiresAt,
+		})
+		return true
+	})
+	return result
 }
 
 // ResolveAgentApproval validates the deciding user/conversation, consumes the request once,
@@ -389,6 +457,16 @@ func (dh *DaemonHub) SendToMachine(machineID string, msg WSMessage) error {
 func (dh *DaemonHub) IsConnected(machineID string) bool {
 	_, ok := dh.clients.Load(machineID)
 	return ok
+}
+
+// SupportsCapability checks the capability handshake on the currently active
+// connection. This deliberately fails closed for older daemons that omit it.
+func (dh *DaemonHub) SupportsCapability(machineID, capability string) bool {
+	value, ok := dh.clients.Load(machineID)
+	if !ok {
+		return false
+	}
+	return value.(*DaemonClient).supportsCapability(capability)
 }
 
 // RegisterTaskPromise 创建并存储任务结果 channel（带 buffer=1）

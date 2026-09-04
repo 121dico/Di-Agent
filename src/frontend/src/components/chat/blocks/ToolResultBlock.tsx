@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
@@ -32,8 +32,11 @@ function ToolResultBlockInner({
   block,
   defaultExpanded = false,
 }: ToolResultBlockProps) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [expanded, setExpanded] = useState(defaultExpanded || block.is_error === true);
   const isError = block.is_error === true;
+  useEffect(() => {
+    if (isError) setExpanded(true);
+  }, [isError]);
   const text = useMemo(() => block.text ?? '', [block.text]);
   const hasText = text.length > 0;
   const resultIcon = isError ? <CloseCircleOutlined /> : <CheckCircleOutlined />;

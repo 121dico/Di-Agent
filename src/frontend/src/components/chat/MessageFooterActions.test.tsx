@@ -46,4 +46,29 @@ describe('MessageFooterActions', () => {
     ));
     expect(container.querySelector<HTMLButtonElement>('[aria-label="从此回复 Fork"]')?.disabled).toBe(true);
   });
+
+  it('preserves reply, pin, and more actions beside Copy and Fork', () => {
+    const onReply = vi.fn();
+    const onTogglePin = vi.fn();
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mounted.push({ container, unmount: () => root.unmount() });
+    act(() => root.render(
+      <MessageFooterActions
+        onCopy={vi.fn()}
+        onFork={vi.fn()}
+        onReply={onReply}
+        onTogglePin={onTogglePin}
+        menuItems={[]}
+      />,
+    ));
+    act(() => {
+      container.querySelector<HTMLButtonElement>('[aria-label="回复此消息"]')?.click();
+      container.querySelector<HTMLButtonElement>('[aria-label="Pin 到上下文黑板"]')?.click();
+    });
+    expect(onReply).toHaveBeenCalledOnce();
+    expect(onTogglePin).toHaveBeenCalledOnce();
+    expect(container.querySelector('[aria-label="更多消息操作"]')).not.toBeNull();
+  });
 });

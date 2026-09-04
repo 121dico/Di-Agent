@@ -1,6 +1,13 @@
 import React from 'react';
-import { Button, Tooltip } from 'antd';
-import { BranchesOutlined, CopyOutlined } from '@ant-design/icons';
+import { Button, Dropdown, Tooltip } from 'antd';
+import type { MenuProps } from 'antd';
+import {
+  BranchesOutlined,
+  CopyOutlined,
+  MessageOutlined,
+  MoreOutlined,
+  PushpinOutlined,
+} from '@ant-design/icons';
 import styles from './MessageFooterActions.module.css';
 
 interface MessageFooterActionsProps {
@@ -8,6 +15,10 @@ interface MessageFooterActionsProps {
   onFork: () => void;
   forkDisabled?: boolean;
   forking?: boolean;
+  onReply?: () => void;
+  onTogglePin?: () => void;
+  pinned?: boolean;
+  menuItems?: MenuProps['items'];
 }
 
 export const MessageFooterActions: React.FC<MessageFooterActionsProps> = ({
@@ -15,6 +26,10 @@ export const MessageFooterActions: React.FC<MessageFooterActionsProps> = ({
   onFork,
   forkDisabled = false,
   forking = false,
+  onReply,
+  onTogglePin,
+  pinned = false,
+  menuItems = [],
 }) => (
   <div className={styles.actions} aria-label="Agent 回复操作">
     <Tooltip title="复制回复">
@@ -37,5 +52,27 @@ export const MessageFooterActions: React.FC<MessageFooterActionsProps> = ({
         onClick={onFork}
       />
     </Tooltip>
+    {onReply && (
+      <Tooltip title="回复">
+        <Button type="text" size="small" icon={<MessageOutlined />} aria-label="回复此消息" onClick={onReply} />
+      </Tooltip>
+    )}
+    {onTogglePin && (
+      <Tooltip title={pinned ? '取消 Pin' : 'Pin 到上下文黑板'}>
+        <Button
+          type="text"
+          size="small"
+          icon={<PushpinOutlined />}
+          aria-label={pinned ? '取消 Pin' : 'Pin 到上下文黑板'}
+          aria-pressed={pinned}
+          onClick={onTogglePin}
+        />
+      </Tooltip>
+    )}
+    <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
+      <Tooltip title="更多操作">
+        <Button type="text" size="small" icon={<MoreOutlined />} aria-label="更多消息操作" />
+      </Tooltip>
+    </Dropdown>
   </div>
 );

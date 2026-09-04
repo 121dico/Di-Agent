@@ -270,6 +270,20 @@ func (h *WebSocketHandler) readLoop(ctx context.Context, client *ws.Client) {
 			h.hub.SendToUser(client.UserID, ws.WSMessage{Type: "agent.approval_resolved", Data: map[string]interface{}{
 				"approval_id": payload.ApprovalID, "conversation_id": payload.ConversationID, "decision": payload.Decision,
 			}})
+		case "agent.approval_list":
+			var payload struct {
+				ConversationID string `json:"conversation_id"`
+			}
+			raw, _ := json.Marshal(msg.Data)
+			if err := json.Unmarshal(raw, &payload); err != nil || h.daemonHub == nil || payload.ConversationID == "" {
+				continue
+			}
+			if ok, _ := h.memberChecker.IsConversationMember(ctx, payload.ConversationID, client.UserID); !ok {
+				continue
+			}
+			for _, approval := range h.daemonHub.PendingAgentApprovals(client.UserID, payload.ConversationID) {
+				_ = client.Send(ws.WSMessage{Type: "agent.approval_required", Data: approval})
+			}
 		default:
 			h.hub.SendToUser(client.UserID, ws.WSMessage{
 				Type: ws.TypeError,

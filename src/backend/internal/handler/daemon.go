@@ -359,7 +359,8 @@ func (h *DaemonHandler) handleTaskApprovalRequired(ctx context.Context, client *
 	}
 	h.daemonHub.RegisterAgentApproval(ws.AgentApprovalContext{
 		ApprovalID: req.ApprovalID, MachineID: task.MachineID, TaskID: task.ID,
-		ConversationID: task.ConversationID, UserID: task.UserID, ExpiresAt: expires,
+		ConversationID: task.ConversationID, UserID: task.UserID, AgentID: task.AgentID,
+		Kind: req.Kind, Method: req.Method, DetailsJSON: string(req.Details), ExpiresAt: expires,
 	})
 	if h.userHub != nil {
 		h.userHub.SendToUser(task.UserID, ws.WSMessage{
@@ -546,6 +547,7 @@ func (h *DaemonHandler) handleRegister(ctx context.Context, client *ws.DaemonCli
 		h.logger.Warn("invalid daemon register data", "error", err)
 		return
 	}
+	client.SetCapabilities(req.Capabilities)
 
 	// 全局 token 连接时 machine == nil，但 daemon 会自报 machineID。
 	// 用它更新 DaemonHub 注册，使 SendToMachine / IsConnected 可用。

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { DownOutlined, RightOutlined, ToolOutlined } from '@ant-design/icons';
 import type { MessageBlock } from '@/types/message';
 import type { BlockRenderContext } from './BlockRegistry';
@@ -21,6 +21,9 @@ interface ToolCallBlockProps {
  */
 function ToolCallBlockInner({ block, defaultExpanded = false, streaming = false }: ToolCallBlockProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  useEffect(() => {
+    if (streaming) setExpanded(true);
+  }, [streaming]);
   const toolName = useMemo(() => block.tool_name ?? 'tool', [block.tool_name]);
   const text = useMemo(() => block.text ?? '', [block.text]);
   const hasInput = text.length > 0;
@@ -38,11 +41,11 @@ function ToolCallBlockInner({ block, defaultExpanded = false, streaming = false 
           }
         }}
       >
-        {hasInput ? (expanded ? <DownOutlined /> : <RightOutlined />) : <ToolOutlined />}
+        {hasInput ? ((streaming || expanded) ? <DownOutlined /> : <RightOutlined />) : <ToolOutlined />}
         <span className={styles.toolChip}>{toolName}</span>
         {streaming && !hasInput && <span className={styles.streamingCursor} aria-hidden />}
       </div>
-      {expanded && hasInput && (
+      {(streaming || expanded) && hasInput && (
         <div className={styles.toolInput}>
           {text}
           {streaming && <span className={styles.streamingCursor} aria-hidden />}

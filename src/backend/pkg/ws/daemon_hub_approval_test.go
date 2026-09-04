@@ -45,3 +45,37 @@ func TestAgentApprovalExpiresWithoutAUserDecision(t *testing.T) {
 		t.Fatal("expected expired approval to be removed")
 	}
 }
+
+func TestDaemonCapabilityHandshakeFailsClosedWhenCapabilityIsMissing(t *testing.T) {
+	hub := NewDaemonHub(slog.Default())
+	client := NewDaemonClient(nil, "machine-1")
+	hub.RegisterTestClient("machine-1", client)
+	if hub.SupportsCapability("machine-1", "agent_runtime_controls_v1") {
+		t.Fatal("missing capability must not be inferred")
+	}
+	client.SetCapabilities([]string{"agent_runtime_controls_v1"})
+	if !hub.SupportsCapability("machine-1", "agent_runtime_controls_v1") {
+		t.Fatal("advertised capability should be available on the live connection")
+	}
+}
+
+func TestPendingAgentApprovalsCanBeReplayedAfterBrowserReconnect(t *testing.T) {
+	hub := NewDaemonHub(slog.Default())
+	hub.RegisterAgentApproval(AgentApprovalContext{
+		ApprovalID: "approval-replay", MachineID: "machine-1", TaskID: "task-1",
+		ConversationID: "conversation-1", UserID: "user-1", AgentID: "agent-1",
+		Kind: "command", Method: "item/commandExecution/requestApproval",
+		DetailsJSON: `{"command":"pwd"}`, ExpiresAt: time.Now().Add(time.Minute),
+	})
+
+	got := hub.PendingAgentApprovals("user-1", "conversation-1")
+	if len(got) != 1 || got[0].ApprovalID != "approval-replay" || got[0].AgentID != "agent-1" {
+		t.Fatalf("unexpected replay payload: %#v", got)
+	}
+	if string(got[0].Details) != `{"command":"pwd"}` {
+		t.Fatalf("details = %s", got[0].Details)
+	}
+	if other := hub.PendingAgentApprovals("other-user", "conversation-1"); len(other) != 0 {
+		t.Fatalf("approval leaked to another user: %#v", other)
+	}
+}

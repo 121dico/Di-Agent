@@ -32,7 +32,8 @@ import type { AttachmentPayload } from '@/types/attachment';
 import type { Message, ReplyToPreview } from '@/types/message';
 import { AttachmentPreview, type PendingAttachment } from './AttachmentPreview';
 import { ComposerAddMenu } from './ComposerAddMenu';
-import { ComposerRuntimeControls } from './ComposerRuntimeControls';
+import { ComposerRuntimeControls, ComposerRuntimeFallback } from './ComposerRuntimeControls';
+import { AgentApprovalPrompt } from './AgentApprovalPrompt';
 import {
   DEFAULT_AGENT_RUNTIME_CONFIG,
   readRuntimePreference,
@@ -716,6 +717,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           />
         </div>
       )}
+      <AgentApprovalPrompt
+        conversationId={conversationId}
+        onResolved={() => textareaRef.current?.focus()}
+      />
       {selectedKnowledgeBases.length > 0 && (
         <div className={styles.kbReferenceBar}>
           <DatabaseOutlined className={styles.kbReferenceBarIcon} />
@@ -776,9 +781,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           aria-invalid={Boolean(sendError)}
           aria-describedby={sendError ? 'composer-send-error' : undefined}
         />
-        {supportsCodexControls && (
-          <ComposerRuntimeControls value={runtimeConfig} onChange={handleRuntimeChange} />
-        )}
+        {conversation?.type === 'agent' && (supportsCodexControls
+          ? <ComposerRuntimeControls value={runtimeConfig} onChange={handleRuntimeChange} />
+          : <ComposerRuntimeFallback />)}
         {onOpenContext && <ComposerContextAction onOpen={onOpenContext} active={contextActive} />}
         <Tooltip title={expanded ? '收起输入框' : '展开输入框'}>
           <Button

@@ -4,7 +4,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { EventEmitter } = require('node:events');
 
-const { createCodexCliSpec } = require('../codex');
+const { createCodexCliSpec, normalizeRuntimeConfig, runtimeConfigFingerprint } = require('../codex');
 
 // ctx.codexLocalInstallPaths / codexExtensionPath / existingFile / commandVersion /
 // fs / pathJoin / tmpdir / defaultSkills / resolveCommand（fallback）/ ensureDiAgentCodexHome /
@@ -164,6 +164,22 @@ test('codex persistent adapter sends model, reasoning and safe approval controls
   assert.strictEqual(turnStart.params.sandboxPolicy.type, 'workspaceWrite');
 });
 
+test('codex runtime config rejects malformed or unknown policy instead of silently downgrading', () => {
+  assert.throws(() => normalizeRuntimeConfig({ approval_mode: 'request' }), /version/);
+  assert.throws(() => normalizeRuntimeConfig({
+    version: 1,
+    model: 'not-a-model',
+    reasoning_effort: 'medium',
+    approval_mode: 'auto',
+  }), /model/);
+  assert.throws(() => runtimeConfigFingerprint({
+    version: 2,
+    model: '',
+    reasoning_effort: 'medium',
+    approval_mode: 'auto',
+  }), /version/);
+});
+
 test('codex persistent adapter answers app-server approval requests through the daemon callback', async () => {
   const requests = [];
   const harness = buildPersistentHarness({
@@ -178,7 +194,9 @@ test('codex persistent adapter answers app-server approval requests through the 
     userId: 'user-approval',
   }, harness.ctx);
 
-  const response = runtime.sendPrompt('run pwd', { approval_mode: 'request' });
+  const response = runtime.sendPrompt('run pwd', {
+    version: 1, model: '', reasoning_effort: 'medium', approval_mode: 'request',
+  });
   await new Promise((resolve) => setImmediate(resolve));
   harness.child.stdout.emit('data', `${JSON.stringify({
     jsonrpc: '2.0',
@@ -204,7 +222,9 @@ test('codex persistent adapter returns a schema-valid empty permission grant whe
     userId: 'user-permissions',
   }, harness.ctx);
 
-  const response = runtime.sendPrompt('use network', { approval_mode: 'request' });
+  const response = runtime.sendPrompt('use network', {
+    version: 1, model: '', reasoning_effort: 'medium', approval_mode: 'request',
+  });
   await new Promise((resolve) => setImmediate(resolve));
   harness.child.stdout.emit('data', `${JSON.stringify({
     jsonrpc: '2.0',
@@ -218,6 +238,82 @@ test('codex persistent adapter returns a schema-valid empty permission grant whe
     .map((line) => JSON.parse(line))
     .find((message) => message.id === 89);
   assert.deepStrictEqual(approvalResponse.result, { permissions: {}, scope: 'turn' });
+});
+
+test('codex persistent adapter returns the requested permission profile when allowed once', async () => {
+  const harness = buildPersistentHarness({ requestApproval: async () => 'accept' });
+  const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({
+    agentId: 'agent-permissions-allow', conversationId: 'conv-permissions-allow', userId: 'user-permissions-allow',
+  }, harness.ctx);
+  const response = runtime.sendPrompt('use network', {
+    version: 1, model: '', reasoning_effort: 'medium', approval_mode: 'request',
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  const permissions = { network: { enabled: true } };
+  harness.child.stdout.emit('data', `${JSON.stringify({
+    jsonrpc: '2.0', id: 90, method: 'item/permissions/requestApproval',
+    params: { permissions, reason: 'reach API' },
+  })}\n`);
+  await response;
+  const approvalResponse = harness.child.stdin.writes
+    .map((line) => JSON.parse(line))
+    .find((message) => message.id === 90);
+  assert.deepStrictEqual(approvalResponse.result, { permissions, scope: 'turn' });
+});
+
+test('codex persistent adapter refreshes the per-turn MCP task context', async () => {
+  const updates = [];
+  const harness = buildPersistentHarness({
+    updateDiAgentCodexTaskContext: (_home, conversationId, userId, agentId, taskId) => {
+      updates.push({ conversationId, userId, agentId, taskId });
+    },
+  });
+  const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({
+    agentId: 'agent-context',
+    conversationId: 'conv-context',
+    userId: 'user-context',
+  }, harness.ctx);
+  const config = { version: 1, model: '', reasoning_effort: 'medium', approval_mode: 'auto' };
+
+  await runtime.sendPrompt('first', config, { task_id: 'task-first' });
+  await runtime.sendPrompt('second', config, { task_id: 'task-second' });
+
+  assert.deepStrictEqual(updates.map((entry) => entry.taskId), ['task-first', 'task-second']);
+});
+
+test('codex binds a same-chunk approval request to the turn being started', async () => {
+  const requests = [];
+  const child = fakeCodexChild((message, activeChild) => {
+    if (message.method === 'initialize') {
+      emitCodexLine(activeChild, { jsonrpc: '2.0', id: message.id, result: {} });
+    } else if (message.method === 'thread/start') {
+      emitCodexLine(activeChild, { jsonrpc: '2.0', id: message.id, result: { thread: { id: 'thread-race' } } });
+    } else if (message.method === 'turn/start') {
+      queueMicrotask(() => activeChild.stdout.emit('data', [
+        JSON.stringify({ jsonrpc: '2.0', id: message.id, result: { turn: { id: 'turn-race' } } }),
+        JSON.stringify({ jsonrpc: '2.0', id: 901, method: 'item/commandExecution/requestApproval', params: { command: 'pwd' } }),
+      ].join('\n') + '\n'));
+      setImmediate(() => activeChild.stdout.emit('data', `${JSON.stringify({ method: 'turn/completed', params: { turn: { id: 'turn-race', status: 'completed' } } })}\n`));
+    }
+  });
+  const harness = buildPersistentHarness({
+    spawn: () => child,
+    requestApproval: async (request) => {
+      requests.push(request);
+      return 'decline';
+    },
+  });
+  const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({
+    agentId: 'agent-race', conversationId: 'conv-race', userId: 'user-race',
+    taskCtx: { taskId: 'slot-first-task' },
+  }, harness.ctx);
+
+  await runtime.sendPrompt('next', {
+    version: 1, model: '', reasoning_effort: 'medium', approval_mode: 'request',
+  }, { task_id: 'current-task', agent_id: 'agent-race', conversation_id: 'conv-race', user_id: 'user-race' });
+
+  assert.strictEqual(requests.length, 1);
+  assert.strictEqual(requests[0].task_id, 'current-task');
 });
 
 test('codex persistent adapter returns an actionable protocol timeout', async () => {
