@@ -69,10 +69,20 @@ describe('GlobalRail collapse preference', () => {
     expect(railStylesheet).toMatch(/\.collapsedBrandToggle:hover \.brandGlyph/);
     expect(railStylesheet).toMatch(/\.collapsedBrandToggle:focus-visible \.brandToggleIcon/);
     expect(railStylesheet).not.toMatch(/\.railCollapsed \.brandGlyph/);
-    expect(railStylesheet).toMatch(/\.railCollapsed \.brandMark \{ opacity: 0; \}/);
+    expect(railStylesheet).toMatch(/\.railCollapsed \.brandMark \{[^}]*opacity: 0;/s);
     expect(railStylesheet).not.toMatch(/\.railCollapsed :is\([^)]*\.brandLabel[^)]*\) \{ display: none; \}/);
     expect(railStylesheet).toMatch(/\.railToggle \{[^}]*width: 40px; height: 40px;/s);
     expect(railStylesheet).toMatch(/\.brandLabel \{[^}]*width: max\(0px, calc\(100% - 136px\)\)/s);
+    expect(railStylesheet).toMatch(/\.brandMark \{[^}]*transition: opacity 80ms linear 80ms;/s);
+    expect(railStylesheet).toMatch(/\.railCollapsed \.brandMark \{[^}]*transition-delay: 0ms;/s);
+    expect(railStylesheet).toMatch(/\.railCollapsed \.brandMark \{[^}]*transition-duration: 40ms;/s);
+    expect(railStylesheet).toMatch(/\.brandGlyph \{[^}]*opacity: 0;[^}]*animation: revealCollapsedBrand 80ms linear 50ms both;/s);
+    expect(railStylesheet).toMatch(/\.collapsedBrandToggle:hover \.brandGlyph,[^{]*\{[^}]*animation: none;/s);
+    expect(railStylesheet).toMatch(/@keyframes revealCollapsedBrand \{ from \{ opacity: 0; \} to \{ opacity: 1; \} \}/);
+    expect(railStylesheet).toMatch(/\.railToggle \.brandToggleIcon \{[^}]*width: 32px; height: 32px;/s);
+    expect(railStylesheet).toMatch(/\.railToggle:hover \.brandToggleIcon \{ background: var\(--wb-surface-hover\); \}/);
+    expect(railStylesheet).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[^}]*\.brandMark,/s);
+    expect(railStylesheet).toMatch(/\.accountMeta \{ transition-duration: 0ms; transition-delay: 0ms; animation-duration: 0ms; animation-delay: 0ms; \}/);
   });
 
   it('starts expanded when no preference has been stored', () => {
