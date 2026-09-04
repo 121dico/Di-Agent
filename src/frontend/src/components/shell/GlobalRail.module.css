@@ -35,13 +35,13 @@
 }
 
 .brandMark { font-size: 15px; font-weight: 700; }
+.railCollapsed :is(.brandMark, .brandLabel) { display: none; }
 .collapsedBrandToggle { position: relative; padding: 0; border: 0; cursor: pointer; }
 .railToggle {
   width: 32px; height: 32px; display: grid; place-items: center;
   margin-left: auto; padding: 0; border: 0; border-radius: 8px;
   color: var(--wb-text-secondary); background: transparent; cursor: pointer;
 }
-
 .collapsedBrandToggle:hover { background: var(--wb-action-hover); }
 .railToggle:hover { color: var(--wb-text-primary); background: var(--wb-surface-hover); }
 .collapsedBrandToggle:focus-visible,
@@ -63,11 +63,11 @@
 
 .brandGlyph { font-size: 15px; font-weight: 700; }
 .brandToggleIcon { display: grid; place-items: center; opacity: 0; }
+.railToggle .brandToggleIcon { opacity: 1; }
 .brandToggleIcon svg,
 .railToggle svg { width: 18px; height: 18px; stroke-width: 1.9; }
 .collapsedBrandToggle:hover .brandGlyph,
 .collapsedBrandToggle:focus-visible .brandGlyph { opacity: 0; }
-
 .collapsedBrandToggle:hover .brandToggleIcon,
 .collapsedBrandToggle:focus-visible .brandToggleIcon { opacity: 1; }
 

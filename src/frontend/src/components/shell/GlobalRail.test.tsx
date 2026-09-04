@@ -92,20 +92,24 @@ describe('GlobalRail collapse preference', () => {
     renderRail();
 
     const toggle = container.querySelector<HTMLButtonElement>('[aria-label="收起侧边栏"]');
+    act(() => toggle?.focus());
+    expect(document.activeElement).toBe(toggle);
     act(() => toggle?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 
     const rail = container.querySelector('aside');
     expect(rail?.getAttribute('data-collapsed')).toBe('true');
-    expect(container.querySelector('[aria-label="展开侧边栏"]')?.textContent).toContain('D');
+    const expand = container.querySelector<HTMLButtonElement>('[aria-label="展开侧边栏"]');
+    expect(expand?.textContent).toContain('D');
+    expect(document.activeElement).toBe(expand);
     expect(container.querySelector('[aria-label="新建对话"]')).not.toBeNull();
     expect(container.querySelector('[aria-label="消息，3 条未读"]')).not.toBeNull();
     expect(container.querySelector('[aria-label="账户设置，已连接"]')).not.toBeNull();
     expect(container.querySelector('[aria-label="退出登录"]')).not.toBeNull();
     expect(localStorage.getItem(STORAGE_KEY)).toBe('1');
 
-    const expand = container.querySelector<HTMLButtonElement>('[aria-label="展开侧边栏"]');
     act(() => expand?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(rail?.getAttribute('data-collapsed')).toBe('false');
+    expect(document.activeElement).toBe(container.querySelector('[aria-label="收起侧边栏"]'));
     expect(localStorage.getItem(STORAGE_KEY)).toBe('0');
   });
 

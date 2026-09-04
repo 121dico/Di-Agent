@@ -97,36 +97,26 @@ export const GlobalRail: React.FC<GlobalRailProps> = ({
     >
       <div className={styles.railSurface}>
         <div className={styles.brandRow}>
-          {railCollapsed ? (
-            <Tooltip title="展开侧边栏" placement="right" mouseEnterDelay={0.5}>
-              <button
-                className={styles.collapsedBrandToggle}
-                type="button"
-                aria-label="展开侧边栏"
-                aria-expanded={false}
-                onClick={toggleRail}
-              >
-                <span className={styles.brandGlyph} aria-hidden="true">D</span>
-                <span className={styles.brandToggleIcon} aria-hidden="true"><PanelLeftOpen /></span>
-              </button>
-            </Tooltip>
-          ) : (
-            <>
-              <span className={styles.brandMark} aria-hidden="true">D</span>
-              <span className={styles.brandLabel}>Di Agent</span>
-              <Tooltip title="收起侧边栏" placement="bottom" mouseEnterDelay={0.5}>
-                <button
-                  className={styles.railToggle}
-                  type="button"
-                  aria-label="收起侧边栏"
-                  aria-expanded={true}
-                  onClick={toggleRail}
-                >
-                  <PanelLeftClose aria-hidden="true" />
-                </button>
-              </Tooltip>
-            </>
-          )}
+          <span className={styles.brandMark} aria-hidden="true">D</span>
+          <span className={styles.brandLabel} aria-hidden={railCollapsed}>Di Agent</span>
+          <Tooltip
+            title={railCollapsed ? '展开侧边栏' : '收起侧边栏'}
+            placement={railCollapsed ? 'right' : 'bottom'}
+            mouseEnterDelay={0.5}
+          >
+            <button
+              className={railCollapsed ? styles.collapsedBrandToggle : styles.railToggle}
+              type="button"
+              aria-label={railCollapsed ? '展开侧边栏' : '收起侧边栏'}
+              aria-expanded={!railCollapsed}
+              onClick={toggleRail}
+            >
+              {railCollapsed && <span className={styles.brandGlyph} aria-hidden="true">D</span>}
+              <span className={styles.brandToggleIcon} aria-hidden="true">
+                {railCollapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+              </span>
+            </button>
+          </Tooltip>
         </div>
 
         <div className={styles.primaryActions}>
