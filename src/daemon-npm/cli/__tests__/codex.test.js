@@ -196,6 +196,30 @@ test('codex persistent adapter answers app-server approval requests through the 
   assert.deepStrictEqual(approvalResponse.result, { decision: 'accept' });
 });
 
+test('codex persistent adapter returns a schema-valid empty permission grant when declined', async () => {
+  const harness = buildPersistentHarness({ requestApproval: async () => 'decline' });
+  const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({
+    agentId: 'agent-permissions',
+    conversationId: 'conv-permissions',
+    userId: 'user-permissions',
+  }, harness.ctx);
+
+  const response = runtime.sendPrompt('use network', { approval_mode: 'request' });
+  await new Promise((resolve) => setImmediate(resolve));
+  harness.child.stdout.emit('data', `${JSON.stringify({
+    jsonrpc: '2.0',
+    id: 89,
+    method: 'item/permissions/requestApproval',
+    params: { permissions: { network: { enabled: true } }, reason: 'reach API' },
+  })}\n`);
+  await response;
+
+  const approvalResponse = harness.child.stdin.writes
+    .map((line) => JSON.parse(line))
+    .find((message) => message.id === 89);
+  assert.deepStrictEqual(approvalResponse.result, { permissions: {}, scope: 'turn' });
+});
+
 test('codex persistent adapter returns an actionable protocol timeout', async () => {
   const child = fakeCodexChild();
   const harness = buildPersistentHarness({

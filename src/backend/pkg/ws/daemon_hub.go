@@ -207,7 +207,19 @@ func (dh *DaemonHub) RegisterAgentApproval(value AgentApprovalContext) {
 	if value.ApprovalID == "" || value.MachineID == "" || value.UserID == "" {
 		return
 	}
+	if value.ExpiresAt.IsZero() {
+		value.ExpiresAt = time.Now().Add(5 * time.Minute)
+	}
 	dh.agentApprovals.Store(value.ApprovalID, value)
+	ttl := time.Until(value.ExpiresAt)
+	if ttl <= 0 {
+		dh.agentApprovals.CompareAndDelete(value.ApprovalID, value)
+		return
+	}
+	time.AfterFunc(ttl, func() {
+		// Compare protects a newer request in the improbable event of ID reuse.
+		dh.agentApprovals.CompareAndDelete(value.ApprovalID, value)
+	})
 }
 
 // ResolveAgentApproval validates the deciding user/conversation, consumes the request once,

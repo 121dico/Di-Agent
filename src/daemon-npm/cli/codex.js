@@ -484,7 +484,7 @@ function createCodexCliSpec(ctx) {
         }
         const allowed = decision === 'accept' || decision === 'acceptForSession';
         const result = kind === 'permissions'
-          ? { permissions: allowed ? (msg.params?.permissions || []) : [] }
+          ? { permissions: allowed ? (msg.params?.permissions || {}) : {}, scope: 'turn' }
           : { decision: allowed ? decision : 'decline' };
         try {
           child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: msg.id, result })}\n`);

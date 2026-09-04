@@ -33,3 +33,15 @@ func TestAgentApprovalIsBoundToOwnerAndConsumedOnce(t *testing.T) {
 		t.Fatal("expected consumed approval to be unavailable")
 	}
 }
+
+func TestAgentApprovalExpiresWithoutAUserDecision(t *testing.T) {
+	hub := NewDaemonHub(slog.Default())
+	hub.RegisterAgentApproval(AgentApprovalContext{
+		ApprovalID: "approval-expiring", MachineID: "machine-1", TaskID: "task-1",
+		ConversationID: "conversation-1", UserID: "user-1", ExpiresAt: time.Now().Add(10 * time.Millisecond),
+	})
+	time.Sleep(30 * time.Millisecond)
+	if err := hub.ResolveAgentApproval("approval-expiring", "user-1", "conversation-1", "accept"); err == nil {
+		t.Fatal("expected expired approval to be removed")
+	}
+}
