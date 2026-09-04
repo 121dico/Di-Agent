@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_AGENT_RUNTIME_CONFIG,
   normalizeAgentRuntimeConfig,
+  resolveRuntimePreference,
   runtimePreferenceKey,
 } from './agentRuntime';
 
@@ -37,5 +38,15 @@ describe('agent runtime preferences', () => {
   it('isolates saved choices by conversation and agent', () => {
     expect(runtimePreferenceKey('conversation-1', 'agent-2'))
       .toBe('di-agent:runtime:v1:conversation-1:agent-2');
+  });
+
+  it('never exposes the previous conversation full-access policy during a switch', () => {
+    const selected = resolveRuntimePreference({
+      identity: 'conversation-1:agent-1',
+      value: { ...DEFAULT_AGENT_RUNTIME_CONFIG, approval_mode: 'full' },
+    }, 'conversation-2', 'agent-2');
+
+    expect(selected.identity).toBe('conversation-2:agent-2');
+    expect(selected.value).toEqual(DEFAULT_AGENT_RUNTIME_CONFIG);
   });
 });

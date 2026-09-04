@@ -12,6 +12,7 @@ import { resetKnowledgeStore } from '@/store/knowledgeStore';
 import { resetCatalogStore } from '@/store/catalogStore';
 import { useWsStore } from '@/store/wsStore';
 import { resetPersonalReportStore } from '@/store/personalReportStore';
+import { useAgentApprovalStore } from '@/store/agentApprovalStore';
 
 interface AuthState {
   user: User | null;
@@ -46,6 +47,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       localStorage.removeItem(STORAGE_KEYS.ACTIVE_CONV);
       setToken(data.token);
       resetAgentStore();
+      useAgentApprovalStore.getState().clear();
       set({ user: data.user, token: data.token, isAuthenticated: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : '登录失败';
@@ -65,6 +67,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       localStorage.removeItem(STORAGE_KEYS.ACTIVE_CONV);
       setToken(data.token);
       resetAgentStore();
+      useAgentApprovalStore.getState().clear();
       set({ user: data.user, token: data.token, isAuthenticated: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : '注册失败';
@@ -104,6 +107,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     resetKnowledgeStore();
     resetCatalogStore();
     resetPersonalReportStore();
+    useAgentApprovalStore.getState().clear();
     useWsStore.getState().disconnect();
     set({ user: null, token: null, isAuthenticated: false });
   },
@@ -115,6 +119,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       try {
         const user: User = JSON.parse(userJson);
         setToken(token);
+        useAgentApprovalStore.getState().clear();
         set({ user, token, isAuthenticated: true });
         void userApi.getCurrentUser().then((freshUser) => {
           localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(freshUser));

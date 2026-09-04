@@ -15,6 +15,7 @@ interface AgentApprovalState {
   pending: Record<string, AgentApprovalRequest>;
   upsert: (request: AgentApprovalRequest) => void;
   remove: (approvalId: string) => void;
+  replaceConversation: (conversationId: string, requests: AgentApprovalRequest[]) => void;
   clear: () => void;
 }
 
@@ -34,6 +35,12 @@ export const useAgentApprovalStore = create<AgentApprovalState>((set) => ({
     if (!state.pending[approvalId]) return state;
     const pending = { ...state.pending };
     delete pending[approvalId];
+    return { pending };
+  }),
+  replaceConversation: (conversationId, requests) => set((state) => {
+    const pending = Object.fromEntries(Object.entries(state.pending)
+      .filter(([, request]) => request.conversation_id !== conversationId));
+    for (const request of requests) pending[request.approval_id] = request;
     return { pending };
   }),
   clear: () => set({ pending: {} }),

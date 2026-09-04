@@ -182,11 +182,13 @@ test('codex runtime config rejects malformed or unknown policy instead of silent
 
 test('codex persistent adapter answers app-server approval requests through the daemon callback', async () => {
   const requests = [];
+  const acknowledgements = [];
   const harness = buildPersistentHarness({
     requestApproval: async (request) => {
       requests.push(request);
-      return 'accept';
+      return { decision: 'accept', approval_id: 'approval-88', task_id: 'task-88' };
     },
+    acknowledgeApproval: (acknowledgement) => acknowledgements.push(acknowledgement),
   });
   const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({
     agentId: 'agent-approval',
@@ -212,6 +214,7 @@ test('codex persistent adapter answers app-server approval requests through the 
     .map((line) => JSON.parse(line))
     .find((message) => message.id === 88);
   assert.deepStrictEqual(approvalResponse.result, { decision: 'accept' });
+  assert.deepStrictEqual(acknowledgements, [{ approval_id: 'approval-88', task_id: 'task-88' }]);
 });
 
 test('codex persistent adapter returns a schema-valid empty permission grant when declined', async () => {
@@ -275,10 +278,11 @@ test('codex persistent adapter refreshes the per-turn MCP task context', async (
   }, harness.ctx);
   const config = { version: 1, model: '', reasoning_effort: 'medium', approval_mode: 'auto' };
 
-  await runtime.sendPrompt('first', config, { task_id: 'task-first' });
-  await runtime.sendPrompt('second', config, { task_id: 'task-second' });
+  await runtime.sendPrompt('first', config, { task_id: 'task-first', user_id: 'user-first' });
+  await runtime.sendPrompt('second', config, { task_id: 'task-second', user_id: 'user-second' });
 
   assert.deepStrictEqual(updates.map((entry) => entry.taskId), ['task-first', 'task-second']);
+  assert.deepStrictEqual(updates.map((entry) => entry.userId), ['user-first', 'user-second']);
 });
 
 test('codex binds a same-chunk approval request to the turn being started', async () => {

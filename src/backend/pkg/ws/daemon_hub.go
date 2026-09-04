@@ -40,6 +40,7 @@ type DaemonClient struct {
 	Conn         *websocket.Conn
 	MachineID    string // DaemonMachine.ID（DB 主键，非 hostname）
 	sendCh       chan []byte
+	done         chan struct{}
 	closeOnce    sync.Once
 	closed       atomic.Bool
 	mu           sync.Mutex
@@ -73,7 +74,18 @@ func NewDaemonClient(conn *websocket.Conn, machineID string) *DaemonClient {
 		Conn:      conn,
 		MachineID: machineID,
 		sendCh:    make(chan []byte, daemonSendBuf),
+		done:      make(chan struct{}),
 	}
+}
+
+func (dc *DaemonClient) close(status websocket.StatusCode, reason string) {
+	dc.closed.Store(true)
+	dc.closeOnce.Do(func() {
+		close(dc.done)
+		if dc.Conn != nil {
+			_ = dc.Conn.Close(status, reason)
+		}
+	})
 }
 
 // WritePump 从 sendCh 读取消息写入连接
@@ -81,6 +93,8 @@ func (dc *DaemonClient) WritePump(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			return
+		case <-dc.done:
 			return
 		case data, ok := <-dc.sendCh:
 			if !ok {
@@ -98,32 +112,42 @@ func (dc *DaemonClient) WritePump(ctx context.Context) {
 
 // Send 向 daemon 发送 JSON 消息（通过写缓冲区）
 func (dc *DaemonClient) Send(msg WSMessage) error {
-	if dc.closed.Load() {
-		return errors.New("daemon client closed: " + dc.MachineID)
-	}
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
+	dc.mu.Lock()
+	defer dc.mu.Unlock()
+	if dc.closed.Load() {
+		return errors.New("daemon client closed: " + dc.MachineID)
+	}
 	select {
 	case dc.sendCh <- data:
+		return nil
 	default:
-		// 背压：丢弃最旧消息腾出一个位置
-		select {
-		case <-dc.sendCh:
-		default:
-		}
-		select {
-		case dc.sendCh <- data:
-		default:
-			snippet := string(data)
-			if len(snippet) > 80 {
-				snippet = snippet[:80] + "..."
-			}
-			slog.Warn("daemon write buffer full after drain, dropping message", "machine_id", dc.MachineID, "msg", snippet)
-		}
+		return errors.New("daemon write buffer full: " + dc.MachineID)
 	}
-	return nil
+}
+
+func (dc *DaemonClient) sendRequiringCapability(capability string, msg WSMessage) error {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	dc.mu.Lock()
+	defer dc.mu.Unlock()
+	if dc.closed.Load() {
+		return errors.New("daemon client closed: " + dc.MachineID)
+	}
+	if _, ok := dc.capabilities[capability]; !ok {
+		return errors.New("daemon capability unavailable: " + capability)
+	}
+	select {
+	case dc.sendCh <- data:
+		return nil
+	default:
+		return errors.New("daemon write buffer full: " + dc.MachineID)
+	}
 }
 
 // --- DaemonHub 内部总线类型 ---
@@ -290,8 +314,9 @@ func (dh *DaemonHub) PendingAgentApprovals(userID, conversationID string) []Agen
 	return result
 }
 
-// ResolveAgentApproval validates the deciding user/conversation, consumes the request once,
-// and forwards only an allowlisted decision to the originating daemon.
+// ResolveAgentApproval validates the deciding user/conversation and forwards an
+// allowlisted decision. The request remains pending until the daemon confirms
+// that the decision reached the original app-server RPC.
 func (dh *DaemonHub) ResolveAgentApproval(approvalID, userID, conversationID, decision string) error {
 	value, ok := dh.agentApprovals.Load(approvalID)
 	if !ok {
@@ -308,10 +333,6 @@ func (dh *DaemonHub) ResolveAgentApproval(approvalID, userID, conversationID, de
 	if decision != "accept" && decision != "acceptForSession" && decision != "decline" {
 		return errors.New("invalid approval decision")
 	}
-	// Consume atomically so two browser tabs cannot approve the same operation twice.
-	if _, loaded := dh.agentApprovals.LoadAndDelete(approvalID); !loaded {
-		return errors.New("approval request already resolved")
-	}
 	return dh.SendToMachine(approval.MachineID, WSMessage{
 		Type: "task.approval_decision",
 		Data: map[string]interface{}{
@@ -320,6 +341,23 @@ func (dh *DaemonHub) ResolveAgentApproval(approvalID, userID, conversationID, de
 			"decision":    decision,
 		},
 	})
+}
+
+// AcknowledgeAgentApproval consumes a request only after its daemon confirms
+// that the decision was written back to the waiting app-server request.
+func (dh *DaemonHub) AcknowledgeAgentApproval(approvalID, machineID, taskID string) (AgentApprovalContext, error) {
+	value, ok := dh.agentApprovals.Load(approvalID)
+	if !ok {
+		return AgentApprovalContext{}, errors.New("approval request not found")
+	}
+	approval := value.(AgentApprovalContext)
+	if approval.MachineID != machineID || approval.TaskID != taskID {
+		return AgentApprovalContext{}, errors.New("approval acknowledgement owner mismatch")
+	}
+	if !dh.agentApprovals.CompareAndDelete(approvalID, approval) {
+		return AgentApprovalContext{}, errors.New("approval request already resolved")
+	}
+	return approval, nil
 }
 
 // Run 启动 DaemonHub 消息总线事件循环，应在独立 goroutine 中调用
@@ -350,9 +388,7 @@ func (dh *DaemonHub) handleRegister(msg daemonBusMsg) {
 	// 若同一 machineID 已有旧连接，先关闭
 	if old, loaded := dh.clients.LoadAndDelete(client.MachineID); loaded {
 		oldClient := old.(*DaemonClient)
-		oldClient.closed.Store(true)
-		oldClient.closeOnce.Do(func() { close(oldClient.sendCh) })
-		oldClient.Conn.Close(websocket.StatusNormalClosure, "replaced by new connection")
+		oldClient.close(websocket.StatusNormalClosure, "replaced by new connection")
 		dh.logger.Info("replaced old daemon connection", "machine_id", client.MachineID)
 	}
 	dh.clients.Store(client.MachineID, client)
@@ -365,9 +401,7 @@ func (dh *DaemonHub) handleUnregister(msg daemonBusMsg) {
 	if loaded, ok := dh.clients.Load(client.MachineID); ok && loaded == client {
 		dh.clients.Delete(client.MachineID)
 	}
-	client.closed.Store(true)
-	client.closeOnce.Do(func() { close(client.sendCh) })
-	client.Conn.Close(websocket.StatusNormalClosure, "disconnect")
+	client.close(websocket.StatusNormalClosure, "disconnect")
 	if !dh.draining.Load() {
 		dh.wg.Done()
 	}
@@ -396,11 +430,7 @@ func (dh *DaemonHub) shutdown() {
 		// 关闭所有 daemon 连接
 		dh.clients.Range(func(key, value interface{}) bool {
 			client := value.(*DaemonClient)
-			client.closed.Store(true)
-			client.closeOnce.Do(func() { close(client.sendCh) })
-			if client.Conn != nil {
-				client.Conn.Close(websocket.StatusNormalClosure, "server shutdown")
-			}
+			client.close(websocket.StatusNormalClosure, "server shutdown")
 			return true
 		})
 
@@ -434,9 +464,7 @@ func (dh *DaemonHub) Unregister(client *DaemonClient) {
 	case dh.bus <- daemonBusMsg{kind: daemonBusUnregister, payload: client}:
 	default:
 		dh.logger.Warn("daemon hub bus full, force-closing connection", "machine_id", client.MachineID)
-		client.closed.Store(true)
-		client.closeOnce.Do(func() { close(client.sendCh) })
-		client.Conn.Close(websocket.StatusNormalClosure, "disconnect")
+		client.close(websocket.StatusNormalClosure, "disconnect")
 		if !dh.draining.Load() {
 			dh.wg.Done()
 		}
@@ -451,6 +479,17 @@ func (dh *DaemonHub) SendToMachine(machineID string, msg WSMessage) error {
 	}
 	client := val.(*DaemonClient)
 	return client.Send(msg)
+}
+
+// SendToMachineRequiringCapability performs capability validation and enqueue
+// against the exact same live connection, closing the replacement race between
+// a preflight capability check and task dispatch.
+func (dh *DaemonHub) SendToMachineRequiringCapability(machineID, capability string, msg WSMessage) error {
+	val, ok := dh.clients.Load(machineID)
+	if !ok {
+		return errors.New("daemon not connected: " + machineID)
+	}
+	return val.(*DaemonClient).sendRequiringCapability(capability, msg)
 }
 
 // IsConnected 检查 daemon 是否 WS 连接中

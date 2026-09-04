@@ -491,6 +491,7 @@ function createCodexCliSpec(ctx) {
               : '';
         if (!kind) return false;
         let decision = 'decline';
+        let approvalResolution = null;
         if (typeof daemonCtx.requestApproval === 'function') {
           try {
             // The app-server may place the turn/start response and an approval request
@@ -498,7 +499,7 @@ function createCodexCliSpec(ctx) {
             // available before awaiting the turn/start response so the request cannot
             // fall back to the slot's first task identity.
             const approvalContext = currentTurn?.approvalContext || pendingTurnApprovalContext || {};
-            decision = await daemonCtx.requestApproval({
+            const response = await daemonCtx.requestApproval({
               kind,
               method,
               params: msg.params || {},
@@ -507,6 +508,12 @@ function createCodexCliSpec(ctx) {
               user_id: approvalContext.user_id || userId,
               task_id: approvalContext.task_id || taskId,
             });
+            if (response && typeof response === 'object') {
+              approvalResolution = response;
+              decision = response.decision;
+            } else {
+              decision = response;
+            }
           } catch (error) {
             daemonCtx.logFlow('warn', 'agent.approval_failed', {
               agent_id: agentId,
@@ -521,6 +528,12 @@ function createCodexCliSpec(ctx) {
           : { decision: allowed ? decision : 'decline' };
         try {
           child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: msg.id, result })}\n`);
+          if (approvalResolution && typeof daemonCtx.acknowledgeApproval === 'function') {
+            daemonCtx.acknowledgeApproval({
+              approval_id: approvalResolution.approval_id,
+              task_id: approvalResolution.task_id,
+            });
+          }
         } catch { /* process teardown resolves the active turn */ }
         return true;
       };
@@ -632,7 +645,13 @@ function createCodexCliSpec(ctx) {
           const controls = codexTurnControls(runtimeConfig);
           pendingTurnApprovalContext = approvalContext || {};
           if (typeof daemonCtx.updateDiAgentCodexTaskContext === 'function') {
-            daemonCtx.updateDiAgentCodexTaskContext(codexHome, conversationId, userId, agentId, approvalContext?.task_id || null);
+            daemonCtx.updateDiAgentCodexTaskContext(
+              codexHome,
+              approvalContext?.conversation_id || conversationId,
+              approvalContext?.user_id || userId,
+              approvalContext?.agent_id || agentId,
+              approvalContext?.task_id || null,
+            );
           }
           const res = await rpcCall('turn/start', {
             threadId,

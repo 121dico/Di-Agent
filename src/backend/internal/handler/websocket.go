@@ -267,9 +267,6 @@ func (h *WebSocketHandler) readLoop(ctx context.Context, client *ws.Client) {
 				h.hub.SendToUser(client.UserID, ws.WSMessage{Type: ws.TypeError, Data: map[string]string{"message": "审批已失效或无权操作"}})
 				continue
 			}
-			h.hub.SendToUser(client.UserID, ws.WSMessage{Type: "agent.approval_resolved", Data: map[string]interface{}{
-				"approval_id": payload.ApprovalID, "conversation_id": payload.ConversationID, "decision": payload.Decision,
-			}})
 		case "agent.approval_list":
 			var payload struct {
 				ConversationID string `json:"conversation_id"`
@@ -281,9 +278,10 @@ func (h *WebSocketHandler) readLoop(ctx context.Context, client *ws.Client) {
 			if ok, _ := h.memberChecker.IsConversationMember(ctx, payload.ConversationID, client.UserID); !ok {
 				continue
 			}
-			for _, approval := range h.daemonHub.PendingAgentApprovals(client.UserID, payload.ConversationID) {
-				_ = client.Send(ws.WSMessage{Type: "agent.approval_required", Data: approval})
-			}
+			_ = client.Send(ws.WSMessage{Type: "agent.approval_snapshot", Data: map[string]interface{}{
+				"conversation_id": payload.ConversationID,
+				"approvals":       h.daemonHub.PendingAgentApprovals(client.UserID, payload.ConversationID),
+			}})
 		default:
 			h.hub.SendToUser(client.UserID, ws.WSMessage{
 				Type: ws.TypeError,

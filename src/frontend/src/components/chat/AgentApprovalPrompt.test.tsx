@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { dispatchWsEvent } from '@/store/wsStore';
+import { useWsStore } from '@/store/wsStore';
 import { useAgentApprovalStore } from '@/store/agentApprovalStore';
 import { AgentApprovalPrompt } from './AgentApprovalPrompt';
 
@@ -14,6 +15,7 @@ afterEach(() => {
     container.remove();
   });
   useAgentApprovalStore.getState().clear();
+  useWsStore.setState({ status: 'disconnected', wsClient: null, currentToken: null });
 });
 
 describe('AgentApprovalPrompt', () => {
@@ -72,5 +74,78 @@ describe('AgentApprovalPrompt', () => {
     act(() => root.render(<AgentApprovalPrompt conversationId="conversation-2" />));
     expect(container.textContent).toContain('Agent 请求修改文件');
     expect(container.textContent).toContain('允许一次');
+  });
+
+  it('requests pending approvals again whenever the same websocket client reconnects', () => {
+    const sent: string[] = [];
+    const wsClient = { send: (payload: string) => sent.push(payload) };
+    useWsStore.setState({
+      status: 'disconnected',
+      wsClient: wsClient as never,
+      currentToken: 'token',
+    });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mounted.push({ container, unmount: () => root.unmount() });
+    act(() => root.render(<AgentApprovalPrompt conversationId="conversation-1" />));
+    expect(sent).toHaveLength(0);
+
+    act(() => useWsStore.setState({ status: 'connected' }));
+    expect(sent).toHaveLength(1);
+    expect(JSON.parse(sent[0]!)).toEqual({
+      type: 'agent.approval_list',
+      data: { conversation_id: 'conversation-1' },
+    });
+
+    act(() => useWsStore.setState({ status: 'disconnected' }));
+    act(() => useWsStore.setState({ status: 'connected' }));
+    expect(sent).toHaveLength(2);
+  });
+
+  it('reconciles an authoritative empty snapshot after a missed resolution', () => {
+    useAgentApprovalStore.getState().upsert({
+      approval_id: 'approval-stale', conversation_id: 'conversation-1',
+      task_id: 'task-1', agent_id: 'agent-1', kind: 'command', method: 'command',
+      details: { command: 'pwd' },
+    });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mounted.push({ container, unmount: () => root.unmount() });
+    act(() => root.render(<AgentApprovalPrompt conversationId="conversation-1" />));
+    expect(container.textContent).toContain('pwd');
+
+    act(() => dispatchWsEvent('agent.approval_snapshot', {
+      conversation_id: 'conversation-1', approvals: [],
+    }));
+    expect(container.querySelector('[aria-label="Agent 审批请求"]')).toBeNull();
+  });
+
+  it('shows the concrete file root and permission profile before approval', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mounted.push({ container, unmount: () => root.unmount() });
+    act(() => root.render(<AgentApprovalPrompt conversationId="conversation-1" />));
+
+    act(() => dispatchWsEvent('agent.approval_required', {
+      approval_id: 'approval-file', conversation_id: 'conversation-1',
+      task_id: 'task-file', agent_id: 'agent-1', kind: 'file_change', method: 'file-change',
+      details: { grantRoot: '/workspace/project', reason: 'write output' },
+    }));
+    expect(container.textContent).toContain('范围：/workspace/project');
+
+    act(() => dispatchWsEvent('agent.approval_resolved', {
+      approval_id: 'approval-file', conversation_id: 'conversation-1',
+    }));
+    act(() => dispatchWsEvent('agent.approval_required', {
+      approval_id: 'approval-permission', conversation_id: 'conversation-1',
+      task_id: 'task-permission', agent_id: 'agent-1', kind: 'permissions', method: 'permissions',
+      details: { cwd: '/workspace/project', permissions: { network: { enabled: true } } },
+    }));
+    expect(container.textContent).toContain('"network"');
+    expect(container.textContent).toContain('目录：/workspace/project');
+    expect(container.textContent).toContain('查看授权详情');
   });
 });

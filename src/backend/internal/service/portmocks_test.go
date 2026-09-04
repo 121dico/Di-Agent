@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/121dico/Di-Agent/src/backend/internal/port"
@@ -111,6 +112,13 @@ func (f *fakeDaemonDispatcher) SendToMachine(machineID string, msg ws.WSMessage)
 		return f.sendToMachine(machineID, msg)
 	}
 	return nil
+}
+
+func (f *fakeDaemonDispatcher) SendToMachineRequiringCapability(machineID, capability string, msg ws.WSMessage) error {
+	if !f.SupportsCapability(machineID, capability) {
+		return fmt.Errorf("daemon capability unavailable: %s", capability)
+	}
+	return f.SendToMachine(machineID, msg)
 }
 
 // AwaitTaskResult 返回 taskID 之前注册的结果 channel。

@@ -9,6 +9,7 @@ const {
   DEFAULT_AGENT_TIMEOUT_MS,
   commandForTask,
   conversationSessions,
+  detectCapabilities,
   daemonConn,
   dispatchToPersistentSlot,
   ensureDiAgentCodexMcpConfig,
@@ -20,6 +21,7 @@ const {
   installSkillFromDirectory,
   MCP_TOOLS,
   parseGitHubSkillSource,
+  readMcpRuntimeContext,
   resolveAllowedTools,
   resolveAgentTimeoutMs,
   runtimeAgentKey,
@@ -49,6 +51,19 @@ test('daemon scan reports CLI and Desktop variants without duplicating physical 
   } finally {
     cliTools.clearCliTools();
     for (const spec of originalSpecs) cliTools.registerCliTool(spec);
+  }
+});
+
+test('daemon advertises runtime controls only when the persistent approval broker is enabled', () => {
+  const previous = process.env.DI_AGENT_DAEMON_DISABLE_STREAM_SLOT;
+  try {
+    delete process.env.DI_AGENT_DAEMON_DISABLE_STREAM_SLOT;
+    assert.equal(detectCapabilities().includes('agent_runtime_controls_v1'), true);
+    process.env.DI_AGENT_DAEMON_DISABLE_STREAM_SLOT = '1';
+    assert.equal(detectCapabilities().includes('agent_runtime_controls_v1'), false);
+  } finally {
+    if (previous === undefined) delete process.env.DI_AGENT_DAEMON_DISABLE_STREAM_SLOT;
+    else process.env.DI_AGENT_DAEMON_DISABLE_STREAM_SLOT = previous;
   }
 });
 
@@ -197,6 +212,32 @@ test('persistent runtime slots are isolated by conversation', () => {
   assert.equal(runningAgents.get(secondKey).sessionId, 'session-2');
 });
 
+test('MCP runtime context follows the latest user and task in a shared conversation', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'di-agent-mcp-context-'));
+  const contextFile = path.join(tempDir, 'context.json');
+  try {
+    fs.writeFileSync(contextFile, JSON.stringify({
+      conversation_id: 'conversation-1', user_id: 'user-a',
+      agent_id: 'agent-1', task_id: 'task-a',
+    }));
+    assert.deepEqual(readMcpRuntimeContext(contextFile, {}), {
+      conversationId: 'conversation-1', userId: 'user-a',
+      agentId: 'agent-1', taskId: 'task-a',
+    });
+
+    fs.writeFileSync(contextFile, JSON.stringify({
+      conversation_id: 'conversation-1', user_id: 'user-b',
+      agent_id: 'agent-1', task_id: 'task-b',
+    }));
+    assert.deepEqual(readMcpRuntimeContext(contextFile, {}), {
+      conversationId: 'conversation-1', userId: 'user-b',
+      agentId: 'agent-1', taskId: 'task-b',
+    });
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('persistent slot is rebuilt when the runtime config fingerprint changes', async () => {
   const originalSpecs = cliTools.allCliTools();
   runningAgents.clear();
@@ -241,6 +282,63 @@ test('persistent slot is rebuilt when the runtime config fingerprint changes', a
   } finally {
     runningAgents.clear();
     conversationSessions.delete('agent-fingerprint:conv-fingerprint');
+    cliTools.clearCliTools();
+    for (const spec of originalSpecs) cliTools.registerCliTool(spec);
+  }
+});
+
+test('persistent slot serializes concurrent turns and keeps stream callbacks task-local', async () => {
+  const originalSpecs = cliTools.allCliTools();
+  runningAgents.clear();
+  const prompts = [];
+  const pending = [];
+  try {
+    cliTools.registerCliTool({
+      cliTool: 'serialized-slot-test',
+      name: 'Serialized Slot Test',
+      defaultCapabilities: [],
+      runtimeConfigFingerprint: () => 'same',
+      spawnPersistent: ({ eventRef }) => {
+        const child = new EventEmitter();
+        child.pid = 14;
+        child.exitCode = null;
+        return {
+          child,
+          sessionId: '44444444-4444-4444-8444-444444444444',
+          sendPrompt: (prompt) => new Promise((resolve) => {
+            prompts.push(prompt);
+            eventRef.current?.({ kind: 'text', text: prompt });
+            pending.push(() => resolve({ result: `${prompt}-done` }));
+          }),
+          close: () => {},
+        };
+      },
+    });
+    const firstEvents = [];
+    const secondEvents = [];
+    const first = dispatchToPersistentSlot(
+      null, 'agent-serialized', 'conv-serialized', 'user-1', 'first', '',
+      { taskId: 'task-first' }, 'serialized-slot-test', (event) => firstEvents.push(event),
+      false, 'cli', { version: 1 },
+    );
+    const second = dispatchToPersistentSlot(
+      null, 'agent-serialized', 'conv-serialized', 'user-2', 'second', '',
+      { taskId: 'task-second' }, 'serialized-slot-test', (event) => secondEvents.push(event),
+      false, 'cli', { version: 1 },
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(prompts, ['first']);
+    pending.shift()();
+    assert.equal(await first, 'first-done');
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(prompts, ['first', 'second']);
+    pending.shift()();
+    assert.equal(await second, 'second-done');
+    assert.deepEqual(firstEvents.map((event) => event.text), ['first']);
+    assert.deepEqual(secondEvents.map((event) => event.text), ['second']);
+  } finally {
+    runningAgents.clear();
+    conversationSessions.delete('agent-serialized:conv-serialized');
     cliTools.clearCliTools();
     for (const spec of originalSpecs) cliTools.registerCliTool(spec);
   }

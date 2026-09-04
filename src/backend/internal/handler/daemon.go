@@ -315,6 +315,8 @@ func (h *DaemonHandler) readLoop(ctx context.Context, client *ws.DaemonClient, m
 			h.handleTaskProgress(envelope.Data, machine)
 		case "task.approval_required":
 			h.handleTaskApprovalRequired(ctx, client, envelope.Data)
+		case "task.approval_resolved":
+			h.handleTaskApprovalResolved(client, envelope.Data)
 		case "agent.started":
 			h.handleAgentStarted(envelope.Data)
 		case "agent.stopped":
@@ -332,6 +334,30 @@ func (h *DaemonHandler) readLoop(ctx context.Context, client *ws.DaemonClient, m
 		default:
 			h.logger.Warn("unknown daemon message", "type", envelope.Type)
 		}
+	}
+}
+
+func (h *DaemonHandler) handleTaskApprovalResolved(client *ws.DaemonClient, data json.RawMessage) {
+	var req struct {
+		ApprovalID string `json:"approval_id"`
+		TaskID     string `json:"task_id"`
+	}
+	if err := json.Unmarshal(data, &req); err != nil || req.ApprovalID == "" || req.TaskID == "" {
+		h.logger.Warn("invalid task approval acknowledgement", "error", err)
+		return
+	}
+	approval, err := h.daemonHub.AcknowledgeAgentApproval(req.ApprovalID, client.MachineID, req.TaskID)
+	if err != nil {
+		h.logger.Warn("task approval acknowledgement rejected", "approval_id", req.ApprovalID, "error", err)
+		return
+	}
+	if h.userHub != nil {
+		h.userHub.SendToUser(approval.UserID, ws.WSMessage{
+			Type: "agent.approval_resolved",
+			Data: map[string]interface{}{
+				"approval_id": req.ApprovalID, "conversation_id": approval.ConversationID,
+			},
+		})
 	}
 }
 

@@ -22,13 +22,22 @@ function approvalSummary(request: AgentApprovalRequest): { title: string; detail
     : typeof details.description === 'string'
       ? details.description
       : '';
+  const grantRoot = typeof details.grantRoot === 'string'
+    ? details.grantRoot
+    : typeof details.grant_root === 'string'
+      ? details.grant_root
+      : '';
+  const cwd = typeof details.cwd === 'string' ? details.cwd : '';
+  const permissions = details.permissions && typeof details.permissions === 'object'
+    ? JSON.stringify(details.permissions)
+    : '';
   if (request.kind === 'command') {
-    return { title: 'Agent 请求执行命令', detail: command || reason || '请确认是否允许本次操作。' };
+    return { title: 'Agent 请求执行命令', detail: [command, cwd && `目录：${cwd}`, reason].filter(Boolean).join(' · ') || '未提供命令详情，请谨慎确认。' };
   }
   if (request.kind === 'file_change') {
-    return { title: 'Agent 请求修改文件', detail: reason || '请确认是否允许本次文件变更。' };
+    return { title: 'Agent 请求修改文件', detail: [grantRoot && `范围：${grantRoot}`, cwd && `目录：${cwd}`, reason].filter(Boolean).join(' · ') || '未提供文件范围，请谨慎确认。' };
   }
-  return { title: 'Agent 请求额外权限', detail: reason || '请确认是否授予本次权限。' };
+  return { title: 'Agent 请求额外权限', detail: [permissions && `权限：${permissions}`, cwd && `目录：${cwd}`, reason].filter(Boolean).join(' · ') || '未提供权限范围，请谨慎确认。' };
 }
 
 export const AgentApprovalPrompt: React.FC<{
@@ -36,9 +45,11 @@ export const AgentApprovalPrompt: React.FC<{
   onResolved?: () => void;
 }> = ({ conversationId, onResolved }) => {
   const wsClient = useWsStore((state) => state.wsClient);
+  const wsStatus = useWsStore((state) => state.status);
   const pending = useAgentApprovalStore((state) => state.pending);
   const upsert = useAgentApprovalStore((state) => state.upsert);
   const remove = useAgentApprovalStore((state) => state.remove);
+  const replaceConversation = useAgentApprovalStore((state) => state.replaceConversation);
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const retryTimerRef = useRef<number | null>(null);
   const conversationIdRef = useRef(conversationId);
@@ -71,20 +82,27 @@ export const AgentApprovalPrompt: React.FC<{
         if (resolvedConversationId === conversationIdRef.current) onResolvedRef.current?.();
       }
     });
+    const unsubscribeSnapshot = onWsEvent('agent.approval_snapshot', (value) => {
+      if (!value || typeof value !== 'object') return;
+      const snapshot = value as { conversation_id?: unknown; approvals?: unknown };
+      if (typeof snapshot.conversation_id !== 'string' || !Array.isArray(snapshot.approvals)) return;
+      replaceConversation(snapshot.conversation_id, snapshot.approvals.filter(isAgentApprovalRequest));
+    });
     return () => {
       if (retryTimerRef.current) window.clearTimeout(retryTimerRef.current);
       unsubscribeRequired();
       unsubscribeResolved();
+      unsubscribeSnapshot();
     };
-  }, [remove, upsert]);
+  }, [remove, replaceConversation, upsert]);
 
   useEffect(() => {
-    if (!wsClient) return;
+    if (!wsClient || wsStatus !== 'connected') return;
     wsClient.send(JSON.stringify({
       type: 'agent.approval_list',
       data: { conversation_id: conversationId },
     }));
-  }, [conversationId, wsClient]);
+  }, [conversationId, wsClient, wsStatus]);
 
   const active = requests[0];
   const summary = useMemo(() => active ? approvalSummary(active) : null, [active]);
@@ -127,6 +145,12 @@ export const AgentApprovalPrompt: React.FC<{
       <div className={styles.body}>
         <div className={styles.title}>{summary.title}</div>
         <div className={styles.detail} title={summary.detail}>{summary.detail}</div>
+        {active.details && Object.keys(active.details).length > 0 && (
+          <details className={styles.rawDetails}>
+            <summary>查看授权详情</summary>
+            <pre>{JSON.stringify(active.details, null, 2)}</pre>
+          </details>
+        )}
       </div>
       {requests.length > 1 && <span className={styles.count}>+{requests.length - 1}</span>}
       <Button disabled={decidingId === active.approval_id} onClick={() => decide('decline')}>拒绝</Button>

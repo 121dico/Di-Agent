@@ -137,7 +137,7 @@ export interface MessageArtifacts {
 }
 
 export interface StreamMessage {
-  type: 'message.streaming' | 'message.complete' | 'agent.status' | 'user.typing_start' | 'user.typing_stop' | 'agent.typing_start' | 'agent.typing_stop' | 'message.recall' | 'task.changed' | 'conversation.role_changed' | 'agent.approval_required' | 'agent.approval_resolved' | 'error';
+  type: 'message.streaming' | 'message.complete' | 'agent.status' | 'user.typing_start' | 'user.typing_stop' | 'agent.typing_start' | 'agent.typing_stop' | 'message.recall' | 'task.changed' | 'conversation.role_changed' | 'agent.approval_required' | 'agent.approval_resolved' | 'agent.approval_snapshot' | 'error';
   data: {
     conversationId?: string;
     conversation_id?: string;

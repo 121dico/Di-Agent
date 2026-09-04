@@ -29,6 +29,13 @@ func TestAgentApprovalIsBoundToOwnerAndConsumedOnce(t *testing.T) {
 	default:
 		t.Fatal("expected decision to be queued for the daemon")
 	}
+	if pending := hub.PendingAgentApprovals("user-1", "conversation-1"); len(pending) != 1 {
+		t.Fatalf("approval must remain pending until daemon acknowledgement: %#v", pending)
+	}
+	acknowledged, err := hub.AcknowledgeAgentApproval("approval-1", "machine-1", "task-1")
+	if err != nil || acknowledged.UserID != "user-1" {
+		t.Fatalf("unexpected acknowledgement: %#v, %v", acknowledged, err)
+	}
 	if err := hub.ResolveAgentApproval("approval-1", "user-1", "conversation-1", "accept"); err == nil {
 		t.Fatal("expected consumed approval to be unavailable")
 	}
@@ -56,6 +63,25 @@ func TestDaemonCapabilityHandshakeFailsClosedWhenCapabilityIsMissing(t *testing.
 	client.SetCapabilities([]string{"agent_runtime_controls_v1"})
 	if !hub.SupportsCapability("machine-1", "agent_runtime_controls_v1") {
 		t.Fatal("advertised capability should be available on the live connection")
+	}
+}
+
+func TestCapabilityCheckAndSendUseTheSameLiveDaemonClient(t *testing.T) {
+	hub := NewDaemonHub(slog.Default())
+	oldClient := NewDaemonClient(nil, "machine-1")
+	oldClient.SetCapabilities([]string{"agent_runtime_controls_v1"})
+	hub.RegisterTestClient("machine-1", oldClient)
+	newClient := NewDaemonClient(nil, "machine-1")
+	hub.RegisterTestClient("machine-1", newClient)
+
+	err := hub.SendToMachineRequiringCapability("machine-1", "agent_runtime_controls_v1", WSMessage{Type: "task.dispatch"})
+	if err == nil {
+		t.Fatal("replacement daemon without capability must reject dispatch")
+	}
+	select {
+	case <-newClient.sendCh:
+		t.Fatal("task must not be queued on a daemon that omitted the capability")
+	default:
 	}
 }
 

@@ -1288,7 +1288,7 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 		return nil, fmt.Errorf("agent %q 的 daemon 未通过 WS 连接", agent.Name)
 	}
 	slog.Info("createAgentReply: BEFORE SendToMachine", "conversation_id", convID, "agent_id", agent.ID, "daemon_task_id", task.ID, "message_id", handle.MessageID, "reply_to", stringValue(replyTo))
-	if err := s.daemonHub.SendToMachine(*agent.MachineID, ws.WSMessage{
+	dispatchMessage := ws.WSMessage{
 		Type: "task.dispatch",
 		Data: map[string]interface{}{
 			"task_id":          task.ID,
@@ -1302,14 +1302,28 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 			"message_id":       handle.MessageID,
 			"runtime_config":   task.RuntimeConfig,
 		},
-	}); err != nil {
+	}
+	var dispatchErr error
+	if agent.CLITool == "codex" {
+		capabilitySender, ok := s.daemonHub.(interface {
+			SendToMachineRequiringCapability(machineID, capability string, msg ws.WSMessage) error
+		})
+		if !ok {
+			dispatchErr = fmt.Errorf("daemon runtime capability sender unavailable")
+		} else {
+			dispatchErr = capabilitySender.SendToMachineRequiringCapability(*agent.MachineID, "agent_runtime_controls_v1", dispatchMessage)
+		}
+	} else {
+		dispatchErr = s.daemonHub.SendToMachine(*agent.MachineID, dispatchMessage)
+	}
+	if dispatchErr != nil {
 		// dispatch 失败也标 error
 		if _, ferr := FinalizeStreamingPipeline(ctx, pipelineDeps, handle, FinalizeStreamingPipelineOptions{
 			Status: model.MessageStatusError,
 		}); ferr != nil {
 			slog.Warn("finalize streaming on dispatch-failure failed", "message_id", handle.MessageID, "error", ferr)
 		}
-		return nil, fmt.Errorf("dispatch to daemon: %w", err)
+		return nil, fmt.Errorf("dispatch to daemon: %w", dispatchErr)
 	}
 	slog.Info("createAgentReply: AFTER SendToMachine", "conversation_id", convID, "agent_id", agent.ID, "daemon_task_id", task.ID, "message_id", handle.MessageID)
 

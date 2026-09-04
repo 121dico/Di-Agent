@@ -17,11 +17,6 @@ func (h *DaemonHandler) DispatchTask(task *model.DaemonTask) {
 	if !h.daemonHub.IsConnected(task.MachineID) {
 		return
 	}
-	if task.CLITool == "codex" && !h.daemonHub.SupportsCapability(task.MachineID, "agent_runtime_controls_v1") {
-		h.failTask(task.MachineID, task.ID, "这台电脑的 Di Agent daemon 版本过旧，请重新运行连接命令升级后再试")
-		return
-	}
-
 	h.daemonHub.RegisterTaskPromise(task.ID)
 
 	data := map[string]interface{}{
@@ -37,10 +32,17 @@ func (h *DaemonHandler) DispatchTask(task *model.DaemonTask) {
 	if task.RuntimeConfig.Version > 0 {
 		data["runtime_config"] = task.RuntimeConfig
 	}
-	if err := h.daemonHub.SendToMachine(task.MachineID, ws.WSMessage{
+	message := ws.WSMessage{
 		Type: "task.dispatch",
 		Data: data,
-	}); err != nil {
+	}
+	var err error
+	if task.CLITool == "codex" {
+		err = h.daemonHub.SendToMachineRequiringCapability(task.MachineID, "agent_runtime_controls_v1", message)
+	} else {
+		err = h.daemonHub.SendToMachine(task.MachineID, message)
+	}
+	if err != nil {
 		h.daemonHub.RemoveTaskPromise(task.ID)
 		h.logger.Warn("daemon task dispatch failed",
 			"machine", task.MachineID, "task", task.ID, "error", err)

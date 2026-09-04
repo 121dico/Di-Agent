@@ -37,6 +37,7 @@ import { AgentApprovalPrompt } from './AgentApprovalPrompt';
 import {
   DEFAULT_AGENT_RUNTIME_CONFIG,
   readRuntimePreference,
+  resolveRuntimePreference,
   writeRuntimePreference,
   type AgentRuntimeConfig,
 } from './agentRuntime';
@@ -160,18 +161,29 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       ?? agentMembers.find((agent) => agent.agent_id === directAgentId);
   }, [agentMembers, directAgentId, globalAgents]);
   const supportsCodexControls = conversation?.type === 'agent' && runtimeAgent?.cli_tool === 'codex';
-  const [runtimeConfig, setRuntimeConfig] = useState<AgentRuntimeConfig>(DEFAULT_AGENT_RUNTIME_CONFIG);
-
-  useEffect(() => {
-    setRuntimeConfig(directAgentId
+  const runtimePreferenceIdentity = directAgentId ? `${conversationId}:${directAgentId}` : '';
+  const [runtimePreferenceState, setRuntimePreferenceState] = useState<{
+    identity: string;
+    value: AgentRuntimeConfig;
+  }>(() => ({
+    identity: runtimePreferenceIdentity,
+    value: directAgentId
       ? readRuntimePreference(conversationId, directAgentId)
-      : { ...DEFAULT_AGENT_RUNTIME_CONFIG });
-  }, [conversationId, directAgentId]);
+      : { ...DEFAULT_AGENT_RUNTIME_CONFIG },
+  }));
+  // Derive the selected conversation's policy synchronously. Using an effect
+  // leaves one render where an immediate Enter can submit the previous
+  // conversation's full-access setting to the new Agent.
+  const runtimeConfig = resolveRuntimePreference(
+    runtimePreferenceState,
+    conversationId,
+    directAgentId,
+  ).value;
 
   const handleRuntimeChange = useCallback((next: AgentRuntimeConfig) => {
-    setRuntimeConfig(next);
+    setRuntimePreferenceState({ identity: runtimePreferenceIdentity, value: next });
     if (directAgentId) writeRuntimePreference(conversationId, directAgentId, next);
-  }, [conversationId, directAgentId]);
+  }, [conversationId, directAgentId, runtimePreferenceIdentity]);
 
   const fetchMentionTargets = useCallback(async () => {
     if (!isGroup) return { members, agentMembers };

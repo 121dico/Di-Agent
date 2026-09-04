@@ -15,6 +15,9 @@
 .body { min-width: 0; }
 .title { color: var(--wb-text-primary); font-size: 13px; font-weight: 650; }
 .detail { overflow: hidden; color: var(--wb-text-secondary); font-family: var(--font-mono, monospace); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.rawDetails { margin-top: 3px; color: var(--wb-text-secondary); font-size: 11px; }
+.rawDetails summary { width: fit-content; cursor: pointer; color: var(--wb-text-tertiary); }
+.rawDetails pre { max-height: 132px; margin: 5px 0 0; padding: 7px 8px; overflow: auto; border-radius: 8px; background: var(--wb-surface-hover); font-family: var(--font-mono, monospace); font-size: 11px; white-space: pre-wrap; word-break: break-word; }
 .count { color: var(--wb-text-tertiary); font-size: 12px; }
 
 @media (max-width: 720px) {

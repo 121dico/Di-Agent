@@ -211,7 +211,9 @@ function detectDocker() {
 function detectCapabilities() {
   // Protocol capabilities must be explicit: a server must never assume that an
   // older daemon understands per-turn sandbox or approval semantics.
-  const caps = ['agent_runtime_controls_v1'];
+  const caps = readDiAgentEnvironment(process.env, 'DAEMON_DISABLE_STREAM_SLOT') === '1'
+    ? []
+    : ['agent_runtime_controls_v1'];
   if (detectDocker()) caps.push('docker');
   return caps;
 }
@@ -1113,6 +1115,7 @@ function onWebSocket(ws, eventName, handler) {
 const activeSessions = new Map();
 // Persistent slots are isolated by Agent and conversation.
 const runningAgents = new Map(); // agentID:conversationID → slot
+const slotDispatchQueues = new Map(); // slotKey → completion signal for the last queued turn
 const idleAgentConfigs = new Map(); // agentID → { cliTool, sessionId, systemPrompt }
 const agentTurnStates = new Map(); // agentID → 'idle' | 'active'
 let currentDaemonWs = null;
@@ -1120,6 +1123,7 @@ const activeTaskIDs = new Set();
 const completedTaskIDs = new Set();
 const pendingTaskCompletions = new Map(); // taskID → task.complete data, flushed after WS reconnect
 const pendingAgentApprovals = new Map(); // approvalID → { resolve, timer }
+const pendingApprovalAcknowledgements = new Map(); // approvalID → applied decision ack
 
 function requestAgentApproval(request) {
   return new Promise((resolve) => {
@@ -1130,7 +1134,7 @@ function requestAgentApproval(request) {
       resolve('decline');
     }, timeoutMs);
     timer.unref();
-    pendingAgentApprovals.set(approvalId, { resolve, timer });
+    pendingAgentApprovals.set(approvalId, { resolve, timer, taskId: request.task_id || '' });
     const sent = safeSend(currentDaemonWs, JSON.stringify({
       type: 'task.approval_required',
       data: {
@@ -1156,7 +1160,11 @@ function requestAgentApproval(request) {
 function resolveAgentApproval(data) {
   const approvalId = data && data.approval_id;
   const pending = approvalId ? pendingAgentApprovals.get(approvalId) : null;
-  if (!pending) return false;
+  if (!pending) {
+    const acknowledgement = approvalId ? pendingApprovalAcknowledgements.get(approvalId) : null;
+    if (acknowledgement) sendApprovalAcknowledgement(acknowledgement);
+    return Boolean(acknowledgement);
+  }
   pendingAgentApprovals.delete(approvalId);
   clearTimeout(pending.timer);
   const decision = data.decision === 'acceptForSession'
@@ -1164,8 +1172,26 @@ function resolveAgentApproval(data) {
     : data.decision === 'accept'
       ? 'accept'
       : 'decline';
-  pending.resolve(decision);
+  pending.resolve({
+    decision,
+    approval_id: approvalId,
+    task_id: (data && data.task_id) || pending.taskId || '',
+  });
   return true;
+}
+
+function sendApprovalAcknowledgement(data) {
+  if (!data || !data.approval_id || !data.task_id) return;
+  if (!pendingApprovalAcknowledgements.has(data.approval_id)) {
+    pendingApprovalAcknowledgements.set(data.approval_id, data);
+    const timer = setTimeout(() => pendingApprovalAcknowledgements.delete(data.approval_id), 5 * 60 * 1000);
+    timer.unref();
+  }
+  safeSend(currentDaemonWs, JSON.stringify({ type: 'task.approval_resolved', data }));
+}
+
+function flushPendingApprovalAcknowledgements() {
+  for (const data of pendingApprovalAcknowledgements.values()) sendApprovalAcknowledgement(data);
 }
 
 // Per-conversation session mapping: `${agent_id}:${conversation_id}` → sessionId
@@ -2171,6 +2197,7 @@ const initCliToolsCtx = {
   // step2: createAsyncQueue（spec.claude.spawnPersistent 构造事件队列）
   createAsyncQueue: require('../cli/events').createAsyncQueue,
   requestApproval: requestAgentApproval,
+  acknowledgeApproval: sendApprovalAcknowledgement,
   // prompt / context 辅助
   buildPlatformMcpArgs,
   buildDiAgentContextEnv,
@@ -2918,6 +2945,24 @@ function spawnStreamJsonProcess(agentId, sessionId, systemPrompt, resume, conver
  * 通用性。前端不会感知到这个函数改名。
  */
 async function dispatchToPersistentSlot(ws, agentId, conversationId, userId, prompt, systemPrompt, taskCtx, cliTool = 'claude', onEvent = null, forceFresh = false, runtimeVariant, runtimeConfig) {
+  const slotKey = runtimeAgentKey(agentId, conversationId);
+  const previous = slotDispatchQueues.get(slotKey);
+  let release;
+  const completion = new Promise((resolve) => { release = resolve; });
+  slotDispatchQueues.set(slotKey, completion);
+  if (previous) await previous;
+  try {
+    return await dispatchToPersistentSlotUnlocked(
+      ws, agentId, conversationId, userId, prompt, systemPrompt, taskCtx,
+      cliTool, onEvent, forceFresh, runtimeVariant, runtimeConfig,
+    );
+  } finally {
+    release();
+    if (slotDispatchQueues.get(slotKey) === completion) slotDispatchQueues.delete(slotKey);
+  }
+}
+
+async function dispatchToPersistentSlotUnlocked(ws, agentId, conversationId, userId, prompt, systemPrompt, taskCtx, cliTool = 'claude', onEvent = null, forceFresh = false, runtimeVariant, runtimeConfig) {
   const sessionKey = `${agentId}:${conversationId}`;
   const slotKey = runtimeAgentKey(agentId, conversationId);
   const approvalContext = {
@@ -3582,6 +3627,7 @@ async function connectWS(serverURL, apiKey) {
         agents: agents.map((agent) => `${agent.name}:${agent.cli_tool}`),
       });
       flushPendingTaskCompletions();
+      flushPendingApprovalAcknowledgements();
       // Start ping interval
       pingTimer = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
@@ -4631,6 +4677,7 @@ async function handleMcpMessage(line, toolMap, ctx) {
     return;
   }
   if (method === 'tools/list') {
+    if (typeof ctx.refreshRuntimeContext === 'function') ctx.refreshRuntimeContext();
     const allowed = await resolveAllowedTools(ctx);
     const tools = MCP_TOOLS
       .filter((tool) => allowed.includes(tool.name))
@@ -4643,6 +4690,7 @@ async function handleMcpMessage(line, toolMap, ctx) {
     return;
   }
   if (method === 'tools/call') {
+    if (typeof ctx.refreshRuntimeContext === 'function') ctx.refreshRuntimeContext();
     const toolName = params && params.name;
     const tool = toolMap.get(toolName);
     if (!tool) {
@@ -4679,6 +4727,28 @@ async function handleMcpMessage(line, toolMap, ctx) {
   }
 }
 
+function readMcpRuntimeContext(taskContextFile, fallback = {}) {
+  const normalizedFallback = {
+    conversationId: typeof fallback.conversationId === 'string' ? fallback.conversationId : null,
+    userId: typeof fallback.userId === 'string' ? fallback.userId : null,
+    agentId: typeof fallback.agentId === 'string' ? fallback.agentId : null,
+    taskId: typeof fallback.taskId === 'string' ? fallback.taskId : null,
+  };
+  if (!taskContextFile) return normalizedFallback;
+  try {
+    const current = JSON.parse(fs.readFileSync(taskContextFile, 'utf8'));
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return normalizedFallback;
+    return {
+      conversationId: typeof current.conversation_id === 'string' ? current.conversation_id : normalizedFallback.conversationId,
+      userId: typeof current.user_id === 'string' ? current.user_id : normalizedFallback.userId,
+      agentId: typeof current.agent_id === 'string' ? current.agent_id : normalizedFallback.agentId,
+      taskId: typeof current.task_id === 'string' ? current.task_id : normalizedFallback.taskId,
+    };
+  } catch {
+    return normalizedFallback;
+  }
+}
+
 async function runMcpServer(serverURL, apiKey) {
   const daemonToken = readArg('--daemon-token') || readDiAgentEnvironment(process.env, 'DAEMON_TOKEN') || '';
   const taskContextFile = readArg('--task-context-file') || '';
@@ -4690,22 +4760,26 @@ async function runMcpServer(serverURL, apiKey) {
     allowedTools: null,
     currentAgent: undefined,
     callApi: (method, pathname, options) => callApi(serverURL, apiKey, method, pathname, options),
-    callMcpApi: (method, pathname, options) => callMcpApi(serverURL, daemonToken, method, pathname, options, ctx.userId),
+    refreshRuntimeContext: () => {
+      const current = readMcpRuntimeContext(taskContextFile, ctx);
+      ctx.conversationId = current.conversationId;
+      ctx.userId = current.userId;
+      ctx.agentId = current.agentId;
+      ctx.taskId = current.taskId;
+      return current;
+    },
+    callMcpApi: (method, pathname, options) => {
+      const current = ctx.refreshRuntimeContext();
+      return callMcpApi(serverURL, daemonToken, method, pathname, options, current.userId);
+    },
     // emitCard 把 MCP subprocess 工具产出的卡片推到后端 task-card 队列，
     // daemon 主进程 createAgentReply 时 Drain 合并到 message.cards_json。
     // 抽象点：工具不需要知道后端怎么传——只管把 card 对象给到 ctx。
     // 缺 taskId（CLI 未注入 --task-id）时仅记日志，不抛错，保证工具不因此失败。
     emitCard: async (card) => {
       if (!card) return;
-      let currentTaskId = ctx.taskId;
-      if (taskContextFile) {
-        try {
-          const current = JSON.parse(fs.readFileSync(taskContextFile, 'utf8'));
-          if (current && typeof current.task_id === 'string') currentTaskId = current.task_id;
-        } catch (error) {
-          logFlow('warn', 'card.task_context_read_failed', { error: errorMessage(error) });
-        }
-      }
+      const current = ctx.refreshRuntimeContext();
+      const currentTaskId = current.taskId;
       if (!currentTaskId) {
         logFlow('warn', 'card.emit_no_task', { card_type: card.type || 'unknown' });
         return;
@@ -4713,7 +4787,7 @@ async function runMcpServer(serverURL, apiKey) {
       try {
         await callMcpApi(serverURL, daemonToken, 'POST', '/api/internal/task-cards', {
           body: { task_id: currentTaskId, card },
-        }, ctx.userId);
+        }, current.userId);
       } catch (err) {
         // 上报失败不应让工具失败——卡片是辅助产物，工具主结果仍应返回
         logFlow('warn', 'card.emit_failed', {
@@ -4728,7 +4802,7 @@ async function runMcpServer(serverURL, apiKey) {
 
   // 从后端拉取工具集模板到 TOOLSET_TEMPLATES，失败时保持为空对象（工具集解析将回退到 NO_AGENT_TOOLS）
   try {
-    const templatesRes = await callMcpApi(serverURL, daemonToken, 'GET', '/api/tools/builtin-templates', {}, ctx.userId);
+    const templatesRes = await ctx.callMcpApi('GET', '/api/tools/builtin-templates', {});
     const data = templatesRes && templatesRes.data ? templatesRes.data : templatesRes;
     if (data && Array.isArray(data)) {
       for (const tpl of data) {
@@ -4796,6 +4870,7 @@ module.exports = {
   DEFAULT_AGENT_TIMEOUT_MS,
   commandForTask,
   conversationSessions,
+  detectCapabilities,
   ensureGitRepoForTask,
   ensureDiAgentCodexMcpConfig,
   updateDiAgentCodexTaskContext,
@@ -4807,6 +4882,7 @@ module.exports = {
   installSkillFromDirectory,
   MCP_TOOLS,
   parseGitHubSkillSource,
+  readMcpRuntimeContext,
   resolveAllowedTools,
   resolveAgentTimeoutMs,
   runtimeAgentKey,

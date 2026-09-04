@@ -42,3 +42,23 @@ export function writeRuntimePreference(
     JSON.stringify(normalizeAgentRuntimeConfig(value)),
   );
 }
+
+export interface RuntimePreferenceState {
+  identity: string;
+  value: AgentRuntimeConfig;
+}
+
+export function resolveRuntimePreference(
+  state: RuntimePreferenceState,
+  conversationId: string,
+  agentId: string | undefined,
+): RuntimePreferenceState {
+  const identity = agentId ? `${conversationId}:${agentId}` : '';
+  if (state.identity === identity) return state;
+  return {
+    identity,
+    value: agentId
+      ? readRuntimePreference(conversationId, agentId)
+      : { ...DEFAULT_AGENT_RUNTIME_CONFIG },
+  };
+}
