@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Avatar, Tooltip } from 'antd';
 import {
   BarChart3,
@@ -50,6 +50,7 @@ const statusLabel: Record<WsStatus, string> = {
 };
 
 const RAIL_COLLAPSED_STORAGE_KEY = 'di_agent_global_rail_collapsed';
+const RAIL_TRANSITION_FALLBACK_MS = 260;
 
 function readRailCollapsed(): boolean {
   try {
@@ -62,6 +63,11 @@ function readRailCollapsed(): boolean {
 
 function isRouteActive(pathname: string, path: string): boolean {
   return path === '/' ? pathname === '/' : pathname.startsWith(path);
+}
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 export const GlobalRail: React.FC<GlobalRailProps> = ({
@@ -78,9 +84,17 @@ export const GlobalRail: React.FC<GlobalRailProps> = ({
   const avatar = user ? resolveUserAvatar(user) : undefined;
   const visibleNavItems = navItems.filter((item) => canAccessWorkspacePath(item.path, user?.is_admin ?? false));
   const [railCollapsed, setRailCollapsed] = useState(readRailCollapsed);
+  const [railTransitioning, setRailTransitioning] = useState(false);
+  const transitionFallback = useRef<number | null>(null);
+  const toggleAtBrand = railCollapsed || railTransitioning;
 
-  const toggleRail = () => {
-    const nextCollapsed = !railCollapsed;
+  useEffect(() => () => {
+    if (transitionFallback.current !== null) {
+      window.clearTimeout(transitionFallback.current);
+    }
+  }, []);
+
+  const applyRailCollapsed = (nextCollapsed: boolean) => {
     setRailCollapsed(nextCollapsed);
     try {
       window.localStorage.setItem(RAIL_COLLAPSED_STORAGE_KEY, nextCollapsed ? '1' : '0');
@@ -89,11 +103,39 @@ export const GlobalRail: React.FC<GlobalRailProps> = ({
     }
   };
 
+  const finishRailTransition = () => {
+    if (transitionFallback.current !== null) {
+      window.clearTimeout(transitionFallback.current);
+      transitionFallback.current = null;
+    }
+    setRailTransitioning(false);
+  };
+
+  const toggleRail = () => {
+    if (railTransitioning) return;
+    const nextCollapsed = !railCollapsed;
+    applyRailCollapsed(nextCollapsed);
+    if (prefersReducedMotion()) return;
+
+    setRailTransitioning(true);
+    transitionFallback.current = window.setTimeout(() => {
+      transitionFallback.current = null;
+      setRailTransitioning(false);
+    }, RAIL_TRANSITION_FALLBACK_MS);
+  };
+
+  const handleRailTransitionEnd = (event: React.TransitionEvent<HTMLElement>) => {
+    if (event.target !== event.currentTarget || event.propertyName !== 'width' || !railTransitioning) return;
+    finishRailTransition();
+  };
+
   return (
     <aside
       className={`${styles.rail} ${railCollapsed ? styles.railCollapsed : ''}`}
       aria-label="全局导航"
       data-collapsed={railCollapsed}
+      data-transitioning={railTransitioning}
+      onTransitionEnd={handleRailTransitionEnd}
     >
       <div className={styles.railSurface}>
         <div className={styles.brandRow}>
@@ -105,13 +147,13 @@ export const GlobalRail: React.FC<GlobalRailProps> = ({
             mouseEnterDelay={0.5}
           >
             <button
-              className={railCollapsed ? styles.collapsedBrandToggle : styles.railToggle}
+              className={toggleAtBrand ? styles.collapsedBrandToggle : styles.railToggle}
               type="button"
               aria-label={railCollapsed ? '展开侧边栏' : '收起侧边栏'}
               aria-expanded={!railCollapsed}
+              aria-disabled={railTransitioning}
               onClick={toggleRail}
             >
-              {railCollapsed && <span className={styles.brandGlyph} aria-hidden="true">D</span>}
               <span className={styles.brandToggleIcon} aria-hidden="true">
                 {railCollapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
               </span>
