@@ -44,10 +44,14 @@ func (s *AgentRuntimeService) GetOverview(
 }
 
 var supportedAgentModels = map[string]bool{
-	"":              true,
-	"gpt-5.6-sol":   true,
-	"gpt-5.6-terra": true,
-	"gpt-5.6-luna":  true,
+	"":                    true,
+	"gpt-5.6-sol":         true,
+	"gpt-5.6-terra":       true,
+	"gpt-5.6-luna":        true,
+	"gpt-5.5":             true,
+	"gpt-5.4":             true,
+	"gpt-5.4-mini":        true,
+	"gpt-5.3-codex-spark": true,
 }
 
 // NormalizeAgentRuntimeConfig converts an omitted policy into the safe product default and

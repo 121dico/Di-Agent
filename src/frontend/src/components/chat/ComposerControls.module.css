@@ -1,4 +1,12 @@
-.runtimeControls { display: flex; align-items: center; gap: 3px; min-width: 0; }
+.runtimeControls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+  height: 34px;
+  border-radius: 17px;
+  background: var(--wb-surface-hover);
+}
 .squareButton {
   flex: 0 0 auto;
   width: 32px;
@@ -20,7 +28,25 @@
   font-size: 12px;
 }
 .pillButton:hover { color: var(--wb-text-primary) !important; background: var(--wb-surface-hover) !important; }
-.effort { padding-left: 5px; border-left: 1px solid var(--wb-border-default); }
+.runtimeSegment,
+.approvalButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 8px;
+  border-radius: 17px;
+  color: var(--wb-text-secondary);
+  font-size: 13px;
+}
+.runtimeSegment:hover,
+.approvalButton:hover { color: var(--wb-text-primary) !important; background: rgba(118, 118, 128, .1) !important; }
+.modelSegment { max-width: 142px; padding-right: 4px; }
+.modelLabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.effortSegment { padding-left: 4px; }
+.approvalButton { max-width: 150px; }
+.approvalLabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chevron { font-size: 9px; }
 .dangerButton { color: var(--wb-warning, #d75b16); background: rgba(245, 98, 0, .08); }
 .dangerButton:hover { color: var(--wb-warning, #d75b16) !important; background: rgba(245, 98, 0, .13) !important; }
@@ -31,6 +57,22 @@
 @media (max-width: 720px) {
   .pillButton { max-width: 116px; padding-inline: 7px; }
   .pillButton span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .effort { display: none; }
+  .modelSegment { max-width: 98px; padding-inline: 7px 2px; }
+  .effortSegment { padding-inline: 3px 6px; }
+  .approvalButton { max-width: 104px; padding-inline: 7px; }
   .menuOption { min-width: 205px; }
+}
+
+@media (max-width: 430px) {
+  .approvalButton { width: 38px; padding: 0; }
+  .approvalLabel { display: none; }
+  .modelSegment { max-width: 82px; padding-left: 6px; }
+  .runtimeSegment { gap: 3px; }
+}
+
+@container (max-width: 460px) {
+  .approvalButton { width: 38px; padding: 0; }
+  .approvalLabel { display: none; }
+  .modelSegment { max-width: 82px; padding-left: 6px; }
+  .runtimeSegment { gap: 3px; }
 }

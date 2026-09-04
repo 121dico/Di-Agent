@@ -39,7 +39,10 @@ const { readDiAgentEnvironment } = require('./environment');
 const { resolveRuntimeCandidates, resolveRuntimeCandidate, runtimeVariant } = require('./runtime');
 
 const LOCAL_PROXY_PORTS = [7897, 7890, 1087];
-const CODEX_MODELS = new Set(['', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']);
+const CODEX_MODELS = new Set([
+  '', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna',
+  'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex-spark',
+]);
 const REASONING_EFFORTS = new Set(['low', 'medium', 'high']);
 const APPROVAL_MODES = new Set(['request', 'auto', 'full']);
 let cachedLocalProxy = undefined; // undefined=未探测 null=无 string=代理地址
@@ -627,7 +630,7 @@ function createCodexCliSpec(ctx) {
       // --- 启动序列：initialize → thread/start ---
       const boot = (async () => {
         const init = await rpcCall('initialize', {
-          clientInfo: { name: 'di-agent-daemon', title: 'Di Agent', version: '0.4.2' },
+          clientInfo: { name: 'di-agent-daemon', title: 'Di Agent', version: '0.4.3' },
         });
         if (init.error) throw new Error(`codex app-server initialize 失败: ${init.error.message}`);
         const thread = await rpcCall('thread/start', { cwd });

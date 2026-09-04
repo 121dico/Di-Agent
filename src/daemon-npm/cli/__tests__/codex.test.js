@@ -181,6 +181,17 @@ test('codex runtime config rejects malformed or unknown policy instead of silent
   }), /version/);
 });
 
+test('codex runtime config accepts every model exposed by the composer', () => {
+  for (const model of [
+    '', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna',
+    'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex-spark',
+  ]) {
+    assert.strictEqual(normalizeRuntimeConfig({
+      version: 1, model, reasoning_effort: 'medium', approval_mode: 'auto',
+    }).model, model);
+  }
+});
+
 test('codex persistent adapter answers app-server approval requests through the daemon callback', async () => {
   const requests = [];
   const acknowledgements = [];

@@ -50,9 +50,10 @@
 
 .inputRow {
   display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  align-items: center;
+  flex-direction: column;
+  gap: 2px;
+  align-items: stretch;
+  container-type: inline-size;
   max-width: var(--chat-reading-width);
   margin: 0 auto;
   padding: 7px 8px 7px 9px;
@@ -96,8 +97,7 @@
 .sendError .sendErrorDismiss { width: 26px; padding: 0; color: var(--wb-text-tertiary); }
 
 .textarea {
-  order: -1;
-  flex: 1 0 100%;
+  flex: 0 0 auto;
   width: 100%;
   min-height: 34px;
   padding: 5px 7px 7px !important;
@@ -108,6 +108,37 @@
   font-size: 15px !important;
   line-height: 1.45 !important;
 }
+
+.composerFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.footerLeft,
+.footerRight,
+.footerSecondaryActions {
+  display: flex;
+  align-items: center;
+}
+
+.footerLeft {
+  flex: 0 1 auto;
+  gap: 3px;
+  min-width: 0;
+}
+
+.footerRight {
+  flex: 0 1 auto;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.footerSecondaryActions { gap: 2px; }
 
 :global(html.dark) .textarea {
   color: var(--color-text) !important;
@@ -125,6 +156,7 @@
 .contextBtn,
 .conversationActionBtn,
 .expandBtn,
+.voiceBtn,
 .sendBtn {
   flex-shrink: 0;
   width: 32px;
@@ -135,14 +167,16 @@
 .attachBtn,
 .contextBtn,
 .conversationActionBtn,
-.expandBtn {
+.expandBtn,
+.voiceBtn {
   color: var(--color-text-secondary);
 }
 
 .attachBtn:hover,
 .contextBtn:hover,
 .conversationActionBtn:hover,
-.expandBtn:hover {
+.expandBtn:hover,
+.voiceBtn:hover {
   color: var(--wb-text-primary) !important;
   background: var(--wb-surface-hover) !important;
 }
@@ -171,11 +205,18 @@
 
 .sendBtn,
 .sendBtn:disabled {
-  margin-left: auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
   color: #8e8e93 !important;
   background: rgba(118, 118, 128, .12) !important;
   border: none !important;
   box-shadow: none;
+}
+
+.voiceBtn:disabled {
+  color: var(--wb-text-tertiary) !important;
+  background: transparent !important;
 }
 
 .sendBtn:not(:disabled) {
@@ -492,8 +533,28 @@
 @media (max-width: 720px) {
   .container { padding: 8px 14px 14px; }
   .inputRow { border-radius: var(--radius-5); }
+  .composerFooter { gap: 4px; }
+  .footerRight { gap: 2px; }
   .mentionDropdown { width: calc(100% - 28px); }
-  .attachBtn, .contextBtn, .conversationActionBtn, .expandBtn, .sendBtn { width: 30px; height: 30px; }
+  .attachBtn, .contextBtn, .conversationActionBtn, .expandBtn, .voiceBtn { width: 30px; height: 30px; }
+  .sendBtn, .sendBtn:disabled { width: 36px; height: 36px; }
+  .contextBtn { min-width: 30px; padding-inline: 0; }
+  .contextBtnLabel { display: none; }
+}
+
+@media (max-width: 430px) {
+  .inputRow { padding-inline: 7px; }
+  .footerLeft { gap: 1px; }
+  .footerSecondaryActions { gap: 0; }
+}
+
+@container (max-width: 460px) {
+  .composerFooter { gap: 4px; }
+  .footerLeft { gap: 1px; }
+  .footerRight { gap: 2px; }
+  .footerSecondaryActions { gap: 0; }
+  .attachBtn, .contextBtn, .conversationActionBtn, .expandBtn, .voiceBtn { width: 30px; height: 30px; }
+  .sendBtn, .sendBtn:disabled { width: 36px; height: 36px; }
   .contextBtn { min-width: 30px; padding-inline: 0; }
   .contextBtnLabel { display: none; }
 }

@@ -1,8 +1,12 @@
 export const CODEX_MODEL_OPTIONS = [
-  { value: '', label: '默认模型' },
-  { value: 'gpt-5.6-sol', label: 'GPT-5.6 Sol' },
-  { value: 'gpt-5.6-terra', label: 'GPT-5.6 Terra' },
-  { value: 'gpt-5.6-luna', label: 'GPT-5.6 Luna' },
+  { value: '', label: 'Default', description: '推荐模型组合' },
+  { value: 'gpt-5.6-sol', label: '5.6 Sol' },
+  { value: 'gpt-5.6-terra', label: '5.6 Terra' },
+  { value: 'gpt-5.6-luna', label: '5.6 Luna' },
+  { value: 'gpt-5.5', label: '5.5' },
+  { value: 'gpt-5.4', label: '5.4' },
+  { value: 'gpt-5.4-mini', label: '5.4 Mini' },
+  { value: 'gpt-5.3-codex-spark', label: '5.3 Codex Spark' },
 ] as const;
 
 export type AgentRuntimeModel = typeof CODEX_MODEL_OPTIONS[number]['value'];

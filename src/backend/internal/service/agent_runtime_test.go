@@ -104,14 +104,20 @@ func TestNormalizeAgentRuntimeConfigDefaultsSafely(t *testing.T) {
 }
 
 func TestNormalizeAgentRuntimeConfigAcceptsSupportedCodexValues(t *testing.T) {
-	got, err := NormalizeAgentRuntimeConfig(model.AgentRuntimeConfig{
-		Version: 1, Model: "gpt-5.6-sol", ReasoningEffort: "high", ApprovalMode: "request",
-	})
-	if err != nil {
-		t.Fatal(err)
+	models := []string{
+		"", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna",
+		"gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex-spark",
 	}
-	if got.Model != "gpt-5.6-sol" || got.ReasoningEffort != "high" || got.ApprovalMode != "request" {
-		t.Fatalf("unexpected normalized config: %#v", got)
+	for _, modelName := range models {
+		got, err := NormalizeAgentRuntimeConfig(model.AgentRuntimeConfig{
+			Version: 1, Model: modelName, ReasoningEffort: "high", ApprovalMode: "request",
+		})
+		if err != nil {
+			t.Fatalf("model %q: %v", modelName, err)
+		}
+		if got.Model != modelName || got.ReasoningEffort != "high" || got.ApprovalMode != "request" {
+			t.Fatalf("unexpected normalized config: %#v", got)
+		}
 	}
 }
 

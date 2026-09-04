@@ -38,25 +38,71 @@ interface ComposerRuntimeControlsProps {
 }
 
 export const ComposerRuntimeControls: React.FC<ComposerRuntimeControlsProps> = ({ value, onChange }) => {
-  const modelLabel = CODEX_MODEL_OPTIONS.find((item) => item.value === value.model)?.label ?? '默认模型';
+  const modelLabel = CODEX_MODEL_OPTIONS.find((item) => item.value === value.model)?.label ?? 'Default';
   const effortLabel = EFFORTS.find((item) => item.value === value.reasoning_effort)?.label ?? '中';
-  const approval = APPROVALS.find((item) => item.value === value.approval_mode) ?? APPROVALS[1]!;
 
-  const modelItems: MenuProps['items'] = [
-    ...CODEX_MODEL_OPTIONS.map((option) => ({
-      key: `model:${option.value || 'default'}`,
-      label: option.label,
-      icon: value.model === option.value ? <CheckOutlined /> : null,
-      onClick: () => onChange({ ...value, model: option.value as AgentRuntimeModel }),
-    })),
-    { type: 'divider' as const },
-    ...EFFORTS.map((option) => ({
-      key: `effort:${option.value}`,
-      label: `推理强度 · ${option.label}`,
-      icon: value.reasoning_effort === option.value ? <CheckOutlined /> : null,
-      onClick: () => onChange({ ...value, reasoning_effort: option.value }),
-    })),
-  ];
+  const modelItems: MenuProps['items'] = CODEX_MODEL_OPTIONS.map((option) => ({
+    key: `model:${option.value || 'default'}`,
+    label: (
+      <span className={styles.menuOption}>
+        <span>{option.label}</span>
+        {'description' in option && <span>{option.description}</span>}
+      </span>
+    ),
+    icon: value.model === option.value ? <CheckOutlined /> : null,
+    onClick: () => onChange({ ...value, model: option.value as AgentRuntimeModel }),
+  }));
+  const effortItems: MenuProps['items'] = EFFORTS.map((option) => ({
+    key: `effort:${option.value}`,
+    label: option.label,
+    icon: value.reasoning_effort === option.value ? <CheckOutlined /> : null,
+    onClick: () => onChange({ ...value, reasoning_effort: option.value }),
+  }));
+
+  return (
+    <div className={styles.runtimeControls} aria-label={`当前运行设置：${modelLabel}，推理强度${effortLabel}`}>
+      <Dropdown
+        menu={{
+          items: modelItems,
+          selectable: true,
+          selectedKeys: [`model:${value.model || 'default'}`],
+        }}
+        trigger={['click']}
+        placement="topRight"
+      >
+        <Button
+          type="text"
+          className={`${styles.runtimeSegment} ${styles.modelSegment}`}
+          aria-label={`选择模型，当前 ${modelLabel}`}
+        >
+          <ThunderboltOutlined />
+          <span className={styles.modelLabel}>{modelLabel}</span>
+        </Button>
+      </Dropdown>
+      <Dropdown
+        menu={{
+          items: effortItems,
+          selectable: true,
+          selectedKeys: [`effort:${value.reasoning_effort}`],
+        }}
+        trigger={['click']}
+        placement="topRight"
+      >
+        <Button
+          type="text"
+          className={`${styles.runtimeSegment} ${styles.effortSegment}`}
+          aria-label={`选择推理强度，当前 ${effortLabel}`}
+        >
+          <span>{effortLabel}</span>
+          <DownOutlined className={styles.chevron} />
+        </Button>
+      </Dropdown>
+    </div>
+  );
+};
+
+export const ComposerApprovalControl: React.FC<ComposerRuntimeControlsProps> = ({ value, onChange }) => {
+  const approval = APPROVALS.find((item) => item.value === value.approval_mode) ?? APPROVALS[1]!;
   const approvalItems: MenuProps['items'] = APPROVALS.map((option) => ({
     key: option.value,
     icon: value.approval_mode === option.value ? <CheckOutlined /> : null,
@@ -70,27 +116,25 @@ export const ComposerRuntimeControls: React.FC<ComposerRuntimeControlsProps> = (
   }));
 
   return (
-    <div className={styles.runtimeControls}>
-      <Dropdown menu={{ items: modelItems }} trigger={['click']} placement="topLeft">
-        <Button type="text" className={styles.pillButton} aria-label="选择模型和推理强度">
-          <ThunderboltOutlined />
-          <span>{modelLabel}</span>
-          <span className={styles.effort}>{effortLabel}</span>
-          <DownOutlined className={styles.chevron} />
-        </Button>
-      </Dropdown>
-      <Dropdown menu={{ items: approvalItems }} trigger={['click']} placement="topLeft">
-        <Button
-          type="text"
-          className={`${styles.pillButton} ${value.approval_mode === 'full' ? styles.dangerButton : ''}`}
-          aria-label="选择审批模式"
-        >
-          <SafetyCertificateOutlined />
-          <span>{approval.label}</span>
-          <DownOutlined className={styles.chevron} />
-        </Button>
-      </Dropdown>
-    </div>
+    <Dropdown
+      menu={{
+        items: approvalItems,
+        selectable: true,
+        selectedKeys: [value.approval_mode],
+      }}
+      trigger={['click']}
+      placement="topLeft"
+    >
+      <Button
+        type="text"
+        className={`${styles.approvalButton} ${value.approval_mode === 'full' ? styles.dangerButton : ''}`}
+        aria-label={`选择审批模式，当前 ${approval.label}`}
+      >
+        <SafetyCertificateOutlined />
+        <span className={styles.approvalLabel}>{approval.label}</span>
+        <DownOutlined className={styles.chevron} />
+      </Button>
+    </Dropdown>
   );
 };
 

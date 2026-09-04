@@ -2,13 +2,14 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { Input, Button, Tooltip, Spin } from 'antd';
 import { message } from '@/utils/message';
 import {
+  ArrowUpOutlined,
   CloseOutlined,
   DatabaseOutlined,
   DashboardOutlined,
   GlobalOutlined,
   LockOutlined,
+  AudioOutlined,
   RobotOutlined,
-  SendOutlined,
   UpOutlined,
   DownOutlined,
   ExclamationCircleOutlined,
@@ -32,7 +33,11 @@ import type { AttachmentPayload } from '@/types/attachment';
 import type { Message, ReplyToPreview } from '@/types/message';
 import { AttachmentPreview, type PendingAttachment } from './AttachmentPreview';
 import { ComposerAddMenu } from './ComposerAddMenu';
-import { ComposerRuntimeControls, ComposerRuntimeFallback } from './ComposerRuntimeControls';
+import {
+  ComposerApprovalControl,
+  ComposerRuntimeControls,
+  ComposerRuntimeFallback,
+} from './ComposerRuntimeControls';
 import { AgentApprovalPrompt } from './AgentApprovalPrompt';
 import {
   DEFAULT_AGENT_RUNTIME_CONFIG,
@@ -768,20 +773,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
       <div className={styles.inputRow}>
-        <ComposerAddMenu
-          onAddAttachment={() => fileInputRef.current?.click()}
-          onAddKnowledge={handleKnowledgeButtonClick}
-          knowledgeCount={selectedKnowledgeBases.length}
-          onReturnFocus={() => textareaRef.current?.focus()}
-        />
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={ACCEPTED_TYPES}
-          multiple
-          onChange={handleFileSelect}
-          className={styles.fileInput}
-        />
         <TextArea
           ref={textareaRef}
           value={value}
@@ -793,26 +784,62 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           aria-invalid={Boolean(sendError)}
           aria-describedby={sendError ? 'composer-send-error' : undefined}
         />
-        {conversation?.type === 'agent' && (supportsCodexControls
-          ? <ComposerRuntimeControls value={runtimeConfig} onChange={handleRuntimeChange} />
-          : <ComposerRuntimeFallback />)}
-        {onOpenContext && <ComposerContextAction onOpen={onOpenContext} active={contextActive} />}
-        <Tooltip title={expanded ? '收起输入框' : '展开输入框'}>
-          <Button
-            type="text"
-            icon={expanded ? <DownOutlined /> : <UpOutlined />}
-            className={styles.expandBtn}
-            onClick={() => setExpanded(!expanded)}
-          />
-        </Tooltip>
-        <Button
-          type="primary"
-          shape="default"
-          icon={<SendOutlined />}
-          onClick={handleSubmit}
-          loading={sending}
-          disabled={!canSend}
-          className={styles.sendBtn}
+        <div className={styles.composerFooter}>
+          <div className={styles.footerLeft} aria-label="添加内容与授权">
+            <ComposerAddMenu
+              onAddAttachment={() => fileInputRef.current?.click()}
+              onAddKnowledge={handleKnowledgeButtonClick}
+              knowledgeCount={selectedKnowledgeBases.length}
+              onReturnFocus={() => textareaRef.current?.focus()}
+            />
+            {supportsCodexControls && (
+              <ComposerApprovalControl value={runtimeConfig} onChange={handleRuntimeChange} />
+            )}
+          </div>
+          <div className={styles.footerRight} aria-label="运行与发送">
+            <div className={styles.footerSecondaryActions}>
+              {onOpenContext && <ComposerContextAction onOpen={onOpenContext} active={contextActive} />}
+              <Tooltip title={expanded ? '收起输入框' : '展开输入框'}>
+                <Button
+                  type="text"
+                  icon={expanded ? <DownOutlined /> : <UpOutlined />}
+                  className={styles.expandBtn}
+                  aria-label={expanded ? '收起输入框' : '展开输入框'}
+                  onClick={() => setExpanded(!expanded)}
+                />
+              </Tooltip>
+            </div>
+            {conversation?.type === 'agent' && (supportsCodexControls
+              ? <ComposerRuntimeControls value={runtimeConfig} onChange={handleRuntimeChange} />
+              : <ComposerRuntimeFallback />)}
+            <Tooltip title="语音输入即将上线">
+              <Button
+                type="text"
+                icon={<AudioOutlined />}
+                className={styles.voiceBtn}
+                aria-label="语音输入（即将上线）"
+                disabled
+              />
+            </Tooltip>
+            <Button
+              type="primary"
+              shape="circle"
+              icon={<ArrowUpOutlined />}
+              aria-label="发送消息"
+              onClick={handleSubmit}
+              loading={sending}
+              disabled={!canSend}
+              className={styles.sendBtn}
+            />
+          </div>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={ACCEPTED_TYPES}
+          multiple
+          onChange={handleFileSelect}
+          className={styles.fileInput}
         />
       </div>
       {mentionVisible && filteredTargets.length > 0 && (
