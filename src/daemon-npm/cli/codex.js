@@ -30,6 +30,7 @@ const {
   thinkingEvent,
   toolUseEvent,
   toolResultEvent,
+  errorEvent,
   turnEndEvent,
   sessionEndEvent,
   createAsyncQueue,
@@ -38,7 +39,42 @@ const { readDiAgentEnvironment } = require('./environment');
 const { resolveRuntimeCandidates, resolveRuntimeCandidate, runtimeVariant } = require('./runtime');
 
 const LOCAL_PROXY_PORTS = [7897, 7890, 1087];
+const CODEX_MODELS = new Set(['', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']);
+const REASONING_EFFORTS = new Set(['low', 'medium', 'high']);
+const APPROVAL_MODES = new Set(['request', 'auto', 'full']);
 let cachedLocalProxy = undefined; // undefined=未探测 null=无 string=代理地址
+
+function normalizeRuntimeConfig(value) {
+  const input = value && typeof value === 'object' ? value : {};
+  return {
+    version: 1,
+    model: CODEX_MODELS.has(input.model) ? input.model : '',
+    reasoning_effort: REASONING_EFFORTS.has(input.reasoning_effort) ? input.reasoning_effort : 'medium',
+    approval_mode: APPROVAL_MODES.has(input.approval_mode) ? input.approval_mode : 'auto',
+  };
+}
+
+function codexTurnControls(value) {
+  const config = normalizeRuntimeConfig(value);
+  const params = {};
+  if (config.model) params.model = config.model;
+  params.effort = config.reasoning_effort;
+  if (config.approval_mode === 'full') {
+    params.approvalPolicy = 'never';
+    params.sandboxPolicy = { type: 'dangerFullAccess' };
+  } else {
+    params.approvalPolicy = config.approval_mode === 'request' ? 'untrusted' : 'on-request';
+    params.approvalsReviewer = config.approval_mode === 'request' ? 'user' : 'auto_review';
+    params.sandboxPolicy = {
+      type: 'workspaceWrite',
+      writableRoots: [],
+      networkAccess: false,
+      excludeSlashTmp: false,
+      excludeTmpdirEnvVar: false,
+    };
+  }
+  return { config, params };
+}
 
 function detectLocalProxy() {
   const explicit = readDiAgentEnvironment(process.env, 'CODEX_PROXY')
@@ -103,9 +139,16 @@ function createCodexCliSpec(ctx) {
       const effectivePrompt = systemPrompt
         ? `${CODEX_MCP_FALLBACK}[系统指令]\n${systemPrompt}\n\n${userPrompt}`
         : `${CODEX_MCP_FALLBACK}${userPrompt}`;
+      const runtime = normalizeRuntimeConfig(task.runtime_config);
+      const accessArgs = runtime.approval_mode === 'full'
+        ? ['--dangerously-bypass-approvals-and-sandbox']
+        : ['--sandbox', 'workspace-write', '-c', `approval_policy=${runtime.approval_mode === 'request' ? '"untrusted"' : '"never"'}`];
+      const modelArgs = runtime.model ? ['--model', runtime.model] : [];
       const execArgs = [
         '--skip-git-repo-check',
-        '--dangerously-bypass-approvals-and-sandbox',
+        ...accessArgs,
+        ...modelArgs,
+        '-c', `model_reasoning_effort="${runtime.reasoning_effort}"`,
         '--ephemeral',
         '--json',
         '--color',
@@ -408,6 +451,47 @@ function createCodexCliSpec(ctx) {
         }
       };
 
+      const handleServerRequest = async (msg) => {
+        const method = String(msg.method || '');
+        const kind = method.includes('commandExecution')
+          ? 'command'
+          : method.includes('fileChange')
+            ? 'file_change'
+            : method.includes('permissions')
+              ? 'permissions'
+              : '';
+        if (!kind) return false;
+        let decision = 'decline';
+        if (typeof daemonCtx.requestApproval === 'function') {
+          try {
+            const approvalContext = currentTurn?.approvalContext || {};
+            decision = await daemonCtx.requestApproval({
+              kind,
+              method,
+              params: msg.params || {},
+              agent_id: approvalContext.agent_id || agentId,
+              conversation_id: approvalContext.conversation_id || conversationId,
+              user_id: approvalContext.user_id || userId,
+              task_id: approvalContext.task_id || taskId,
+            });
+          } catch (error) {
+            daemonCtx.logFlow('warn', 'agent.approval_failed', {
+              agent_id: agentId,
+              conversation_id: conversationId,
+              error: error?.message || String(error),
+            });
+          }
+        }
+        const allowed = decision === 'accept' || decision === 'acceptForSession';
+        const result = kind === 'permissions'
+          ? { permissions: allowed ? (msg.params?.permissions || []) : [] }
+          : { decision: allowed ? decision : 'decline' };
+        try {
+          child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: msg.id, result })}\n`);
+        } catch { /* process teardown resolves the active turn */ }
+        return true;
+      };
+
       // --- stdio 行解析 ---
       let stdoutBuf = '';
       child.stdout.setEncoding('utf8');
@@ -423,6 +507,8 @@ function createCodexCliSpec(ctx) {
             const pending = pendingCalls.get(msg.id);
             pendingCalls.delete(msg.id);
             pending.resolve(msg);
+          } else if (msg && msg.method && msg.id !== undefined) {
+            void handleServerRequest(msg);
           } else if (msg && msg.method) {
             handleNotification(msg);
           }
@@ -470,7 +556,7 @@ function createCodexCliSpec(ctx) {
       // --- 启动序列：initialize → thread/start ---
       const boot = (async () => {
         const init = await rpcCall('initialize', {
-          clientInfo: { name: 'di-agent-daemon', title: 'Di Agent', version: '0.3.1' },
+          clientInfo: { name: 'di-agent-daemon', title: 'Di Agent', version: '0.4.1' },
         });
         if (init.error) throw new Error(`codex app-server initialize 失败: ${init.error.message}`);
         const thread = await rpcCall('thread/start', { cwd });
@@ -496,7 +582,7 @@ function createCodexCliSpec(ctx) {
 
       // --- sendPrompt：串行化 + turn/start + 等 turn 终态 ---
       let queueTail = Promise.resolve();
-      const sendPromptRaw = (prompt) => new Promise((resolve) => {
+      const sendPromptRaw = (prompt, runtimeConfig, approvalContext) => new Promise((resolve) => {
         if (child.exitCode !== null) {
           resolve({ error: 'Agent process not running' });
           return;
@@ -510,10 +596,12 @@ function createCodexCliSpec(ctx) {
               : `${CODEX_MCP_FALLBACK}${prompt}`;
             firstTurn = false;
           }
+          const controls = codexTurnControls(runtimeConfig);
           const res = await rpcCall('turn/start', {
             threadId,
             cwd,
             input: [{ type: 'text', text }],
+            ...controls.params,
           });
           const turnId = res && res.result && res.result.turn && res.result.turn.id;
           if (!turnId) {
@@ -527,7 +615,7 @@ function createCodexCliSpec(ctx) {
             turn_id: turnId,
             prompt_len: typeof prompt === 'string' ? prompt.length : 0,
           });
-          currentTurn = { turnId, resolve, timer: null, text: '' };
+          currentTurn = { turnId, resolve, timer: null, text: '', approvalContext };
           currentTurn.timer = setTimeout(() => {
             if (currentTurn && currentTurn.turnId === turnId) {
               daemonCtx.logFlow('error', 'agent.turn_timeout', {
@@ -547,8 +635,8 @@ function createCodexCliSpec(ctx) {
           resolve({ error: err.message });
         });
       });
-      const sendPrompt = (prompt) => {
-        const run = () => sendPromptRaw(prompt);
+      const sendPrompt = (prompt, runtimeConfig, approvalContext) => {
+        const run = () => sendPromptRaw(prompt, runtimeConfig, approvalContext);
         queueTail = queueTail.then(run, run);
         return queueTail;
       };
@@ -616,4 +704,4 @@ function createCodexCliSpec(ctx) {
   };
 }
 
-module.exports = { createCodexCliSpec };
+module.exports = { createCodexCliSpec, normalizeRuntimeConfig, codexTurnControls };

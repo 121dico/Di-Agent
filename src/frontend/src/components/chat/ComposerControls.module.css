@@ -1,0 +1,36 @@
+.runtimeControls { display: flex; align-items: center; gap: 3px; min-width: 0; }
+.squareButton {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 10px;
+  color: var(--wb-text-secondary);
+}
+.squareButton:hover { color: var(--wb-text-primary) !important; background: var(--wb-surface-hover) !important; }
+.pillButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 190px;
+  height: 32px;
+  padding: 0 9px;
+  border-radius: 10px;
+  color: var(--wb-text-secondary);
+  font-size: 12px;
+}
+.pillButton:hover { color: var(--wb-text-primary) !important; background: var(--wb-surface-hover) !important; }
+.effort { padding-left: 5px; border-left: 1px solid var(--wb-border-default); }
+.chevron { font-size: 9px; }
+.dangerButton { color: var(--wb-warning, #d75b16); background: rgba(245, 98, 0, .08); }
+.dangerButton:hover { color: var(--wb-warning, #d75b16) !important; background: rgba(245, 98, 0, .13) !important; }
+.menuOption { display: flex; flex-direction: column; gap: 1px; min-width: 240px; }
+.menuOption > span:last-child { color: var(--wb-text-tertiary); font-size: 12px; }
+.dangerText { color: var(--wb-warning, #d75b16); }
+
+@media (max-width: 720px) {
+  .pillButton { max-width: 116px; padding-inline: 7px; }
+  .pillButton span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .effort { display: none; }
+  .menuOption { min-width: 205px; }
+}

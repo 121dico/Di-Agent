@@ -16,13 +16,12 @@
   position: relative;
   border: 1px solid var(--wb-border-subtle);
   background: var(--wb-surface-subtle);
-  border-radius: var(--radius-3);
-  padding: 7px 10px;
-  margin: 6px 0;
+  border-radius: 12px;
+  padding: 9px 11px;
+  margin: 8px 0;
   font-size: 13px;
   color: var(--color-text-secondary, rgba(0, 0, 0, 0.55));
   overflow: hidden;
-  transition: background 200ms ease, border-color 200ms ease;
 }
 
 /* streaming 时背景微微变深 + 强调色边框 */
@@ -39,9 +38,8 @@
   user-select: none;
   font-weight: 500;
   color: var(--color-text-secondary, rgba(0, 0, 0, 0.55));
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 20px;
-  transition: color 150ms ease;
 }
 
 .thinkingHeader:hover {
@@ -81,24 +79,16 @@
   margin-left: auto;
   font-size: 10px;
   color: var(--color-text-tertiary, rgba(0, 0, 0, 0.35));
-  transition: transform 200ms ease;
   flex-shrink: 0;
 }
 
-/* 折叠态 body——max-height: 0 + opacity 0 实现平滑收起 */
+/* 完成态保持紧凑；打开时直接呈现，避免卡片高度过渡造成跳动。 */
 .thinkingBodyWrap {
-  max-height: 0;
-  opacity: 0;
-  overflow: hidden;
-  transition: max-height 240ms cubic-bezier(0.4, 0, 0.2, 1),
-              opacity 180ms ease,
-              margin-top 240ms ease;
-  margin-top: 0;
+  display: none;
 }
 
 .thinkingBodyExpanded {
-  max-height: 1200px;  /* 给足够空间，超出后由 .thinkingBody 自然扩展 */
-  opacity: 1;
+  display: block;
   margin-top: 6px;
 }
 
@@ -136,11 +126,11 @@
 }
 
 .toolCallBlock {
-  background: var(--wb-surface-subtle);
+  background: transparent;
   border: 1px solid var(--wb-border-subtle);
-  border-radius: var(--radius-3);
-  padding: 7px 10px;
-  margin: 4px 0;
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin: 6px 0;
   font-size: 13px;
 }
 
@@ -151,13 +141,14 @@
   cursor: pointer;
   user-select: none;
   font-weight: 500;
+  color: var(--wb-text-secondary);
 }
 
 .toolChip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: var(--wb-surface-selected);
+  background: rgba(10, 102, 255, .08);
   color: var(--wb-link);
   border-radius: var(--radius-2);
   padding: 1px 6px;
@@ -173,14 +164,19 @@
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--color-text-secondary, rgba(0, 0, 0, 0.65));
+  max-height: 240px;
+  overflow: auto;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--wb-surface-subtle);
 }
 
 .toolResultBlock {
-  border-radius: var(--radius-3);
-  padding: 7px 10px;
-  margin: 4px 0;
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin: 6px 0;
   font-size: 13px;
-  background: var(--wb-surface-subtle);
+  background: transparent;
   border: 1px solid var(--wb-border-subtle);
 }
 
@@ -198,7 +194,6 @@
   font-size: 12px;
   font-weight: 500;
   color: var(--color-text-secondary, rgba(0, 0, 0, 0.55));
-  margin-bottom: 4px;
 }
 
 .toolResultBody {
@@ -206,6 +201,12 @@
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-word;
+  max-height: 260px;
+  overflow: auto;
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--wb-surface-subtle);
 }
 
 .errorBlock {
@@ -213,10 +214,10 @@
   flex-direction: column;
   gap: 6px;
   background: var(--color-error-bg, rgba(255, 77, 79, 0.1));
-  border: 1px solid var(--color-error, #ff4d4f);
-  border-radius: var(--radius-3);
-  padding: 8px 12px;
-  margin: 4px 0;
+  border: 1px solid rgba(194, 53, 42, .28);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 8px 0;
   color: var(--color-error-text, #cf1322);
   font-size: 13px;
 }

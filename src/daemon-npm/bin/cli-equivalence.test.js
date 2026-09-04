@@ -130,7 +130,12 @@ test('codex: exec args order + CODEX_HOME env + outputFile + cwd', () => {
     // execArgs 顺序
     const expectedExecFlags = [
       '--skip-git-repo-check',
-      '--dangerously-bypass-approvals-and-sandbox',
+      '--sandbox',
+      'workspace-write',
+      '-c',
+      'approval_policy="never"',
+      '-c',
+      'model_reasoning_effort="medium"',
       '--ephemeral',
       '--json',
       '--color',

@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { Message } from '@/types/message';
 import {
   conversationToMarkdown,
+  forkConversationFromMessage,
   forkConversationFromLatest,
   hasExportableMessage,
   loadCompleteConversation,
   waitForForkableCheckpoint,
 } from './conversationActions';
-import type { ConversationCheckpoint } from '@/types/context';
+import type { ConversationCheckpoint, CreateCheckpointRequest } from '@/types/context';
 
 function createMessage(overrides: Partial<Message>): Message {
   return {
@@ -263,5 +264,40 @@ describe('forkConversationFromLatest', () => {
     );
 
     expect(calls).toEqual(['checkpoint:create', 'checkpoint:read', 'fork:checkpoint-1']);
+  });
+});
+
+describe('forkConversationFromMessage', () => {
+  it('pins the checkpoint boundary to the selected agent response', async () => {
+    const ready: ConversationCheckpoint = {
+      id: 'checkpoint-message',
+      conversation_id: 'conversation-1',
+      source_agent_id: 'agent-1',
+      generation: 1,
+      source_to_message_id: 'message-9',
+      markdown_content: '# Context',
+      scope: 'conversation_shared',
+      status: 'ready',
+      created_at: '2026-09-04T08:00:00Z',
+    };
+    let checkpointRequest: CreateCheckpointRequest | undefined;
+
+    await forkConversationFromMessage(
+      { conversationId: 'conversation-1', messageId: 'message-9', agentId: 'agent-1' },
+      {
+        createCheckpoint: async (_conversationId, request) => {
+          checkpointRequest = request;
+          return ready;
+        },
+        readCheckpoint: async () => ready,
+        createFork: async () => undefined,
+      },
+    );
+
+    expect(checkpointRequest).toEqual({
+      agent_id: 'agent-1',
+      scope: 'conversation_shared',
+      source_to_message_id: 'message-9',
+    });
   });
 });

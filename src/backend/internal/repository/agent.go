@@ -133,7 +133,12 @@ func (r *AgentRepo) GetByID(ctx context.Context, id string) (*model.Agent, error
 const daemonTaskRetention = 10 * time.Minute
 
 // CreateDaemonTask 创建一次等待远端电脑执行的 CLI 任务（内存队列，不落库）。
-func (r *AgentRepo) CreateDaemonTask(_ context.Context, userID, conversationID, agentID, machineID, cliTool, runtimeVariant, prompt, contextMessages string) (*model.DaemonTask, error) {
+func (r *AgentRepo) CreateDaemonTask(ctx context.Context, userID, conversationID, agentID, machineID, cliTool, runtimeVariant, prompt, contextMessages string) (*model.DaemonTask, error) {
+	return r.CreateDaemonTaskWithRuntime(ctx, userID, conversationID, agentID, machineID, cliTool, runtimeVariant, prompt, contextMessages, model.AgentRuntimeConfig{})
+}
+
+// CreateDaemonTaskWithRuntime creates a task whose execution policy is immutable for this dispatch.
+func (r *AgentRepo) CreateDaemonTaskWithRuntime(_ context.Context, userID, conversationID, agentID, machineID, cliTool, runtimeVariant, prompt, contextMessages string, runtimeConfig model.AgentRuntimeConfig) (*model.DaemonTask, error) {
 	if runtimeVariant == "" {
 		// Agents created before runtime_variant existed always targeted the CLI.
 		runtimeVariant = "cli"
@@ -150,6 +155,7 @@ func (r *AgentRepo) CreateDaemonTask(_ context.Context, userID, conversationID, 
 		MachineID:       machineID,
 		CLITool:         cliTool,
 		RuntimeVariant:  runtimeVariant,
+		RuntimeConfig:   runtimeConfig,
 		Prompt:          prompt,
 		ContextMessages: contextMessages,
 		Status:          "pending",

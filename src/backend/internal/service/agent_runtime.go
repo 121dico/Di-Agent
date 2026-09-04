@@ -42,3 +42,37 @@ func (s *AgentRuntimeService) GetOverview(
 	}
 	return overview, nil
 }
+
+var supportedAgentModels = map[string]bool{
+	"":              true,
+	"gpt-5.6-sol":   true,
+	"gpt-5.6-terra": true,
+	"gpt-5.6-luna":  true,
+}
+
+// NormalizeAgentRuntimeConfig converts an omitted policy into the safe product default and
+// rejects arbitrary model/config strings before they can reach a local CLI process.
+func NormalizeAgentRuntimeConfig(input model.AgentRuntimeConfig) (model.AgentRuntimeConfig, error) {
+	if input.Version == 0 {
+		input.Version = 1
+	}
+	if input.Version != 1 {
+		return model.AgentRuntimeConfig{}, fmt.Errorf("%w: unsupported version", ErrMsgInvalidRuntime)
+	}
+	if input.ReasoningEffort == "" {
+		input.ReasoningEffort = "medium"
+	}
+	if input.ApprovalMode == "" {
+		input.ApprovalMode = "auto"
+	}
+	if !supportedAgentModels[input.Model] {
+		return model.AgentRuntimeConfig{}, fmt.Errorf("%w: unsupported model", ErrMsgInvalidRuntime)
+	}
+	if input.ReasoningEffort != "low" && input.ReasoningEffort != "medium" && input.ReasoningEffort != "high" {
+		return model.AgentRuntimeConfig{}, fmt.Errorf("%w: unsupported reasoning effort", ErrMsgInvalidRuntime)
+	}
+	if input.ApprovalMode != "request" && input.ApprovalMode != "auto" && input.ApprovalMode != "full" {
+		return model.AgentRuntimeConfig{}, fmt.Errorf("%w: unsupported approval mode", ErrMsgInvalidRuntime)
+	}
+	return input, nil
+}

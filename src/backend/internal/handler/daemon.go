@@ -313,6 +313,8 @@ func (h *DaemonHandler) readLoop(ctx context.Context, client *ws.DaemonClient, m
 			h.handleTaskComplete(envelope.Data, machine)
 		case "task.progress":
 			h.handleTaskProgress(envelope.Data, machine)
+		case "task.approval_required":
+			h.handleTaskApprovalRequired(ctx, client, envelope.Data)
 		case "agent.started":
 			h.handleAgentStarted(envelope.Data)
 		case "agent.stopped":
@@ -330,6 +332,49 @@ func (h *DaemonHandler) readLoop(ctx context.Context, client *ws.DaemonClient, m
 		default:
 			h.logger.Warn("unknown daemon message", "type", envelope.Type)
 		}
+	}
+}
+
+func (h *DaemonHandler) handleTaskApprovalRequired(ctx context.Context, client *ws.DaemonClient, data json.RawMessage) {
+	var req struct {
+		ApprovalID string          `json:"approval_id"`
+		TaskID     string          `json:"task_id"`
+		Kind       string          `json:"kind"`
+		Method     string          `json:"method"`
+		Details    json.RawMessage `json:"details"`
+		ExpiresIn  int64           `json:"expires_in_ms"`
+	}
+	if err := json.Unmarshal(data, &req); err != nil || req.ApprovalID == "" || req.TaskID == "" {
+		h.logger.Warn("invalid task approval request", "error", err)
+		return
+	}
+	task, err := h.agentSvc.GetDaemonTask(ctx, req.TaskID)
+	if err != nil || task == nil || task.MachineID != client.MachineID || task.UserID == "" || task.ConversationID == "" {
+		h.logger.Warn("task approval ownership check failed", "task_id", req.TaskID, "machine_id", client.MachineID)
+		return
+	}
+	expires := time.Now().Add(5 * time.Minute)
+	if req.ExpiresIn > 0 && req.ExpiresIn < int64(5*time.Minute/time.Millisecond) {
+		expires = time.Now().Add(time.Duration(req.ExpiresIn) * time.Millisecond)
+	}
+	h.daemonHub.RegisterAgentApproval(ws.AgentApprovalContext{
+		ApprovalID: req.ApprovalID, MachineID: task.MachineID, TaskID: task.ID,
+		ConversationID: task.ConversationID, UserID: task.UserID, ExpiresAt: expires,
+	})
+	if h.userHub != nil {
+		h.userHub.SendToUser(task.UserID, ws.WSMessage{
+			Type: "agent.approval_required",
+			Data: map[string]interface{}{
+				"approval_id":     req.ApprovalID,
+				"task_id":         task.ID,
+				"conversation_id": task.ConversationID,
+				"agent_id":        task.AgentID,
+				"kind":            req.Kind,
+				"method":          req.Method,
+				"details":         json.RawMessage(req.Details),
+				"expires_at":      expires,
+			},
+		})
 	}
 }
 

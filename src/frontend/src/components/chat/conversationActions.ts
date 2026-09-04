@@ -30,6 +30,10 @@ interface ForkLatestInput {
   agentId: string;
 }
 
+interface ForkMessageInput extends ForkLatestInput {
+  messageId: string;
+}
+
 interface ForkLatestActions {
   createCheckpoint: (
     conversationId: string,
@@ -92,6 +96,28 @@ export async function forkConversationFromLatest(
   const created = await actions.createCheckpoint(input.conversationId, {
     agent_id: input.agentId,
     scope: 'conversation_shared',
+  });
+  const checkpoint = await waitForForkableCheckpoint(
+    input.conversationId,
+    created,
+    actions.readCheckpoint,
+    waitOptions,
+  );
+  await actions.createFork(input.conversationId, {
+    checkpoint_id: checkpoint.id,
+    agent_id: input.agentId,
+  });
+}
+
+export async function forkConversationFromMessage(
+  input: ForkMessageInput,
+  actions: ForkLatestActions,
+  waitOptions?: CheckpointWaitOptions,
+): Promise<void> {
+  const created = await actions.createCheckpoint(input.conversationId, {
+    agent_id: input.agentId,
+    scope: 'conversation_shared',
+    source_to_message_id: input.messageId,
   });
   const checkpoint = await waitForForkableCheckpoint(
     input.conversationId,

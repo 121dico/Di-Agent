@@ -6,7 +6,6 @@ import {
   DatabaseOutlined,
   DashboardOutlined,
   GlobalOutlined,
-  LinkOutlined,
   LockOutlined,
   RobotOutlined,
   SendOutlined,
@@ -32,10 +31,14 @@ import type { TextAreaRef } from 'antd/es/input/TextArea';
 import type { AttachmentPayload } from '@/types/attachment';
 import type { Message, ReplyToPreview } from '@/types/message';
 import { AttachmentPreview, type PendingAttachment } from './AttachmentPreview';
+import { ComposerAddMenu } from './ComposerAddMenu';
+import { ComposerRuntimeControls } from './ComposerRuntimeControls';
 import {
-  ComposerConversationActions,
-  type ComposerConversationActionsProps,
-} from './ComposerConversationActions';
+  DEFAULT_AGENT_RUNTIME_CONFIG,
+  readRuntimePreference,
+  writeRuntimePreference,
+  type AgentRuntimeConfig,
+} from './agentRuntime';
 import { appendKnowledgeRefs } from '@/components/knowledge/knowledgeReferenceState';
 import styles from './ChatInput.module.css';
 
@@ -72,7 +75,6 @@ interface ChatInputProps {
   onCancelReply?: () => void;
   onOpenContext?: () => void;
   contextActive?: boolean;
-  conversationActions?: ComposerConversationActionsProps;
   /**
    * 把内部 processFiles 暴露给父级（ChatWindow），让整个聊天窗口的拖放都能复用同一套
    * 校验 + 上传逻辑。传 null 表示注销（卸载时）。
@@ -104,7 +106,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onCancelReply,
   onOpenContext,
   contextActive = false,
-  conversationActions,
   onRegisterProcessFiles,
 }) => {
   const [expanded, setExpanded] = useState(false);
@@ -152,6 +153,24 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const isGroup = conversation?.type === 'group';
   const globalAgents = useAgentStore((s) => s.agents);
   const currentUsername = useAuthStore((s) => s.user?.username ?? '');
+  const runtimeAgent = useMemo(() => {
+    if (!directAgentId) return undefined;
+    return globalAgents.find((agent) => agent.id === directAgentId)
+      ?? agentMembers.find((agent) => agent.agent_id === directAgentId);
+  }, [agentMembers, directAgentId, globalAgents]);
+  const supportsCodexControls = conversation?.type === 'agent' && runtimeAgent?.cli_tool === 'codex';
+  const [runtimeConfig, setRuntimeConfig] = useState<AgentRuntimeConfig>(DEFAULT_AGENT_RUNTIME_CONFIG);
+
+  useEffect(() => {
+    setRuntimeConfig(directAgentId
+      ? readRuntimePreference(conversationId, directAgentId)
+      : { ...DEFAULT_AGENT_RUNTIME_CONFIG });
+  }, [conversationId, directAgentId]);
+
+  const handleRuntimeChange = useCallback((next: AgentRuntimeConfig) => {
+    setRuntimeConfig(next);
+    if (directAgentId) writeRuntimePreference(conversationId, directAgentId, next);
+  }, [conversationId, directAgentId]);
 
   const fetchMentionTargets = useCallback(async () => {
     if (!isGroup) return { members, agentMembers };
@@ -528,6 +547,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       // Group chats: don't pass agentId — routing handled by backend mention parsing.
       // Agent/single chats: pass the resolved agentId for direct dispatch.
       const targetAgentId = isGroup ? undefined : (mentionedAgentId ?? directAgentId);
+      const selectedAgentId = mentionedAgentId ?? directAgentId;
+      const selectedAgent = selectedAgentId
+        ? (globalAgents.find((agent) => agent.id === selectedAgentId)
+          ?? agentMembers.find((agent) => agent.agent_id === selectedAgentId))
+        : undefined;
       await send(
         persistedContent,
         attachments.length ? attachments : undefined,
@@ -535,6 +559,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         replyPreview,
         mentions,
         targetAgentId,
+        !isGroup && selectedAgent?.cli_tool === 'codex' ? runtimeConfig : undefined,
       );
       // Persist the @mentioned agent as sticky target for subsequent messages
       if (isGroup && mentionedAgentId) {
@@ -551,7 +576,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     } finally {
       setSending(false);
     }
-  }, [value, selectedKnowledgeBases, pendingFiles, isStreaming, send, sendTypingStop, replyTo, onCancelReply, isGroup, mentionTargetsLoaded, fetchMentionTargets, members, agentMembers, hasMention, directAgentId, bindDirectAgentChat, conversationId]);
+  }, [value, selectedKnowledgeBases, pendingFiles, isStreaming, send, sendTypingStop, replyTo, onCancelReply, isGroup, mentionTargetsLoaded, fetchMentionTargets, members, agentMembers, hasMention, directAgentId, bindDirectAgentChat, conversationId, globalAgents, runtimeConfig]);
 
   const lastSendAtRef = useRef(0);
 
@@ -726,23 +751,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
       <div className={styles.inputRow}>
-        <Tooltip title="添加附件">
-          <Button
-            type="text"
-            icon={<LinkOutlined />}
-            className={styles.attachBtn}
-            onClick={() => fileInputRef.current?.click()}
-          />
-        </Tooltip>
-        <Tooltip title="添加知识库">
-          <Button
-            type="text"
-            icon={<DatabaseOutlined />}
-            aria-label="添加知识库"
-            className={`${styles.attachBtn} ${selectedKnowledgeBases.length > 0 ? styles.knowledgeBtnActive : ''}`}
-            onClick={handleKnowledgeButtonClick}
-          />
-        </Tooltip>
+        <ComposerAddMenu
+          onAddAttachment={() => fileInputRef.current?.click()}
+          onAddKnowledge={handleKnowledgeButtonClick}
+          knowledgeCount={selectedKnowledgeBases.length}
+          onReturnFocus={() => textareaRef.current?.focus()}
+        />
         <input
           ref={fileInputRef}
           type="file"
@@ -762,8 +776,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           aria-invalid={Boolean(sendError)}
           aria-describedby={sendError ? 'composer-send-error' : undefined}
         />
+        {supportsCodexControls && (
+          <ComposerRuntimeControls value={runtimeConfig} onChange={handleRuntimeChange} />
+        )}
         {onOpenContext && <ComposerContextAction onOpen={onOpenContext} active={contextActive} />}
-        {conversationActions && <ComposerConversationActions {...conversationActions} />}
         <Tooltip title={expanded ? '收起输入框' : '展开输入框'}>
           <Button
             type="text"

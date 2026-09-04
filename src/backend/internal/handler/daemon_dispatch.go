@@ -31,6 +31,7 @@ func (h *DaemonHandler) DispatchTask(task *model.DaemonTask) {
 			"agent_id":         task.AgentID,
 			"conversation_id":  task.ConversationID,
 			"user_id":          task.UserID,
+			"runtime_config":   task.RuntimeConfig,
 		},
 	}); err != nil {
 		h.daemonHub.RemoveTaskPromise(task.ID)

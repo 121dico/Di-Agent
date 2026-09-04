@@ -312,7 +312,7 @@ test('commandForTask starts opencode without session on first conversation turn'
   assert.equal(spec.args.includes('--session'), false);
 });
 
-test('commandForTask runs codex with non-interactive MCP-capable execution', () => {
+test('commandForTask runs codex with safe non-interactive MCP-capable execution', () => {
   const tempCodexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'di-agent-codex-home-'));
   const originalCodexHome = process.env.DI_AGENT_CODEX_HOME;
   process.env.DI_AGENT_CODEX_HOME = tempCodexHome;
@@ -327,10 +327,12 @@ test('commandForTask runs codex with non-interactive MCP-capable execution', () 
     });
 
     assert.equal(spec.args[0], 'exec');
-    assert.equal(spec.args.includes('--dangerously-bypass-approvals-and-sandbox'), true);
+    assert.equal(spec.args.includes('--dangerously-bypass-approvals-and-sandbox'), false);
     assert.equal(spec.args.includes('--ephemeral'), true);
-    assert.equal(spec.args.includes('--sandbox'), false);
-    assert.equal(spec.args.includes('read-only'), false);
+    assert.equal(spec.args.includes('--sandbox'), true);
+    assert.equal(spec.args.includes('workspace-write'), true);
+    assert.equal(spec.args.includes('approval_policy="never"'), true);
+    assert.equal(spec.args.includes('model_reasoning_effort="medium"'), true);
     assert.equal(spec.env.CODEX_HOME, tempCodexHome);
     assert.equal(spec.env.DI_AGENT_CONVERSATION_ID, 'conv-1');
     assert.equal(spec.env.DI_AGENT_USER_ID, 'user-1');

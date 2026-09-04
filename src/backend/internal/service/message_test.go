@@ -332,7 +332,10 @@ func TestSendMessageWithAgentCreatesAssistantReply(t *testing.T) {
 		})
 	}()
 
-	result, err := svc.SendMessageWithReply(context.Background(), "conv-1", userID, "user", "hello", "", nil, nil, "agent-1", nil)
+	runtimeConfig := model.AgentRuntimeConfig{
+		Version: 1, Model: "gpt-5.6-sol", ReasoningEffort: "high", ApprovalMode: "request",
+	}
+	result, err := svc.SendMessageWithRuntime(context.Background(), "conv-1", userID, "user", "hello", "", nil, nil, "agent-1", nil, runtimeConfig)
 	if err != nil {
 		t.Fatalf("send message failed: %v", err)
 	}
@@ -363,6 +366,9 @@ func TestSendMessageWithAgentCreatesAssistantReply(t *testing.T) {
 	}
 	if agentMessage.ArtifactsJSON == "" {
 		t.Fatalf("expected agent metadata in artifacts")
+	}
+	if agentRepo.task == nil || agentRepo.task.RuntimeConfig != runtimeConfig {
+		t.Fatalf("runtime config not preserved on daemon task: %#v", agentRepo.task)
 	}
 }
 

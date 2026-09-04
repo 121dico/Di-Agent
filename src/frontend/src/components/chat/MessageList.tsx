@@ -16,6 +16,8 @@ interface MessageListProps {
   onPinChanged?: () => void;
   onOpenThread?: (message: Message) => void;
   onDelete?: (messageId: string) => void;
+  onFork?: (message: Message) => void;
+  forkingMessageId?: string | null;
   conversationAgents?: ConversationAgent[];
 }
 
@@ -80,6 +82,8 @@ export const MessageList: React.FC<MessageListProps> = React.memo(({
   onPinChanged,
   onOpenThread,
   onDelete,
+  onFork,
+  forkingMessageId,
   conversationAgents = [],
 }) => {
   const {
@@ -259,6 +263,8 @@ export const MessageList: React.FC<MessageListProps> = React.memo(({
                   onTogglePin={handleTogglePin}
                   onRecall={isOwn ? handleRecall : undefined}
                   onDelete={onDelete}
+                  onFork={onFork}
+                  forking={forkingMessageId === msg.id}
                   conversationAgents={conversationAgents}
                   replyCount={replyCounts[msg.id]}
                   onOpenThread={onOpenThread}

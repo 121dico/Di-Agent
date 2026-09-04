@@ -10,6 +10,7 @@ import styles from './Cards.module.css';
 export const ApprovalCard: React.FC<CardProps<ApprovalCardData>> = ({ card, onAction }) => {
   const isResolved = card.state === 'resolved';
   const persistedAction = card.selected_action;
+  const actions = Array.isArray(card.actions) ? card.actions : [];
 
   const [resolved, setResolved] = useState<string>(persistedAction || '');
 
@@ -19,7 +20,7 @@ export const ApprovalCard: React.FC<CardProps<ApprovalCardData>> = ({ card, onAc
   };
 
   if (resolved) {
-    const action = card.actions.find((a) => a.id === resolved);
+    const action = actions.find((a) => a.id === resolved);
     return (
       <div className={styles.card}>
         <div className={styles.cardHeader}>
@@ -33,7 +34,7 @@ export const ApprovalCard: React.FC<CardProps<ApprovalCardData>> = ({ card, onAc
         </div>
         <Typography.Text type="secondary">{card.message}</Typography.Text>
         {action && (
-          <div style={{ marginTop: 8 }}>
+          <div className={styles.resolvedAction}>
             <Typography.Text type={action.style === 'danger' ? 'danger' : 'success'}>
               {action.label}
             </Typography.Text>
@@ -55,7 +56,7 @@ export const ApprovalCard: React.FC<CardProps<ApprovalCardData>> = ({ card, onAc
       <Typography.Text className={styles.confirmMessage}>{card.message}</Typography.Text>
 
       <div className={styles.cardFooter}>
-        {card.actions.map((action) => (
+        {actions.map((action) => (
           <Button
             key={action.id}
             size="small"
@@ -66,6 +67,9 @@ export const ApprovalCard: React.FC<CardProps<ApprovalCardData>> = ({ card, onAc
             {action.label}
           </Button>
         ))}
+        {actions.length === 0 && (
+          <Typography.Text type="secondary">没有可执行的审批选项</Typography.Text>
+        )}
       </div>
     </div>
   );

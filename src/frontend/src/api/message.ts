@@ -1,6 +1,7 @@
 import { get, post, put, patch, del } from './client';
 import type { ConversationBlackboard, Message, PinnedMessage, SendMessageResult, MessageRole } from '@/types/message';
 import type { AttachmentPayload } from '@/types/attachment';
+import type { AgentRuntimeConfig } from '@/types/agentRuntime';
 
 export async function sendMessage(
   conversationId: string,
@@ -10,6 +11,7 @@ export async function sendMessage(
   replyToId?: string,
   mentions?: string[],
   agentId?: string,
+  runtimeConfig?: AgentRuntimeConfig,
 ): Promise<SendMessageResult> {
   return post<SendMessageResult>(`/api/conversations/${conversationId}/messages`, {
     content,
@@ -18,6 +20,7 @@ export async function sendMessage(
     ...(replyToId ? { reply_to: replyToId } : {}),
     ...(mentions && mentions.length > 0 ? { mentions } : {}),
     ...(agentId ? { agent_id: agentId } : {}),
+    ...(runtimeConfig ? { runtime_config: runtimeConfig } : {}),
   });
 }
 

@@ -36,6 +36,7 @@ import { CodeBlock, extractText } from './CodeBlock';
 import { ArtifactCard } from './ArtifactCard';
 import { DeployStatusCard } from './DeployStatusCard';
 import { StopButton } from './StopButton';
+import { MessageFooterActions } from './MessageFooterActions';
 // blocks/index.ts 触发各 block 组件的 registerBlock 自注册副作用，
 // MessageBubble 只依赖 renderBlock 抽象，不直接 import 具体组件。
 import { renderBlock, type BlockRenderContext } from './blocks';
@@ -399,6 +400,8 @@ interface MessageBubbleProps {
   conversationAgents?: ConversationAgent[];
   replyCount?: number;
   onOpenThread?: (message: Message) => void;
+  onFork?: (message: Message) => void;
+  forking?: boolean;
 }
 
 function formatTimestamp(dateStr: string): string {
@@ -443,6 +446,8 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
   conversationAgents = [],
   replyCount = 0,
   onOpenThread,
+  onFork,
+  forking = false,
 }) => {
   // 默认展开：内容不再自动折叠（代码块级折叠已由 CodeBlock 承担）
   const [expanded, setExpanded] = useState(true);
@@ -725,7 +730,7 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
         )}
         {!showAvatar && <div className={styles.avatarSpacer} />}
         <div className={styles.content}>
-          <div className={styles.messageActions} aria-label="消息操作">
+          {isOwn && <div className={styles.messageActions} aria-label="消息操作">
             <Tooltip title="复制">
               <Button
                 type="text"
@@ -768,7 +773,7 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
                 />
               </Tooltip>
             </Dropdown>
-          </div>
+          </div>}
           {showAvatar && (
             <div className={styles.meta}>
               <Text className={styles.agentLabel}>{displayName}</Text>
@@ -926,6 +931,14 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
                 </>
               )}
             </button>
+          )}
+          {!isOwn && !isOptimisticSending && !isOptimisticFailed && (
+            <MessageFooterActions
+              onCopy={handleCopy}
+              onFork={() => onFork?.(message)}
+              forkDisabled={!onFork || isStreaming}
+              forking={forking}
+            />
           )}
           {isOptimisticFailed && (
             <div className={styles.failedActions}>

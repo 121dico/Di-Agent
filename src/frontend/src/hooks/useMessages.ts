@@ -4,6 +4,7 @@ import { getUnreadMessages } from '@/api/message';
 import { markConversationRead } from '@/api/conversation';
 import type { OptimisticMessage, ReplyToPreview } from '@/types/message';
 import type { AttachmentPayload } from '@/types/attachment';
+import type { AgentRuntimeConfig } from '@/types/agentRuntime';
 import { CACHE_TTL_MS, MAX_MESSAGES, UNREAD_FETCH_LIMIT } from '@/config/constants';
 
 /** Per-conversation last fetch timestamp */
@@ -101,11 +102,12 @@ export function useMessages(conversationId: string | null) {
       replyPreview?: ReplyToPreview,
       mentions?: string[],
       agentId?: string,
+      runtimeConfig?: AgentRuntimeConfig,
     ) => {
       if (!conversationId) return;
       // Invalidate cache so next switch re-fetches
       delete lastFetchedAt[conversationId];
-      await sendMessage(conversationId, content, attachments, replyTo, replyPreview, mentions, agentId);
+      await sendMessage(conversationId, content, attachments, replyTo, replyPreview, mentions, agentId, runtimeConfig);
     },
     [conversationId, sendMessage],
   );

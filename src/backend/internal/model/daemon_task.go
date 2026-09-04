@@ -4,14 +4,15 @@ import "time"
 
 // DaemonTask 表示投递给远端电脑 daemon 的一次真实 CLI 执行。
 type DaemonTask struct {
-	ID             string `json:"id" db:"id"`
-	UserID         string `json:"user_id" db:"user_id"`
-	ConversationID string `json:"conversation_id" db:"conversation_id"`
-	AgentID        string `json:"agent_id" db:"agent_id"`
-	MachineID      string `json:"machine_id" db:"machine_id"`
-	CLITool        string `json:"cli_tool" db:"cli_tool"`
-	RuntimeVariant string `json:"runtime_variant" db:"runtime_variant"`
-	Prompt         string `json:"prompt" db:"prompt"`
+	ID             string             `json:"id" db:"id"`
+	UserID         string             `json:"user_id" db:"user_id"`
+	ConversationID string             `json:"conversation_id" db:"conversation_id"`
+	AgentID        string             `json:"agent_id" db:"agent_id"`
+	MachineID      string             `json:"machine_id" db:"machine_id"`
+	CLITool        string             `json:"cli_tool" db:"cli_tool"`
+	RuntimeVariant string             `json:"runtime_variant" db:"runtime_variant"`
+	RuntimeConfig  AgentRuntimeConfig `json:"runtime_config" db:"-"`
+	Prompt         string             `json:"prompt" db:"prompt"`
 	// ContextMessages 是 Layer 2 上下文：编排调度时为群聊背景+调度指令+依赖输出的纯文本，
 	// 直接 dispatch 时为 agentHandoff 的 JSON 数组（最多 5 条）。
 	// 空字符串表示无历史上下文（首条消息）。

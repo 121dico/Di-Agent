@@ -168,6 +168,8 @@
   line-height: 1.5;
 }
 
+.resolvedAction { margin-top: 8px; }
+
 /* Info card */
 .infoFieldTable {
   width: 100%;

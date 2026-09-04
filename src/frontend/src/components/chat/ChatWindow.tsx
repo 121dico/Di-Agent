@@ -48,6 +48,7 @@ import { ConversationContextDrawer } from './ConversationContextDrawer';
 import { getConversationFork } from '@/api/context';
 import type { ConversationFork } from '@/types/context';
 import { useConversationActions } from './useConversationActions';
+import { AgentApprovalPrompt } from './AgentApprovalPrompt';
 import styles from './ChatWindow.module.css';
 
 const ACCEPTED_TYPES =
@@ -694,6 +695,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onOpenPersonalReport, pe
         onPinChanged={handlePinnedMessageChange}
         onOpenThread={setThreadMessage}
         onDelete={(messageId) => useMessageStore.getState().deleteMessage(activeConv.id, messageId)}
+        onFork={(selectedMessage) => void conversationActions.forkMessage(selectedMessage)}
+        forkingMessageId={conversationActions.forkingMessageId}
         conversationAgents={conversationAgents}
       />
       {otherTyping.length > 0 && (
@@ -710,20 +713,13 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onOpenPersonalReport, pe
           </span>
         </div>
       )}
+      <AgentApprovalPrompt conversationId={activeConv.id} />
       <ChatInput
         conversationId={activeConv.id}
         replyTo={replyTo}
         onCancelReply={() => setReplyTo(null)}
         onOpenContext={(isAgent || isGroup) ? () => setContextDrawerOpen(true) : undefined}
         contextActive={contextDrawerOpen}
-        conversationActions={{
-          onCopy: () => void conversationActions.copyConversation(),
-          onFork: () => void conversationActions.forkConversation(),
-          copying: conversationActions.copying,
-          forking: conversationActions.forking,
-          forkDisabled: Boolean(conversationActions.forkDisabledReason),
-          forkDisabledReason: conversationActions.forkDisabledReason,
-        }}
         onRegisterProcessFiles={registerProcessFiles}
       />
       {isGroup && activeId && (

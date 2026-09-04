@@ -277,6 +277,7 @@ func main() {
 	uploadHandler := handler.NewUploadHandler(uploadSvc)
 	pptPreviewHandler := handler.NewPptPreviewHandler(cfg.Upload.Dir)
 	wsHandler := handler.NewWebSocketHandler(authSvc, hub, groupSvc, msgSvc, logger, cfg.CORS.AllowedOrigins)
+	wsHandler.SetDaemonHub(daemonHub)
 	agentHandler := handler.NewAgentHandler(agentSvc, hub)
 	agentRuntimeHandler := handler.NewAgentRuntimeHandler(agentRuntimeSvc)
 	reportHandler := handler.NewReportHandler(reportSvc)

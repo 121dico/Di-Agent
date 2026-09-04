@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { message as antdMessage } from '@/utils/message';
 import type { Message, MessageBlock, OptimisticMessage, ReplyToPreview, AgentEvent, MessageStatus } from '@/types/message';
 import type { AttachmentPayload } from '@/types/attachment';
+import type { AgentRuntimeConfig } from '@/types/agentRuntime';
 import * as msgApi from '@/api/message';
 import { PAGE_SIZE, MAX_MESSAGES, RECALL_DEDUP_TTL_MS } from '@/config/constants';
 import { reduceEvents, initialStreamingState } from './streamingReducer';
@@ -31,6 +32,7 @@ interface MessageState {
     replyPreview?: ReplyToPreview,
     mentions?: string[],
     agentId?: string,
+    runtimeConfig?: AgentRuntimeConfig,
   ) => Promise<void>;
   recall: (conversationId: string, messageId: string) => Promise<void>;
   deleteMessage: (conversationId: string, messageId: string) => Promise<void>;
@@ -153,7 +155,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     }
   },
 
-  sendMessage: async (conversationId, content, attachments?, replyTo?, replyPreview?, mentions?, agentId?) => {
+  sendMessage: async (conversationId, content, attachments?, replyTo?, replyPreview?, mentions?, agentId?, runtimeConfig?) => {
     const resolveReplyPreview = (replyToId?: string): ReplyToPreview | null => {
       if (!replyToId) return null;
       const existing = get().messages[conversationId] ?? [];
@@ -182,6 +184,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
       optimisticStatus: 'sending',
       pendingAttachments: attachments,
       pendingAgentId: agentId,
+      pendingRuntimeConfig: runtimeConfig,
     };
 
     // Add optimistic message immediately
@@ -196,7 +199,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     });
 
     try {
-      const result = await msgApi.sendMessage(conversationId, content, 'user', attachments, replyTo, mentions, agentId);
+      const result = await msgApi.sendMessage(conversationId, content, 'user', attachments, replyTo, mentions, agentId, runtimeConfig);
       const msg = result.user_message;
       if (!msg) throw new Error('Server returned empty user_message');
       const patchedMsg = resolvedReplyPreview && !msg.reply_to_message
@@ -530,6 +533,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
         optMsg.reply_to ?? undefined,
         optMsg.mentions,
         optMsg.pendingAgentId,
+        optMsg.pendingRuntimeConfig,
       );
       if (!result.user_message) throw new Error('Server returned empty user_message');
       get().addMessage(conversationId, result.user_message);

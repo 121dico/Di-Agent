@@ -50,7 +50,7 @@ export const WebpageFrame: React.FC<Props> = ({ url, srcDoc }) => {
   };
 
   const sandbox = srcDoc
-    ? 'allow-scripts allow-modals allow-popups allow-popups-to-escape-sandbox allow-forms allow-top-navigation'
+    ? 'allow-scripts allow-modals allow-forms'
     : 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation';
 
   return (

@@ -121,15 +121,26 @@ type daemonBusMsg struct {
 // DaemonHub 管理所有 daemon WebSocket 连接，基于消息总线模式。
 // 与用户 Hub 相同设计：单 goroutine 事件循环 + sync.Map + buffered bus channel。
 type DaemonHub struct {
-	clients      sync.Map // machineID -> *DaemonClient
-	resultChans  sync.Map // taskID -> chan *TaskResult
-	taskMessages sync.Map // taskID -> messageID（daemon 丢字段时的兜底映射）
-	taskAgents   sync.Map // taskID -> agentName（PR3：message.streaming 广播时携带 agent_name）
-	bus          chan daemonBusMsg
-	logger       *slog.Logger
-	wg           sync.WaitGroup
-	draining     atomic.Bool
-	shutdownOnce sync.Once
+	clients        sync.Map // machineID -> *DaemonClient
+	resultChans    sync.Map // taskID -> chan *TaskResult
+	taskMessages   sync.Map // taskID -> messageID（daemon 丢字段时的兜底映射）
+	taskAgents     sync.Map // taskID -> agentName（PR3：message.streaming 广播时携带 agent_name）
+	agentApprovals sync.Map // approvalID -> AgentApprovalContext
+	bus            chan daemonBusMsg
+	logger         *slog.Logger
+	wg             sync.WaitGroup
+	draining       atomic.Bool
+	shutdownOnce   sync.Once
+}
+
+// AgentApprovalContext binds a daemon approval request to the authenticated task owner.
+type AgentApprovalContext struct {
+	ApprovalID     string
+	MachineID      string
+	TaskID         string
+	ConversationID string
+	UserID         string
+	ExpiresAt      time.Time
 }
 
 // NewDaemonHub 创建 DaemonHub 实例
@@ -189,6 +200,46 @@ func (dh *DaemonHub) DeleteTaskMessage(taskID string) {
 		return
 	}
 	dh.taskMessages.Delete(taskID)
+}
+
+// RegisterAgentApproval records the immutable ownership boundary for a pending request.
+func (dh *DaemonHub) RegisterAgentApproval(value AgentApprovalContext) {
+	if value.ApprovalID == "" || value.MachineID == "" || value.UserID == "" {
+		return
+	}
+	dh.agentApprovals.Store(value.ApprovalID, value)
+}
+
+// ResolveAgentApproval validates the deciding user/conversation, consumes the request once,
+// and forwards only an allowlisted decision to the originating daemon.
+func (dh *DaemonHub) ResolveAgentApproval(approvalID, userID, conversationID, decision string) error {
+	value, ok := dh.agentApprovals.Load(approvalID)
+	if !ok {
+		return errors.New("approval request not found")
+	}
+	approval := value.(AgentApprovalContext)
+	if approval.UserID != userID || approval.ConversationID != conversationID {
+		return errors.New("approval request owner mismatch")
+	}
+	if time.Now().After(approval.ExpiresAt) {
+		dh.agentApprovals.Delete(approvalID)
+		return errors.New("approval request expired")
+	}
+	if decision != "accept" && decision != "acceptForSession" && decision != "decline" {
+		return errors.New("invalid approval decision")
+	}
+	// Consume atomically so two browser tabs cannot approve the same operation twice.
+	if _, loaded := dh.agentApprovals.LoadAndDelete(approvalID); !loaded {
+		return errors.New("approval request already resolved")
+	}
+	return dh.SendToMachine(approval.MachineID, WSMessage{
+		Type: "task.approval_decision",
+		Data: map[string]interface{}{
+			"approval_id": approvalID,
+			"task_id":     approval.TaskID,
+			"decision":    decision,
+		},
+	})
 }
 
 // Run 启动 DaemonHub 消息总线事件循环，应在独立 goroutine 中调用

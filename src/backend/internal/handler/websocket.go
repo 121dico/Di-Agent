@@ -21,6 +21,13 @@ type WebSocketHandler struct {
 	msgSender      WSMessageSender
 	logger         *slog.Logger
 	allowedOrigins []string
+	daemonHub      *ws.DaemonHub
+}
+
+// SetDaemonHub enables authenticated Agent approval decisions without expanding the
+// existing constructor used by tests.
+func (h *WebSocketHandler) SetDaemonHub(daemonHub *ws.DaemonHub) {
+	h.daemonHub = daemonHub
 }
 
 // MemberChecker 校验用户是否为会话成员
@@ -242,6 +249,27 @@ func (h *WebSocketHandler) readLoop(ctx context.Context, client *ws.Client) {
 					},
 				})
 			}
+		case "agent.approval_decision":
+			var payload struct {
+				ApprovalID     string `json:"approval_id"`
+				ConversationID string `json:"conversation_id"`
+				Decision       string `json:"decision"`
+			}
+			raw, _ := json.Marshal(msg.Data)
+			if err := json.Unmarshal(raw, &payload); err != nil || h.daemonHub == nil {
+				h.hub.SendToUser(client.UserID, ws.WSMessage{Type: ws.TypeError, Data: map[string]string{"message": "审批请求无效"}})
+				continue
+			}
+			if ok, _ := h.memberChecker.IsConversationMember(ctx, payload.ConversationID, client.UserID); !ok {
+				continue
+			}
+			if err := h.daemonHub.ResolveAgentApproval(payload.ApprovalID, client.UserID, payload.ConversationID, payload.Decision); err != nil {
+				h.hub.SendToUser(client.UserID, ws.WSMessage{Type: ws.TypeError, Data: map[string]string{"message": "审批已失效或无权操作"}})
+				continue
+			}
+			h.hub.SendToUser(client.UserID, ws.WSMessage{Type: "agent.approval_resolved", Data: map[string]interface{}{
+				"approval_id": payload.ApprovalID, "conversation_id": payload.ConversationID, "decision": payload.Decision,
+			}})
 		default:
 			h.hub.SendToUser(client.UserID, ws.WSMessage{
 				Type: ws.TypeError,

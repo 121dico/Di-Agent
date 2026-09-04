@@ -1,0 +1,31 @@
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 28px;
+  margin-top: 3px;
+  color: var(--wb-text-tertiary);
+}
+
+.actions :global(.ant-btn) {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 8px;
+  color: var(--wb-text-tertiary);
+}
+
+.actions :global(.ant-btn:hover),
+.actions :global(.ant-btn:focus-visible) {
+  color: var(--wb-text-primary) !important;
+  background: var(--wb-surface-hover) !important;
+}
+
+@media (pointer: fine) {
+  .actions { opacity: .68; }
+  .actions:hover, .actions:focus-within { opacity: 1; }
+}
+
+@media (max-width: 720px) {
+  .actions :global(.ant-btn) { width: 32px; height: 32px; }
+}

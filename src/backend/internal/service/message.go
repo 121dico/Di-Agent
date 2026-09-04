@@ -301,6 +301,7 @@ var (
 	ErrMsgAgentNoPerm       = errors.New("无权使用此 Agent")
 	ErrMsgAgentOffline      = errors.New("Agent 未连接电脑，无法执行真实 CLI")
 	ErrMsgAgentTimeout      = errors.New("Agent 执行超时")
+	ErrMsgInvalidRuntime    = errors.New("Agent 运行配置无效")
 	ErrMsgBlackboardTooLong = errors.New("黑板内容过长")
 )
 
@@ -415,6 +416,15 @@ func (s *MessageService) SendMessageWithMentions(ctx context.Context, convID, us
 
 // SendMessageWithReply 发送消息（支持回复引用和 Agent 回复）
 func (s *MessageService) SendMessageWithReply(ctx context.Context, convID, userID, role, content, artifactsJSON string, attachments []model.MessageAttachment, replyTo *string, agentID string, mentions []string) (*SendMessageResult, error) {
+	return s.SendMessageWithRuntime(ctx, convID, userID, role, content, artifactsJSON, attachments, replyTo, agentID, mentions, model.AgentRuntimeConfig{})
+}
+
+// SendMessageWithRuntime snapshots the selected model, reasoning and approval policy for this turn.
+func (s *MessageService) SendMessageWithRuntime(ctx context.Context, convID, userID, role, content, artifactsJSON string, attachments []model.MessageAttachment, replyTo *string, agentID string, mentions []string, runtimeConfig model.AgentRuntimeConfig) (*SendMessageResult, error) {
+	normalizedRuntime, err := NormalizeAgentRuntimeConfig(runtimeConfig)
+	if err != nil {
+		return nil, err
+	}
 	if len(content) > maxMessageLen {
 		return nil, ErrMsgTooLong
 	}
@@ -473,7 +483,7 @@ func (s *MessageService) SendMessageWithReply(ctx context.Context, convID, userI
 		}
 		slog.Info("agent chat dispatch resolved", "conversation_id", convID, "agent_id", resolvedAgentID, "provided_agent_id", strings.TrimSpace(agentID) != "")
 		if resolvedAgentID != "" {
-			go s.asyncAgentReply(convID, userID, resolvedAgentID, content, msg.Attachments, &msg.ID)
+			go s.asyncAgentReply(convID, userID, resolvedAgentID, content, msg.Attachments, &msg.ID, normalizedRuntime)
 		}
 	case "group":
 		// Group chat — mention routing via Orchestrator
@@ -1180,7 +1190,7 @@ func (s *MessageService) buildAgentHandoffs(ctx context.Context, convID string) 
 }
 
 // createAgentReply 生成 Agent 回复消息
-func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, agentID, userContent, contextMessages string, replyTo *string) (*model.Message, error) {
+func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, agentID, userContent, contextMessages string, replyTo *string, runtimeConfig ...model.AgentRuntimeConfig) (*model.Message, error) {
 	if s.agentRepo == nil {
 		return nil, ErrAgentNotFound
 	}
@@ -1208,7 +1218,21 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 		return nil, fmt.Errorf("agent %q 已被用户停止", agent.Name)
 	}
 
-	task, err := s.agentRepo.CreateDaemonTask(ctx, userID, convID, agent.ID, *agent.MachineID, agent.CLITool, agent.RuntimeVariant, userContent, contextMessages)
+	selectedRuntime := model.AgentRuntimeConfig{}
+	if len(runtimeConfig) > 0 {
+		selectedRuntime = runtimeConfig[0]
+	}
+	var task *model.DaemonTask
+	if creator, ok := s.agentRepo.(interface {
+		CreateDaemonTaskWithRuntime(context.Context, string, string, string, string, string, string, string, string, model.AgentRuntimeConfig) (*model.DaemonTask, error)
+	}); ok {
+		task, err = creator.CreateDaemonTaskWithRuntime(ctx, userID, convID, agent.ID, *agent.MachineID, agent.CLITool, agent.RuntimeVariant, userContent, contextMessages, selectedRuntime)
+	} else {
+		task, err = s.agentRepo.CreateDaemonTask(ctx, userID, convID, agent.ID, *agent.MachineID, agent.CLITool, agent.RuntimeVariant, userContent, contextMessages)
+		if task != nil {
+			task.RuntimeConfig = selectedRuntime
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("create daemon task: %w", err)
 	}
@@ -1258,6 +1282,7 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 			"conversation_id":  convID,
 			"user_id":          userID,
 			"message_id":       handle.MessageID,
+			"runtime_config":   task.RuntimeConfig,
 		},
 	}); err != nil {
 		// dispatch 失败也标 error
@@ -1416,8 +1441,7 @@ func (s *MessageService) asyncMentionDispatch(convID, userID, sourceMessageID, c
 }
 
 // asyncAgentReply 异步执行 agentID 路径回复，不阻塞 HTTP 响应。
-// asyncAgentReply 异步执行 agentID 路径回复，不阻塞 HTTP 响应。
-func (s *MessageService) asyncAgentReply(convID, userID, agentID, content string, attachments []model.MessageAttachment, replyTo *string) {
+func (s *MessageService) asyncAgentReply(convID, userID, agentID, content string, attachments []model.MessageAttachment, replyTo *string, runtimeConfig model.AgentRuntimeConfig) {
 	slog.Info("asyncAgentReply ENTER", "conversation_id", convID, "agent_id", agentID, "reply_to", stringValue(replyTo), "goroutine", "started")
 
 	defer func() {
@@ -1459,7 +1483,7 @@ func (s *MessageService) asyncAgentReply(convID, userID, agentID, content string
 		}
 	}
 
-	agentMsg, err := s.createAgentReply(ctx, convID, userID, agentID, content, contextMessages, replyTo)
+	agentMsg, err := s.createAgentReply(ctx, convID, userID, agentID, content, contextMessages, replyTo, runtimeConfig)
 	if err != nil {
 		slog.Warn("agent reply failed", "convID", convID, "agentID", agentID, "error", err)
 		s.postAgentFailure(ctx, convID, userID, "Agent 调用失败："+shortAgentError(err), replyTo)

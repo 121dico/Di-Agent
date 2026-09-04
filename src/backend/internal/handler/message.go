@@ -32,6 +32,7 @@ type SendMessageRequest struct {
 	ReplyTo       *string                   `json:"reply_to"`
 	AgentID       string                    `json:"agent_id"`
 	Mentions      []string                  `json:"mentions"`
+	RuntimeConfig model.AgentRuntimeConfig  `json:"runtime_config"`
 }
 
 // BlackboardRequest updates user-authored conversation blackboard context.
@@ -54,7 +55,7 @@ func (h *MessageHandler) Send(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
-	msg, err := h.svc.SendMessageWithReply(c.Request.Context(), convID, userID, req.Role, req.Content, req.ArtifactsJSON, req.Attachments, req.ReplyTo, req.AgentID, req.Mentions)
+	msg, err := h.svc.SendMessageWithRuntime(c.Request.Context(), convID, userID, req.Role, req.Content, req.ArtifactsJSON, req.Attachments, req.ReplyTo, req.AgentID, req.Mentions, req.RuntimeConfig)
 	if err != nil {
 		slog.Error("send message failed", "error", err, "convID", convID, "userID", userID)
 		if errors.Is(err, service.ErrMsgConvNotFound) {
@@ -75,6 +76,10 @@ func (h *MessageHandler) Send(c *gin.Context) {
 		}
 		if errors.Is(err, service.ErrMsgEmptyContent) {
 			middleware.ErrorResponse(c, http.StatusBadRequest, 40042, err.Error())
+			return
+		}
+		if errors.Is(err, service.ErrMsgInvalidRuntime) {
+			middleware.ErrorResponse(c, http.StatusBadRequest, 40043, err.Error())
 			return
 		}
 		if errors.Is(err, service.ErrAgentNotFound) {

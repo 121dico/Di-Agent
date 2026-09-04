@@ -2,6 +2,7 @@ import type { MessageAttachment } from './attachment';
 import type { AttachmentPayload } from './attachment';
 import type { Deployment } from './deployment';
 import type { AgentEvent } from './agentEvent';
+import type { AgentRuntimeConfig } from './agentRuntime';
 
 // 重新导出，保持现有 `import { AgentEvent } from '@/types/message'` 的兼容性。
 export type { AgentEvent, AgentEventType, AgentEventEnvelope } from './agentEvent';
@@ -117,6 +118,7 @@ export interface OptimisticMessage extends Message {
   /** Original attachment payloads used when sending, for retry */
   pendingAttachments?: AttachmentPayload[];
   pendingAgentId?: string;
+  pendingRuntimeConfig?: AgentRuntimeConfig;
 }
 
 export type DisplayMessage = Message | OptimisticMessage;
@@ -135,7 +137,7 @@ export interface MessageArtifacts {
 }
 
 export interface StreamMessage {
-  type: 'message.streaming' | 'message.complete' | 'agent.status' | 'user.typing_start' | 'user.typing_stop' | 'agent.typing_start' | 'agent.typing_stop' | 'message.recall' | 'task.changed' | 'conversation.role_changed' | 'error';
+  type: 'message.streaming' | 'message.complete' | 'agent.status' | 'user.typing_start' | 'user.typing_stop' | 'agent.typing_start' | 'agent.typing_stop' | 'message.recall' | 'task.changed' | 'conversation.role_changed' | 'agent.approval_required' | 'agent.approval_resolved' | 'error';
   data: {
     conversationId?: string;
     conversation_id?: string;

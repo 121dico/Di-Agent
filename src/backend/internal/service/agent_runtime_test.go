@@ -92,3 +92,36 @@ func TestAgentRuntimeOverviewReturnsEmptyRecentRuns(t *testing.T) {
 		t.Fatalf("recent_runs = %#v, want non-nil empty slice", got.RecentRuns)
 	}
 }
+
+func TestNormalizeAgentRuntimeConfigDefaultsSafely(t *testing.T) {
+	got, err := NormalizeAgentRuntimeConfig(model.AgentRuntimeConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ReasoningEffort != "medium" || got.ApprovalMode != "auto" || got.Version != 1 {
+		t.Fatalf("unexpected defaults: %#v", got)
+	}
+}
+
+func TestNormalizeAgentRuntimeConfigAcceptsSupportedCodexValues(t *testing.T) {
+	got, err := NormalizeAgentRuntimeConfig(model.AgentRuntimeConfig{
+		Version: 1, Model: "gpt-5.6-sol", ReasoningEffort: "high", ApprovalMode: "request",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Model != "gpt-5.6-sol" || got.ReasoningEffort != "high" || got.ApprovalMode != "request" {
+		t.Fatalf("unexpected normalized config: %#v", got)
+	}
+}
+
+func TestNormalizeAgentRuntimeConfigRejectsRawFlags(t *testing.T) {
+	_, err := NormalizeAgentRuntimeConfig(model.AgentRuntimeConfig{
+		Model:           "--dangerously-bypass-approvals-and-sandbox",
+		ReasoningEffort: "medium",
+		ApprovalMode:    "auto",
+	})
+	if err == nil {
+		t.Fatal("expected unsupported model to be rejected")
+	}
+}

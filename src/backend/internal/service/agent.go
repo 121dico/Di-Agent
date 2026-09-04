@@ -96,6 +96,12 @@ func (s *AgentService) CompleteDaemonTask(ctx context.Context, machine *model.Da
 	return task, nil
 }
 
+// GetDaemonTask returns the in-memory task so daemon-originated side channels can be
+// checked against the authenticated machine and task owner.
+func (s *AgentService) GetDaemonTask(ctx context.Context, taskID string) (*model.DaemonTask, error) {
+	return s.repo.GetDaemonTask(ctx, taskID)
+}
+
 var (
 	ErrAgentNotFound     = errors.New("Agent 不存在")
 	ErrAgentInvalidInput = errors.New("Agent 参数无效")

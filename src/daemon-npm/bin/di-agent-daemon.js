@@ -1117,6 +1117,54 @@ let currentDaemonWs = null;
 const activeTaskIDs = new Set();
 const completedTaskIDs = new Set();
 const pendingTaskCompletions = new Map(); // taskID → task.complete data, flushed after WS reconnect
+const pendingAgentApprovals = new Map(); // approvalID → { resolve, timer }
+
+function requestAgentApproval(request) {
+  return new Promise((resolve) => {
+    const approvalId = crypto.randomUUID();
+    const timeoutMs = 5 * 60 * 1000;
+    const timer = setTimeout(() => {
+      pendingAgentApprovals.delete(approvalId);
+      resolve('decline');
+    }, timeoutMs);
+    timer.unref();
+    pendingAgentApprovals.set(approvalId, { resolve, timer });
+    const sent = safeSend(currentDaemonWs, JSON.stringify({
+      type: 'task.approval_required',
+      data: {
+        approval_id: approvalId,
+        task_id: request.task_id || '',
+        conversation_id: request.conversation_id || '',
+        agent_id: request.agent_id || '',
+        user_id: request.user_id || '',
+        kind: request.kind || 'action',
+        method: request.method || '',
+        details: request.params || {},
+        expires_in_ms: timeoutMs,
+      },
+    }));
+    if (!sent) {
+      clearTimeout(timer);
+      pendingAgentApprovals.delete(approvalId);
+      resolve('decline');
+    }
+  });
+}
+
+function resolveAgentApproval(data) {
+  const approvalId = data && data.approval_id;
+  const pending = approvalId ? pendingAgentApprovals.get(approvalId) : null;
+  if (!pending) return false;
+  pendingAgentApprovals.delete(approvalId);
+  clearTimeout(pending.timer);
+  const decision = data.decision === 'acceptForSession'
+    ? 'acceptForSession'
+    : data.decision === 'accept'
+      ? 'accept'
+      : 'decline';
+  pending.resolve(decision);
+  return true;
+}
 
 // Per-conversation session mapping: `${agent_id}:${conversation_id}` → sessionId
 // 持久化路径在顶部 CONFIG.sessionsFile。
@@ -2097,6 +2145,7 @@ const initCliToolsCtx = {
   agentTurnStates,
   // step2: createAsyncQueue（spec.claude.spawnPersistent 构造事件队列）
   createAsyncQueue: require('../cli/events').createAsyncQueue,
+  requestApproval: requestAgentApproval,
   // prompt / context 辅助
   buildPlatformMcpArgs,
   buildDiAgentContextEnv,
@@ -2821,9 +2870,15 @@ function spawnStreamJsonProcess(agentId, sessionId, systemPrompt, resume, conver
  * 注：WS event name（agent.*）是前端约定的对外协议，保持原样不动；只改函数名和内部
  * 通用性。前端不会感知到这个函数改名。
  */
-async function dispatchToPersistentSlot(ws, agentId, conversationId, userId, prompt, systemPrompt, taskCtx, cliTool = 'claude', onEvent = null, forceFresh = false, runtimeVariant) {
+async function dispatchToPersistentSlot(ws, agentId, conversationId, userId, prompt, systemPrompt, taskCtx, cliTool = 'claude', onEvent = null, forceFresh = false, runtimeVariant, runtimeConfig) {
   const sessionKey = `${agentId}:${conversationId}`;
   const slotKey = runtimeAgentKey(agentId, conversationId);
+  const approvalContext = {
+    task_id: taskCtx && taskCtx.taskId,
+    agent_id: agentId,
+    conversation_id: conversationId,
+    user_id: userId,
+  };
   if (forceFresh) {
     stopRuntimeSlot(slotKey);
     if (slotKey !== agentId) stopRuntimeSlot(agentId);
@@ -2877,7 +2932,7 @@ async function dispatchToPersistentSlot(ws, agentId, conversationId, userId, pro
     // 注入本次 task 的 onEvent 到 slot.eventRef（persistent agent 跨 task 复用）
     if (slot.eventRef && typeof onEvent === 'function') slot.eventRef.current = onEvent;
     try {
-      const response = await slot.sendPrompt(prompt);
+      const response = await slot.sendPrompt(prompt, runtimeConfig, approvalContext);
       if (response.error) throw new Error(response.error);
       return response.result;
     } finally {
@@ -2910,7 +2965,7 @@ async function dispatchToPersistentSlot(ws, agentId, conversationId, userId, pro
       slot.currentConversationId = conversationId;
       if (slot.eventRef && typeof onEvent === 'function') slot.eventRef.current = onEvent;
       try {
-        const response = await slot.sendPrompt(prompt);
+        const response = await slot.sendPrompt(prompt, runtimeConfig, approvalContext);
         if (response.error) throw new Error(response.error);
         return response.result;
       } finally {
@@ -2991,7 +3046,7 @@ async function dispatchToPersistentSlot(ws, agentId, conversationId, userId, pro
   });
 
   try {
-    const response = await sendPrompt(prompt);
+    const response = await sendPrompt(prompt, runtimeConfig, approvalContext);
     if (response.error) throw new Error(response.error);
     return response.result;
   } finally {
@@ -3139,6 +3194,7 @@ async function handleTaskDispatch(ws, data) {
     force_fresh_session: data.force_fresh_session === true,
     session_generation: Number(data.session_generation || 0),
     checkpoint_id: data.checkpoint_id || '',
+    runtime_config: data.runtime_config || {},
   };
   if (task.force_fresh_session) {
     task._sessionId = crypto.randomUUID();
@@ -3243,7 +3299,7 @@ async function handleTaskDispatch(ws, data) {
         conversation_id: task.conversation_id,
         mode: 'persistent_slot',
       });
-      result = await dispatchToPersistentSlot(ws, task.agent_id, task.conversation_id, task.user_id, userPrompt, systemPrompt, taskCtx, task.cli_tool, onEvent, task.force_fresh_session, task.runtime_variant);
+      result = await dispatchToPersistentSlot(ws, task.agent_id, task.conversation_id, task.user_id, userPrompt, systemPrompt, taskCtx, task.cli_tool, onEvent, task.force_fresh_session, task.runtime_variant, task.runtime_config);
     } else {
       logFlow('info', 'task.execution_start', {
         task_id: task.id,
@@ -3313,6 +3369,7 @@ registerWsHandler('task.cancel', (ws, data) => {
   bus.emit('task.cancel', { ws, data });
   return true;
 });
+registerWsHandler('task.approval_decision', (_ws, data) => resolveAgentApproval(data));
 
 // 部署已改为 MCP 工具（deploy_project / stop_deploy），不经 WS 下发。
 // daemon 主进程只负责 TTL 清理（scanAndCleanupDeploys，见 main()）。

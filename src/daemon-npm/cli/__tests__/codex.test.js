@@ -139,6 +139,63 @@ test('codex persistent adapter launches the resolved runtime through process nor
   assert.deepStrictEqual(selections, [{ cliTool: 'codex', runtimeVariant: 'desktop' }]);
 });
 
+test('codex persistent adapter sends model, reasoning and safe approval controls per turn', async () => {
+  const harness = buildPersistentHarness();
+  const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({
+    agentId: 'agent-controls',
+    conversationId: 'conv-controls',
+    userId: 'user-controls',
+  }, harness.ctx);
+
+  await runtime.sendPrompt('hello', {
+    version: 1,
+    model: 'gpt-5.6-sol',
+    reasoning_effort: 'high',
+    approval_mode: 'request',
+  });
+
+  const turnStart = harness.child.stdin.writes
+    .map((line) => JSON.parse(line))
+    .find((message) => message.method === 'turn/start');
+  assert.strictEqual(turnStart.params.model, 'gpt-5.6-sol');
+  assert.strictEqual(turnStart.params.effort, 'high');
+  assert.strictEqual(turnStart.params.approvalPolicy, 'untrusted');
+  assert.strictEqual(turnStart.params.approvalsReviewer, 'user');
+  assert.strictEqual(turnStart.params.sandboxPolicy.type, 'workspaceWrite');
+});
+
+test('codex persistent adapter answers app-server approval requests through the daemon callback', async () => {
+  const requests = [];
+  const harness = buildPersistentHarness({
+    requestApproval: async (request) => {
+      requests.push(request);
+      return 'accept';
+    },
+  });
+  const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({
+    agentId: 'agent-approval',
+    conversationId: 'conv-approval',
+    userId: 'user-approval',
+  }, harness.ctx);
+
+  const response = runtime.sendPrompt('run pwd', { approval_mode: 'request' });
+  await new Promise((resolve) => setImmediate(resolve));
+  harness.child.stdout.emit('data', `${JSON.stringify({
+    jsonrpc: '2.0',
+    id: 88,
+    method: 'item/commandExecution/requestApproval',
+    params: { command: 'pwd', reason: 'inspect workdir' },
+  })}\n`);
+  await response;
+
+  assert.strictEqual(requests.length, 1);
+  assert.strictEqual(requests[0].kind, 'command');
+  const approvalResponse = harness.child.stdin.writes
+    .map((line) => JSON.parse(line))
+    .find((message) => message.id === 88);
+  assert.deepStrictEqual(approvalResponse.result, { decision: 'accept' });
+});
+
 test('codex persistent adapter returns an actionable protocol timeout', async () => {
   const child = fakeCodexChild();
   const harness = buildPersistentHarness({

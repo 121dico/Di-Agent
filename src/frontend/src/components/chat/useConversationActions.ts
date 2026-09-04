@@ -10,6 +10,7 @@ import { copyText } from '@/utils/clipboard';
 import { message } from '@/utils/message';
 import {
   conversationToMarkdown,
+  forkConversationFromMessage,
   forkConversationFromLatest,
   hasExportableMessage,
   loadCompleteConversation,
@@ -38,12 +39,14 @@ export function useConversationActions({
 }: UseConversationActionsInput) {
   const [copying, setCopying] = useState(false);
   const [forking, setForking] = useState(false);
+  const [forkingMessageId, setForkingMessageId] = useState<string | null>(null);
   const activeConversationIdRef = useRef(conversation?.id);
 
   useEffect(() => {
     activeConversationIdRef.current = conversation?.id;
     setCopying(false);
     setForking(false);
+    setForkingMessageId(null);
   }, [conversation?.id]);
 
   const forkAgentId = useMemo(
@@ -108,11 +111,56 @@ export function useConversationActions({
     }
   }, [conversation, createFork, forkAgentId, forkDisabledReason, forking, onForkCreated]);
 
+  const forkMessage = useCallback(async (selected: Message) => {
+    if (!conversation || selected.role !== 'assistant' || selected.status === 'streaming' || forkingMessageId) return;
+    let selectedAgentId = '';
+    if (selected.artifacts_json) {
+      try {
+        const metadata = JSON.parse(selected.artifacts_json) as { agent_id?: unknown };
+        if (typeof metadata.agent_id === 'string') selectedAgentId = metadata.agent_id;
+      } catch {
+        // Legacy message metadata can be invalid; direct-chat fallback below stays usable.
+      }
+    }
+    selectedAgentId ||= conversation.type === 'agent' ? (conversation.peer_id ?? '') : forkAgentId;
+    if (!selectedAgentId) {
+      message.error('无法确定这条回复对应的 Agent');
+      return;
+    }
+
+    setForkingMessageId(selected.id);
+    try {
+      await forkConversationFromMessage(
+        { conversationId: conversation.id, messageId: selected.id, agentId: selectedAgentId },
+        {
+          createCheckpoint: createConversationCheckpoint,
+          readCheckpoint: getConversationCheckpoint,
+          createFork: (sourceConversationId, request) => {
+            if (activeConversationIdRef.current !== sourceConversationId) {
+              throw new Error('已切换对话，本次 Fork 已取消');
+            }
+            return createFork(sourceConversationId, request);
+          },
+        },
+      );
+      onForkCreated?.();
+      message.success('已从此回复创建 Fork');
+    } catch (error) {
+      message.error(error instanceof Error && error.message
+        ? error.message
+        : '创建 Fork 失败，请稍后重试');
+    } finally {
+      setForkingMessageId(null);
+    }
+  }, [conversation, createFork, forkAgentId, forkingMessageId, onForkCreated]);
+
   return {
     copying,
     forking,
+    forkingMessageId,
     forkDisabledReason,
     copyConversation,
     forkConversation,
+    forkMessage,
   };
 }

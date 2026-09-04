@@ -21,3 +21,12 @@ type AgentRuntimeRecentRun struct {
 	Status         string    `json:"status" db:"status"`
 	CreatedAt      time.Time `json:"created_at" db:"created_at"`
 }
+
+// AgentRuntimeConfig is the validated, per-message execution policy sent to a daemon.
+// It deliberately exposes only an allowlisted product contract, never arbitrary CLI flags.
+type AgentRuntimeConfig struct {
+	Version         int    `json:"version"`
+	Model           string `json:"model,omitempty"`
+	ReasoningEffort string `json:"reasoning_effort"`
+	ApprovalMode    string `json:"approval_mode"`
+}

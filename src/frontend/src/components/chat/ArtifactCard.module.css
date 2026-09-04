@@ -4,8 +4,8 @@
   min-width: 0;
   max-width: 100%;
   flex-direction: column;
-  gap: 10px;
-  margin: 8px 0 2px;
+  gap: 8px;
+  margin: 10px 0 3px;
 }
 
 /* webpage 卡片 */
@@ -13,10 +13,10 @@
   min-width: 0;
   max-width: 100%;
   border: 1px solid var(--wb-border-subtle);
-  border-radius: var(--radius-4);
+  border-radius: 14px;
   overflow: hidden;
   cursor: pointer;
-  transition: box-shadow var(--motion-control) var(--ease-standard), border-color var(--motion-control) var(--ease-standard);
+  background: var(--wb-surface);
 }
 
 .webCard:hover {
@@ -26,7 +26,7 @@
 
 .webPreview {
   position: relative;
-  height: 180px;
+  height: 210px;
   overflow: hidden;
   background: #fff;
   pointer-events: none; /* 缩略预览不可交互，点击落到卡片上展开全屏 */
@@ -36,8 +36,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
-  background: var(--wb-surface-subtle);
+  padding: 10px 12px;
+  border-top: 1px solid var(--wb-border-subtle);
+  background: var(--wb-surface);
 }
 
 .webIcon {
@@ -74,12 +75,12 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px;
+  min-height: 58px;
+  padding: 10px 12px;
   border: 1px solid var(--wb-border-subtle);
   border-radius: var(--radius-4);
-  background: var(--wb-surface-subtle);
+  background: var(--wb-surface);
   cursor: pointer;
-  transition: box-shadow var(--transition-fast), border-color var(--transition-fast);
 }
 
 @media (max-width: 1100px) {

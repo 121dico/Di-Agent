@@ -74,6 +74,7 @@ export interface ContextUsage {
 export interface CreateCheckpointRequest {
   agent_id: string;
   scope: CheckpointScope;
+  source_to_message_id?: string;
 }
 
 export interface ContinueCheckpointRequest {

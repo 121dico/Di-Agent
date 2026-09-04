@@ -21,7 +21,7 @@ interface ThinkingBlockProps {
  * UX 设计（参考 Claude Code / ChatGPT 思考 UI）：
  *   - 折叠时显示脑图标 + "已思考 Ns"（或 "思考中..." pulse）
  *   - streaming 时自动展开，展示流式 token + 末尾光标
- *   - streaming 结束后 300ms 延迟自动收起（避免立即抖动）
+ *   - streaming 结束后自动收起
  *   - 用户手动 toggle 后，不再自动收起（尊重用户意图）
  *   - 平滑 max-height 过渡（CSS transition）
  *
@@ -55,9 +55,7 @@ function ThinkingBlockInner({ block, defaultExpanded = false, streaming = false 
         streamStartRef.current = null;
       }
       if (!userTouched.current) {
-        // 300ms 延迟，让光标先消失再收起，避免视觉抖动
-        const timer = setTimeout(() => setExpanded(false), 300);
-        return () => clearTimeout(timer);
+        setExpanded(false);
       }
     }
   }, [streaming]);
