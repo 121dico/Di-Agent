@@ -67,6 +67,14 @@
 }
 .inputRow:focus-within { border-color: rgba(10, 102, 255, .46); box-shadow: var(--shadow-input-focus), 0 8px 24px rgba(29, 29, 31, .075); }
 
+.contextDock {
+  display: flex;
+  justify-content: flex-end;
+  width: min(100%, var(--chat-reading-width));
+  margin: 0 auto 6px;
+  padding-inline: 2px;
+}
+
 .sendError {
   width: min(100%, var(--chat-reading-width));
   min-height: 36px;
@@ -156,7 +164,6 @@
 .contextBtn,
 .conversationActionBtn,
 .expandBtn,
-.voiceBtn,
 .sendBtn {
   flex-shrink: 0;
   width: 32px;
@@ -167,16 +174,14 @@
 .attachBtn,
 .contextBtn,
 .conversationActionBtn,
-.expandBtn,
-.voiceBtn {
+.expandBtn {
   color: var(--color-text-secondary);
 }
 
 .attachBtn:hover,
 .contextBtn:hover,
 .conversationActionBtn:hover,
-.expandBtn:hover,
-.voiceBtn:hover {
+.expandBtn:hover {
   color: var(--wb-text-primary) !important;
   background: var(--wb-surface-hover) !important;
 }
@@ -212,11 +217,6 @@
   background: rgba(118, 118, 128, .12) !important;
   border: none !important;
   box-shadow: none;
-}
-
-.voiceBtn:disabled {
-  color: var(--wb-text-tertiary) !important;
-  background: transparent !important;
 }
 
 .sendBtn:not(:disabled) {
@@ -536,7 +536,7 @@
   .composerFooter { gap: 4px; }
   .footerRight { gap: 2px; }
   .mentionDropdown { width: calc(100% - 28px); }
-  .attachBtn, .contextBtn, .conversationActionBtn, .expandBtn, .voiceBtn { width: 30px; height: 30px; }
+  .attachBtn, .contextBtn, .conversationActionBtn, .expandBtn { width: 30px; height: 30px; }
   .sendBtn, .sendBtn:disabled { width: 36px; height: 36px; }
   .contextBtn { min-width: 30px; padding-inline: 0; }
   .contextBtnLabel { display: none; }
@@ -553,7 +553,7 @@
   .footerLeft { gap: 1px; }
   .footerRight { gap: 2px; }
   .footerSecondaryActions { gap: 0; }
-  .attachBtn, .contextBtn, .conversationActionBtn, .expandBtn, .voiceBtn { width: 30px; height: 30px; }
+  .attachBtn, .contextBtn, .conversationActionBtn, .expandBtn { width: 30px; height: 30px; }
   .sendBtn, .sendBtn:disabled { width: 36px; height: 36px; }
   .contextBtn { min-width: 30px; padding-inline: 0; }
   .contextBtnLabel { display: none; }

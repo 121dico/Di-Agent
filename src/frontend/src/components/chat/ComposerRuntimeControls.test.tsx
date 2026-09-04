@@ -2,6 +2,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   ComposerApprovalControl,
@@ -31,7 +32,7 @@ afterEach(() => {
 });
 
 describe('Composer runtime controls', () => {
-  it('exposes model and reasoning as independent controls with a combined summary', () => {
+  it('exposes model, reasoning, and fast service tier as independent controls', () => {
     const markup = renderToStaticMarkup(
       <ComposerRuntimeControls
         value={{
@@ -45,9 +46,32 @@ describe('Composer runtime controls', () => {
 
     expect(markup).toContain('aria-label="选择模型，当前 5.6 Sol"');
     expect(markup).toContain('aria-label="选择推理强度，当前 高"');
+    expect(markup).toContain('aria-label="极速模式，当前关闭"');
+    expect(markup).toContain('aria-pressed="false"');
     expect(markup).toContain('5.6 Sol');
     expect(markup).toContain('高');
     expect(markup).not.toContain('选择审批模式');
+  });
+
+  it('toggles priority independently and disables it for unsupported models', () => {
+    const onChange = vi.fn();
+    const priorityMarkup = renderToStaticMarkup(
+      <ComposerRuntimeControls
+        value={{ ...DEFAULT_AGENT_RUNTIME_CONFIG, model: 'gpt-5.6-sol', service_tier: 'priority' }}
+        onChange={onChange}
+      />,
+    );
+    expect(priorityMarkup).toContain('aria-label="极速模式，当前开启"');
+    expect(priorityMarkup).toContain('aria-pressed="true"');
+
+    const unsupportedMarkup = renderToStaticMarkup(
+      <ComposerRuntimeControls
+        value={{ ...DEFAULT_AGENT_RUNTIME_CONFIG, model: 'gpt-5.4-mini' }}
+        onChange={onChange}
+      />,
+    );
+    expect(unsupportedMarkup).toContain('aria-label="极速模式不可用：当前模型不支持"');
+    expect(unsupportedMarkup).toContain('disabled=""');
   });
 
   it('keeps approval as a separate left-side control', () => {
@@ -60,6 +84,13 @@ describe('Composer runtime controls', () => {
 
     expect(markup).toContain('aria-label="选择审批模式，当前 完全访问"');
     expect(markup).toContain('完全访问');
+  });
+
+  it('scopes the selected and hover full-access row to a pale warning surface', () => {
+    const css = readFileSync('src/components/chat/ComposerControls.module.css', 'utf8');
+    expect(css).toContain('.dangerMenuItem:global(.ant-dropdown-menu-item-selected)');
+    expect(css).toContain('background: rgba(245, 98, 0, .1) !important;');
+    expect(css).not.toMatch(/dangerMenuItem[^}]*background:\s*(?:#000|black|rgba\(0,\s*0,\s*0)/);
   });
 
   it('offers the full model list and emits only the selected model change', async () => {
@@ -89,7 +120,22 @@ describe('Composer runtime controls', () => {
     expect(onChange).toHaveBeenCalledWith({
       ...DEFAULT_AGENT_RUNTIME_CONFIG,
       model: 'gpt-5.4-mini',
+      service_tier: 'default',
     });
+  });
+
+  it('emits a priority service-tier change from the fast toggle', () => {
+    const onChange = vi.fn();
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mounted.push({ container, unmount: () => root.unmount() });
+    const value = { ...DEFAULT_AGENT_RUNTIME_CONFIG, model: 'gpt-5.6-sol' as const };
+    act(() => root.render(<ComposerRuntimeControls value={value} onChange={onChange} />));
+
+    const fastButton = container.querySelector<HTMLButtonElement>('[aria-label^="极速模式，"]');
+    act(() => fastButton?.click());
+    expect(onChange).toHaveBeenCalledWith({ ...value, service_tier: 'priority' });
   });
 
   it('opens reasoning separately and preserves the selected model', async () => {
@@ -132,6 +178,7 @@ describe('Composer runtime controls', () => {
     });
     const option = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
       .find((item) => item.textContent?.includes('完全访问'));
+    expect(option?.className).toContain('dangerMenuItem');
     await act(async () => option?.click());
     expect(onChange).toHaveBeenCalledWith({ ...value, approval_mode: 'full' });
   });

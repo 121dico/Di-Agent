@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Dropdown } from 'antd';
+import { Button, Dropdown, Tooltip } from 'antd';
 import {
   CheckOutlined,
   DownOutlined,
@@ -9,6 +9,7 @@ import {
 import type { MenuProps } from 'antd';
 import {
   CODEX_MODEL_OPTIONS,
+  supportsPriorityServiceTier,
   type AgentApprovalMode,
   type AgentReasoningEffort,
   type AgentRuntimeConfig,
@@ -40,6 +41,8 @@ interface ComposerRuntimeControlsProps {
 export const ComposerRuntimeControls: React.FC<ComposerRuntimeControlsProps> = ({ value, onChange }) => {
   const modelLabel = CODEX_MODEL_OPTIONS.find((item) => item.value === value.model)?.label ?? 'Default';
   const effortLabel = EFFORTS.find((item) => item.value === value.reasoning_effort)?.label ?? '中';
+  const prioritySupported = supportsPriorityServiceTier(value.model);
+  const priorityEnabled = prioritySupported && value.service_tier === 'priority';
 
   const modelItems: MenuProps['items'] = CODEX_MODEL_OPTIONS.map((option) => ({
     key: `model:${option.value || 'default'}`,
@@ -50,7 +53,14 @@ export const ComposerRuntimeControls: React.FC<ComposerRuntimeControlsProps> = (
       </span>
     ),
     icon: value.model === option.value ? <CheckOutlined /> : null,
-    onClick: () => onChange({ ...value, model: option.value as AgentRuntimeModel }),
+    onClick: () => {
+      const model = option.value as AgentRuntimeModel;
+      onChange({
+        ...value,
+        model,
+        service_tier: supportsPriorityServiceTier(model) ? value.service_tier : 'default',
+      });
+    },
   }));
   const effortItems: MenuProps['items'] = EFFORTS.map((option) => ({
     key: `effort:${option.value}`,
@@ -60,7 +70,10 @@ export const ComposerRuntimeControls: React.FC<ComposerRuntimeControlsProps> = (
   }));
 
   return (
-    <div className={styles.runtimeControls} aria-label={`当前运行设置：${modelLabel}，推理强度${effortLabel}`}>
+    <div
+      className={styles.runtimeControls}
+      aria-label={`当前运行设置：${modelLabel}，推理强度${effortLabel}，极速${priorityEnabled ? '开启' : '关闭'}`}
+    >
       <Dropdown
         menu={{
           items: modelItems,
@@ -97,6 +110,26 @@ export const ComposerRuntimeControls: React.FC<ComposerRuntimeControlsProps> = (
           <DownOutlined className={styles.chevron} />
         </Button>
       </Dropdown>
+      <Tooltip title={prioritySupported ? '极速模式' : '当前模型不支持极速模式'}>
+        <span className={styles.fastToggleWrap}>
+          <Button
+            type="text"
+            className={`${styles.runtimeSegment} ${styles.fastSegment} ${priorityEnabled ? styles.fastSegmentActive : ''}`}
+            aria-label={prioritySupported
+              ? `极速模式，当前${priorityEnabled ? '开启' : '关闭'}`
+              : '极速模式不可用：当前模型不支持'}
+            aria-pressed={priorityEnabled}
+            disabled={!prioritySupported}
+            onClick={() => onChange({
+              ...value,
+              service_tier: priorityEnabled ? 'default' : 'priority',
+            })}
+          >
+            <ThunderboltOutlined />
+            <span className={styles.fastLabel}>极速</span>
+          </Button>
+        </span>
+      </Tooltip>
     </div>
   );
 };
@@ -105,6 +138,7 @@ export const ComposerApprovalControl: React.FC<ComposerRuntimeControlsProps> = (
   const approval = APPROVALS.find((item) => item.value === value.approval_mode) ?? APPROVALS[1]!;
   const approvalItems: MenuProps['items'] = APPROVALS.map((option) => ({
     key: option.value,
+    className: option.value === 'full' ? styles.dangerMenuItem : undefined,
     icon: value.approval_mode === option.value ? <CheckOutlined /> : null,
     label: (
       <span className={styles.menuOption}>

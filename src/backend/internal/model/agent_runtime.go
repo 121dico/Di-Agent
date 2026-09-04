@@ -29,4 +29,5 @@ type AgentRuntimeConfig struct {
 	Model           string `json:"model,omitempty"`
 	ReasoningEffort string `json:"reasoning_effort"`
 	ApprovalMode    string `json:"approval_mode"`
+	ServiceTier     string `json:"service_tier"`
 }

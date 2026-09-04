@@ -45,21 +45,34 @@ const CODEX_MODELS = new Set([
 ]);
 const REASONING_EFFORTS = new Set(['low', 'medium', 'high']);
 const APPROVAL_MODES = new Set(['request', 'auto', 'full']);
+const SERVICE_TIERS = new Set(['default', 'priority']);
+const PRIORITY_UNSUPPORTED_MODELS = new Set(['gpt-5.4-mini', 'gpt-5.3-codex-spark']);
 let cachedLocalProxy = undefined; // undefined=未探测 null=无 string=代理地址
+
+const DEFAULT_RUNTIME_CONFIG = Object.freeze({
+  version: 2,
+  model: '',
+  reasoning_effort: 'medium',
+  approval_mode: 'auto',
+  service_tier: 'default',
+});
 
 function normalizeRuntimeConfig(value) {
   if (value === undefined || value === null) {
-    return { version: 1, model: '', reasoning_effort: 'medium', approval_mode: 'auto' };
+    return { ...DEFAULT_RUNTIME_CONFIG };
   }
   if (typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('Invalid Codex runtime config: expected an object');
   }
   const input = value;
   if (Object.keys(input).length === 0) {
-    return { version: 1, model: '', reasoning_effort: 'medium', approval_mode: 'auto' };
+    return { ...DEFAULT_RUNTIME_CONFIG };
   }
-  if (input.version !== 1) {
+  if (input.version !== 1 && input.version !== 2) {
     throw new Error('Invalid Codex runtime config: unsupported version');
+  }
+  if (input.version === 1 && input.service_tier) {
+    throw new Error('Invalid Codex runtime config: service tier requires version 2');
   }
   if (!CODEX_MODELS.has(input.model)) {
     throw new Error('Invalid Codex runtime config: unsupported model');
@@ -70,11 +83,19 @@ function normalizeRuntimeConfig(value) {
   if (!APPROVAL_MODES.has(input.approval_mode)) {
     throw new Error('Invalid Codex runtime config: unsupported approval mode');
   }
+  const serviceTier = input.version === 1 ? 'default' : input.service_tier;
+  if (!SERVICE_TIERS.has(serviceTier)) {
+    throw new Error('Invalid Codex runtime config: unsupported service tier');
+  }
+  if (serviceTier === 'priority' && PRIORITY_UNSUPPORTED_MODELS.has(input.model)) {
+    throw new Error('Invalid Codex runtime config: model does not support priority service tier');
+  }
   return {
-    version: 1,
+    version: 2,
     model: input.model,
     reasoning_effort: input.reasoning_effort,
     approval_mode: input.approval_mode,
+    service_tier: serviceTier,
   };
 }
 
@@ -88,6 +109,7 @@ function codexTurnControls(value) {
   const params = {};
   if (config.model) params.model = config.model;
   params.effort = config.reasoning_effort;
+  params.serviceTier = config.service_tier === 'priority' ? 'priority' : null;
   if (config.approval_mode === 'full') {
     params.approvalPolicy = 'never';
     params.sandboxPolicy = { type: 'dangerFullAccess' };
@@ -175,11 +197,15 @@ function createCodexCliSpec(ctx) {
         ? ['--dangerously-bypass-approvals-and-sandbox']
         : ['--sandbox', 'workspace-write', '-c', `approval_policy=${runtime.approval_mode === 'request' ? '"untrusted"' : '"never"'}`];
       const modelArgs = runtime.model ? ['--model', runtime.model] : [];
+      const serviceTierArgs = runtime.service_tier === 'priority'
+        ? ['-c', 'service_tier="priority"']
+        : [];
       const execArgs = [
         '--skip-git-repo-check',
         ...accessArgs,
         ...modelArgs,
         '-c', `model_reasoning_effort="${runtime.reasoning_effort}"`,
+        ...serviceTierArgs,
         '--ephemeral',
         '--json',
         '--color',
@@ -374,6 +400,7 @@ function createCodexCliSpec(ctx) {
       let threadId = null;
       let currentTurn = null; // {turnId, resolve, timer, text}
       let pendingTurnApprovalContext = null;
+      let pendingRuntimeVerification = null;
       let firstTurn = true;
       let processSettled = false;
 
@@ -410,6 +437,79 @@ function createCodexCliSpec(ctx) {
         if (turn.timer) clearTimeout(turn.timer);
         daemonCtx.agentTurnStates.set(agentId, 'idle');
         return turn.resolve(outcome);
+      };
+
+      const logRuntimeUnverified = (verification) => {
+        if (!verification || verification.verified || verification.unverifiedLogged) return;
+        verification.unverifiedLogged = true;
+        const expected = verification.config;
+        daemonCtx.logFlow('warn', 'agent.codex_runtime_unverified', {
+          agent_id: agentId,
+          conversation_id: conversationId,
+          task_id: verification.taskId,
+          thread_id: threadId,
+          requested_model: expected.model || 'default',
+          requested_effort: expected.reasoning_effort,
+          requested_service_tier: expected.service_tier,
+          runtime_status: 'unverified',
+        });
+      };
+
+      const logRuntimeApplied = (verification, settings) => {
+        if (!verification || verification.verified || verification.unverifiedLogged) return;
+        const appliedModel = typeof settings.model === 'string'
+          && settings.model !== ''
+          && CODEX_MODELS.has(settings.model)
+          ? settings.model
+          : 'unknown';
+        const rawEffort = settings.effort ?? settings.reasoningEffort;
+        const appliedEffort = typeof rawEffort === 'string' && REASONING_EFFORTS.has(rawEffort)
+          ? rawEffort
+          : 'unknown';
+        const hasServiceTier = Object.prototype.hasOwnProperty.call(settings, 'serviceTier');
+        const appliedServiceTier = hasServiceTier && settings.serviceTier === null
+          ? 'default'
+          : (hasServiceTier
+            && typeof settings.serviceTier === 'string'
+            && SERVICE_TIERS.has(settings.serviceTier)
+            ? settings.serviceTier
+            : 'unknown');
+        const expected = verification.config;
+        const modelMatches = expected.model ? appliedModel === expected.model : appliedModel !== 'unknown';
+        const runtimeMatch = modelMatches
+          && appliedEffort === expected.reasoning_effort
+          && appliedServiceTier === expected.service_tier;
+        verification.verified = true;
+        daemonCtx.logFlow(runtimeMatch ? 'info' : 'warn', 'agent.codex_runtime_applied', {
+          agent_id: agentId,
+          conversation_id: conversationId,
+          task_id: verification.taskId,
+          thread_id: threadId,
+          requested_model: expected.model || 'default',
+          applied_model: appliedModel,
+          requested_effort: expected.reasoning_effort,
+          applied_effort: appliedEffort,
+          requested_service_tier: expected.service_tier,
+          applied_service_tier: appliedServiceTier,
+          runtime_match: runtimeMatch,
+          runtime_status: runtimeMatch ? 'matched' : 'mismatch',
+        });
+      };
+
+      const verifyRuntimeAfterTurn = async (verification) => {
+        if (!verification || verification.verificationStarted) return;
+        verification.verificationStarted = true;
+        const resumed = await rpcCall('thread/resume', { threadId, excludeTurns: true });
+        const settings = resumed && resumed.result;
+        if (resumed?.error
+          || !settings
+          || typeof settings !== 'object'
+          || Array.isArray(settings)
+          || !Object.prototype.hasOwnProperty.call(settings, 'model')) {
+          logRuntimeUnverified(verification);
+          return;
+        }
+        logRuntimeApplied(verification, settings);
       };
 
       const dispatchEvent = (ev) => {
@@ -473,13 +573,25 @@ function createCodexCliSpec(ctx) {
         }
         if (method === 'turn/completed' || method === 'turn/failed' || method === 'turn/error') {
           const turnObj = p.turn || {};
-          if (!currentTurn || (turnObj.id && turnObj.id !== currentTurn.turnId)) return;
+          if (!currentTurn
+            || currentTurn.terminalReceived
+            || (turnObj.id && turnObj.id !== currentTurn.turnId)) return;
+          const turn = currentTurn;
+          turn.terminalReceived = true;
+          if (turn.timer) {
+            clearTimeout(turn.timer);
+            turn.timer = null;
+          }
           const turnError = method !== 'turn/completed' || turnObj.status === 'error' || turnObj.error
             ? (turnObj.error?.message || turnObj.error || 'codex turn failed')
             : undefined;
-          const resultText = currentTurn.text || '';
-          dispatchEvent(turnEndEvent({ result: resultText, error: turnError }));
-          finishTurn(turnError ? { error: String(turnError) } : { result: resultText });
+          void (async () => {
+            await verifyRuntimeAfterTurn(turn.runtimeVerification);
+            if (currentTurn !== turn) return;
+            const resultText = turn.text || '';
+            dispatchEvent(turnEndEvent({ result: resultText, error: turnError }));
+            finishTurn(turnError ? { error: String(turnError) } : { result: resultText });
+          })();
         }
       };
 
@@ -573,6 +685,8 @@ function createCodexCliSpec(ctx) {
         stdoutBuf += chunk;
         const lines = stdoutBuf.split('\n');
         stdoutBuf = lines.pop();
+        let rpcResponseSeen = false;
+        const deferredNotifications = [];
         for (const line of lines) {
           if (!line.trim()) continue;
           let msg;
@@ -581,11 +695,21 @@ function createCodexCliSpec(ctx) {
             const pending = pendingCalls.get(msg.id);
             pendingCalls.delete(msg.id);
             pending.resolve(msg);
+            rpcResponseSeen = true;
           } else if (msg && msg.method && msg.id !== undefined) {
             void handleServerRequest(msg);
           } else if (msg && msg.method) {
-            handleNotification(msg);
+            if (rpcResponseSeen) deferredNotifications.push(msg);
+            else handleNotification(msg);
           }
+        }
+        if (deferredNotifications.length > 0) {
+          // Resolving turn/start schedules its Promise continuation. Delivering later
+          // notifications in a following microtask lets that continuation install
+          // currentTurn first, while preserving notification order within the chunk.
+          queueMicrotask(() => {
+            for (const notification of deferredNotifications) handleNotification(notification);
+          });
         }
       });
 
@@ -604,6 +728,7 @@ function createCodexCliSpec(ctx) {
         for (const pending of pendingCalls.values()) pending.resolve({ error: { message: exitMessage } });
         pendingCalls.clear();
         if (currentTurn) {
+          logRuntimeUnverified(currentTurn.runtimeVerification);
           dispatchEvent(turnEndEvent({ error: exitMessage }));
           finishTurn({ error: exitMessage });
         }
@@ -630,7 +755,7 @@ function createCodexCliSpec(ctx) {
       // --- 启动序列：initialize → thread/start ---
       const boot = (async () => {
         const init = await rpcCall('initialize', {
-          clientInfo: { name: 'di-agent-daemon', title: 'Di Agent', version: '0.4.3' },
+          clientInfo: { name: 'di-agent-daemon', title: 'Di Agent', version: '0.4.4' },
         });
         if (init.error) throw new Error(`codex app-server initialize 失败: ${init.error.message}`);
         const thread = await rpcCall('thread/start', { cwd });
@@ -672,6 +797,11 @@ function createCodexCliSpec(ctx) {
           }
           const controls = codexTurnControls(runtimeConfig);
           pendingTurnApprovalContext = approvalContext || {};
+          pendingRuntimeVerification = {
+            config: controls.config,
+            taskId: approvalContext?.task_id || taskId,
+            verified: false,
+          };
           if (typeof daemonCtx.updateDiAgentCodexTaskContext === 'function') {
             daemonCtx.updateDiAgentCodexTaskContext(
               codexHome,
@@ -690,6 +820,8 @@ function createCodexCliSpec(ctx) {
           const turnId = res && res.result && res.result.turn && res.result.turn.id;
           if (!turnId) {
             pendingTurnApprovalContext = null;
+            logRuntimeUnverified(pendingRuntimeVerification);
+            pendingRuntimeVerification = null;
             resolve({ error: `turn/start 失败: ${JSON.stringify((res && res.error) || {}).slice(0, 120)}` });
             return;
           }
@@ -700,8 +832,16 @@ function createCodexCliSpec(ctx) {
             turn_id: turnId,
             prompt_len: typeof prompt === 'string' ? prompt.length : 0,
           });
-          currentTurn = { turnId, resolve, timer: null, text: '', approvalContext };
+          currentTurn = {
+            turnId,
+            resolve,
+            timer: null,
+            text: '',
+            approvalContext,
+            runtimeVerification: pendingRuntimeVerification,
+          };
           pendingTurnApprovalContext = null;
+          pendingRuntimeVerification = null;
           currentTurn.timer = setTimeout(() => {
             if (currentTurn && currentTurn.turnId === turnId) {
               daemonCtx.logFlow('error', 'agent.turn_timeout', {
@@ -713,12 +853,15 @@ function createCodexCliSpec(ctx) {
               });
               const turn = currentTurn;
               currentTurn = null;
+              logRuntimeUnverified(turn.runtimeVerification);
               turn.resolve({ error: `Agent task timed out (${Math.round(daemonCtx.EXEC_TIMEOUT_MS / 1000)}s)` });
             }
           }, daemonCtx.EXEC_TIMEOUT_MS);
           if (currentTurn) currentTurn.timer.unref();
         }).catch((err) => {
           pendingTurnApprovalContext = null;
+          logRuntimeUnverified(pendingRuntimeVerification);
+          pendingRuntimeVerification = null;
           resolve({ error: err.message });
         });
       });

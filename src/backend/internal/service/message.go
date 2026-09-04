@@ -422,7 +422,7 @@ func (s *MessageService) SendMessageWithReply(ctx context.Context, convID, userI
 // SendMessageWithRuntime snapshots the selected model, reasoning and approval policy for this turn.
 func (s *MessageService) SendMessageWithRuntime(ctx context.Context, convID, userID, role, content, artifactsJSON string, attachments []model.MessageAttachment, replyTo *string, agentID string, mentions []string, runtimeConfig model.AgentRuntimeConfig) (*SendMessageResult, error) {
 	normalizedRuntime := runtimeConfig
-	if runtimeConfig.Version != 0 || runtimeConfig.Model != "" || runtimeConfig.ReasoningEffort != "" || runtimeConfig.ApprovalMode != "" {
+	if runtimeConfig.Version != 0 || runtimeConfig.Model != "" || runtimeConfig.ReasoningEffort != "" || runtimeConfig.ApprovalMode != "" || runtimeConfig.ServiceTier != "" {
 		var err error
 		normalizedRuntime, err = NormalizeAgentRuntimeConfig(runtimeConfig)
 		if err != nil {
@@ -1234,10 +1234,10 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 		capabilityChecker, ok := s.daemonHub.(interface {
 			SupportsCapability(machineID, capability string) bool
 		})
-		if !ok || !capabilityChecker.SupportsCapability(*agent.MachineID, "agent_runtime_controls_v1") {
+		if !ok || !capabilityChecker.SupportsCapability(*agent.MachineID, "agent_runtime_controls_v2") {
 			return nil, fmt.Errorf("%w: 这台电脑的 Di Agent daemon 版本过旧，请重新运行连接命令升级后再试", ErrMsgInvalidRuntime)
 		}
-	} else if selectedRuntime.Version != 0 || selectedRuntime.Model != "" || selectedRuntime.ReasoningEffort != "" || selectedRuntime.ApprovalMode != "" {
+	} else if selectedRuntime.Version != 0 || selectedRuntime.Model != "" || selectedRuntime.ReasoningEffort != "" || selectedRuntime.ApprovalMode != "" || selectedRuntime.ServiceTier != "" {
 		return nil, fmt.Errorf("%w: %s 暂不支持可配置运行策略", ErrMsgInvalidRuntime, agent.CLITool)
 	}
 	var task *model.DaemonTask
@@ -1311,7 +1311,7 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 		if !ok {
 			dispatchErr = fmt.Errorf("daemon runtime capability sender unavailable")
 		} else {
-			dispatchErr = capabilitySender.SendToMachineRequiringCapability(*agent.MachineID, "agent_runtime_controls_v1", dispatchMessage)
+			dispatchErr = capabilitySender.SendToMachineRequiringCapability(*agent.MachineID, "agent_runtime_controls_v2", dispatchMessage)
 		}
 	} else {
 		dispatchErr = s.daemonHub.SendToMachine(*agent.MachineID, dispatchMessage)

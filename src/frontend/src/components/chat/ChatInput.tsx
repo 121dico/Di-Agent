@@ -8,7 +8,6 @@ import {
   DashboardOutlined,
   GlobalOutlined,
   LockOutlined,
-  AudioOutlined,
   RobotOutlined,
   UpOutlined,
   DownOutlined,
@@ -772,6 +771,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           </button>
         </div>
       )}
+      {onOpenContext && (
+        <div className={styles.contextDock}>
+          <ComposerContextAction onOpen={onOpenContext} active={contextActive} />
+        </div>
+      )}
       <div className={styles.inputRow}>
         <TextArea
           ref={textareaRef}
@@ -798,7 +802,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           </div>
           <div className={styles.footerRight} aria-label="运行与发送">
             <div className={styles.footerSecondaryActions}>
-              {onOpenContext && <ComposerContextAction onOpen={onOpenContext} active={contextActive} />}
               <Tooltip title={expanded ? '收起输入框' : '展开输入框'}>
                 <Button
                   type="text"
@@ -812,15 +815,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             {conversation?.type === 'agent' && (supportsCodexControls
               ? <ComposerRuntimeControls value={runtimeConfig} onChange={handleRuntimeChange} />
               : <ComposerRuntimeFallback />)}
-            <Tooltip title="语音输入即将上线">
-              <Button
-                type="text"
-                icon={<AudioOutlined />}
-                className={styles.voiceBtn}
-                aria-label="语音输入（即将上线）"
-                disabled
-              />
-            </Tooltip>
             <Button
               type="primary"
               shape="circle"

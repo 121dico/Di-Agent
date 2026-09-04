@@ -3,6 +3,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { ComposerContextAction } from './ChatInput';
 import { ComposerConversationActions } from './ComposerConversationActions';
 
@@ -23,6 +24,17 @@ describe('ChatInput context action', () => {
 
     expect(markup).toContain('aria-label="上下文与检查点"');
     expect(markup).toContain('上下文');
+  });
+
+  it('keeps context outside the bordered input container and removes voice UI', () => {
+    const source = readFileSync('src/components/chat/ChatInput.tsx', 'utf8');
+    const contextDock = source.indexOf('className={styles.contextDock}');
+    const inputRow = source.indexOf('className={styles.inputRow}');
+    expect(contextDock).toBeGreaterThan(-1);
+    expect(contextDock).toBeLessThan(inputRow);
+    expect(source).not.toContain('AudioOutlined');
+    expect(source).not.toContain('语音输入即将上线');
+    expect(source).not.toContain('styles.voiceBtn');
   });
 });
 

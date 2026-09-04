@@ -57,10 +57,14 @@ var supportedAgentModels = map[string]bool{
 // NormalizeAgentRuntimeConfig converts an omitted policy into the safe product default and
 // rejects arbitrary model/config strings before they can reach a local CLI process.
 func NormalizeAgentRuntimeConfig(input model.AgentRuntimeConfig) (model.AgentRuntimeConfig, error) {
-	if input.Version == 0 {
-		input.Version = 1
+	if (input.Version == 0 || input.Version == 1) && input.ServiceTier != "" {
+		return model.AgentRuntimeConfig{}, fmt.Errorf("%w: service tier requires runtime config v2", ErrMsgInvalidRuntime)
 	}
-	if input.Version != 1 {
+	if input.Version == 0 || input.Version == 1 {
+		input.Version = 2
+		input.ServiceTier = "default"
+	}
+	if input.Version != 2 {
 		return model.AgentRuntimeConfig{}, fmt.Errorf("%w: unsupported version", ErrMsgInvalidRuntime)
 	}
 	if input.ReasoningEffort == "" {
@@ -68,6 +72,9 @@ func NormalizeAgentRuntimeConfig(input model.AgentRuntimeConfig) (model.AgentRun
 	}
 	if input.ApprovalMode == "" {
 		input.ApprovalMode = "auto"
+	}
+	if input.ServiceTier == "" {
+		input.ServiceTier = "default"
 	}
 	if !supportedAgentModels[input.Model] {
 		return model.AgentRuntimeConfig{}, fmt.Errorf("%w: unsupported model", ErrMsgInvalidRuntime)
@@ -77,6 +84,12 @@ func NormalizeAgentRuntimeConfig(input model.AgentRuntimeConfig) (model.AgentRun
 	}
 	if input.ApprovalMode != "request" && input.ApprovalMode != "auto" && input.ApprovalMode != "full" {
 		return model.AgentRuntimeConfig{}, fmt.Errorf("%w: unsupported approval mode", ErrMsgInvalidRuntime)
+	}
+	if input.ServiceTier != "default" && input.ServiceTier != "priority" {
+		return model.AgentRuntimeConfig{}, fmt.Errorf("%w: unsupported service tier", ErrMsgInvalidRuntime)
+	}
+	if input.ServiceTier == "priority" && (input.Model == "gpt-5.4-mini" || input.Model == "gpt-5.3-codex-spark") {
+		return model.AgentRuntimeConfig{}, fmt.Errorf("%w: model does not support priority service tier", ErrMsgInvalidRuntime)
 	}
 	return input, nil
 }

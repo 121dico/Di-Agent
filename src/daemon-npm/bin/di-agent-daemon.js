@@ -213,7 +213,7 @@ function detectCapabilities() {
   // older daemon understands per-turn sandbox or approval semantics.
   const caps = readDiAgentEnvironment(process.env, 'DAEMON_DISABLE_STREAM_SLOT') === '1'
     ? []
-    : ['agent_runtime_controls_v1'];
+    : ['agent_runtime_controls_v1', 'agent_runtime_controls_v2'];
   if (detectDocker()) caps.push('docker');
   return caps;
 }
@@ -2260,7 +2260,7 @@ function commandForTask(task, taskCtx) {
 
 function hasExplicitRuntimeConfig(value) {
   return Boolean(value && typeof value === 'object' && (
-    value.version || value.model || value.reasoning_effort || value.approval_mode
+    value.version || value.model || value.reasoning_effort || value.approval_mode || value.service_tier
   ));
 }
 

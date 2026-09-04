@@ -59,8 +59,10 @@ test('daemon advertises runtime controls only when the persistent approval broke
   try {
     delete process.env.DI_AGENT_DAEMON_DISABLE_STREAM_SLOT;
     assert.equal(detectCapabilities().includes('agent_runtime_controls_v1'), true);
+    assert.equal(detectCapabilities().includes('agent_runtime_controls_v2'), true);
     process.env.DI_AGENT_DAEMON_DISABLE_STREAM_SLOT = '1';
     assert.equal(detectCapabilities().includes('agent_runtime_controls_v1'), false);
+    assert.equal(detectCapabilities().includes('agent_runtime_controls_v2'), false);
   } finally {
     if (previous === undefined) delete process.env.DI_AGENT_DAEMON_DISABLE_STREAM_SLOT;
     else process.env.DI_AGENT_DAEMON_DISABLE_STREAM_SLOT = previous;

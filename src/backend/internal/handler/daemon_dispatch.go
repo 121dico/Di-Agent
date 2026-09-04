@@ -38,7 +38,7 @@ func (h *DaemonHandler) DispatchTask(task *model.DaemonTask) {
 	}
 	var err error
 	if task.CLITool == "codex" {
-		err = h.daemonHub.SendToMachineRequiringCapability(task.MachineID, "agent_runtime_controls_v1", message)
+		err = h.daemonHub.SendToMachineRequiringCapability(task.MachineID, "agent_runtime_controls_v2", message)
 	} else {
 		err = h.daemonHub.SendToMachine(task.MachineID, message)
 	}

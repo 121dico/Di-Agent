@@ -65,6 +65,7 @@ function emitCodexLine(child, message) {
 function buildPersistentHarness(overrides = {}) {
   const calls = { spawn: [], logs: [], processSpec: [] };
   let child;
+  let lastTurnControls = null;
   const ctx = buildMockCtx({
     resolveCommand: () => '/Applications/ChatGPT.app/Contents/Resources/codex',
     ...overrides,
@@ -91,11 +92,32 @@ function buildPersistentHarness(overrides = {}) {
         } else if (message.method === 'thread/start') {
           emitCodexLine(activeChild, { jsonrpc: '2.0', id: message.id, result: { thread: { id: 'thread-1' } } });
         } else if (message.method === 'turn/start') {
+          lastTurnControls = message.params;
           emitCodexLine(activeChild, { jsonrpc: '2.0', id: message.id, result: { turn: { id: 'turn-1' } } });
           setImmediate(() => {
             activeChild.stdout.emit('data', `${JSON.stringify({ method: 'item/agentMessage/delta', params: { delta: 'hello' } })}\n`);
             activeChild.stdout.emit('data', `${JSON.stringify({ method: 'turn/completed', params: { turn: { id: 'turn-1', status: 'completed' } } })}\n`);
+            if (overrides.duplicateTerminal) {
+              activeChild.stdout.emit('data', `${JSON.stringify({ method: 'turn/completed', params: { turn: { id: 'turn-1', status: 'completed' } } })}\n`);
+            }
           });
+        } else if (message.method === 'thread/resume') {
+          if (overrides.resumeError) {
+            emitCodexLine(activeChild, { jsonrpc: '2.0', id: message.id, error: overrides.resumeError });
+          } else if (overrides.resumeUnavailable) {
+            emitCodexLine(activeChild, { jsonrpc: '2.0', id: message.id, result: {} });
+          } else {
+            const resumeSettings = overrides.resumeSettings || {
+              model: lastTurnControls?.model || 'gpt-5.6-sol',
+              reasoningEffort: lastTurnControls?.effort || 'medium',
+              serviceTier: lastTurnControls?.serviceTier ?? null,
+            };
+            emitCodexLine(activeChild, {
+              jsonrpc: '2.0',
+              id: message.id,
+              result: { thread: { id: 'thread-1' }, ...resumeSettings },
+            });
+          }
         }
       });
       return child;
@@ -149,10 +171,11 @@ test('codex persistent adapter sends model, reasoning and safe approval controls
   }, harness.ctx);
 
   await runtime.sendPrompt('hello', {
-    version: 1,
+    version: 2,
     model: 'gpt-5.6-sol',
     reasoning_effort: 'high',
     approval_mode: 'request',
+    service_tier: 'priority',
   });
 
   const turnStart = harness.child.stdin.writes
@@ -160,6 +183,7 @@ test('codex persistent adapter sends model, reasoning and safe approval controls
     .find((message) => message.method === 'turn/start');
   assert.strictEqual(turnStart.params.model, 'gpt-5.6-sol');
   assert.strictEqual(turnStart.params.effort, 'high');
+  assert.strictEqual(turnStart.params.serviceTier, 'priority');
   assert.strictEqual(turnStart.params.approvalPolicy, 'untrusted');
   assert.strictEqual(turnStart.params.approvalsReviewer, 'user');
   assert.strictEqual(turnStart.params.sandboxPolicy.type, 'workspaceWrite');
@@ -174,11 +198,172 @@ test('codex runtime config rejects malformed or unknown policy instead of silent
     approval_mode: 'auto',
   }), /model/);
   assert.throws(() => runtimeConfigFingerprint({
-    version: 2,
+    version: 3,
     model: '',
     reasoning_effort: 'medium',
     approval_mode: 'auto',
+    service_tier: 'default',
   }), /version/);
+});
+
+test('codex runtime config migrates v1 and rejects unsupported priority combinations', () => {
+  assert.deepStrictEqual(normalizeRuntimeConfig({
+    version: 1, model: 'gpt-5.6-sol', reasoning_effort: 'high', approval_mode: 'auto',
+  }), {
+    version: 2, model: 'gpt-5.6-sol', reasoning_effort: 'high', approval_mode: 'auto', service_tier: 'default',
+  });
+  assert.throws(() => normalizeRuntimeConfig({
+    version: 2, model: 'gpt-5.4-mini', reasoning_effort: 'medium', approval_mode: 'auto', service_tier: 'priority',
+  }), /service tier/);
+  assert.throws(() => normalizeRuntimeConfig({
+    version: 1, model: 'gpt-5.6-sol', reasoning_effort: 'medium', approval_mode: 'auto', service_tier: 'priority',
+  }), /version 2/);
+});
+
+test('codex logs app-server applied settings without prompts or secrets', async () => {
+  const harness = buildPersistentHarness({
+    resumeSettings: { model: 'gpt-5.6-sol', reasoningEffort: 'high', serviceTier: 'priority' },
+  });
+  const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({
+    agentId: 'agent-evidence', conversationId: 'conv-evidence', userId: 'user-evidence',
+  }, harness.ctx);
+  await runtime.sendPrompt('secret prompt must not be logged', {
+    version: 2, model: 'gpt-5.6-sol', reasoning_effort: 'high', approval_mode: 'auto', service_tier: 'priority',
+  }, { task_id: 'task-evidence' });
+
+  const evidence = harness.calls.logs.find((entry) => entry.event === 'agent.codex_runtime_applied');
+  assert.ok(evidence);
+  assert.deepStrictEqual(evidence.payload, {
+    agent_id: 'agent-evidence',
+    conversation_id: 'conv-evidence',
+    task_id: 'task-evidence',
+    thread_id: 'thread-1',
+    requested_model: 'gpt-5.6-sol',
+    applied_model: 'gpt-5.6-sol',
+    requested_effort: 'high',
+    applied_effort: 'high',
+    requested_service_tier: 'priority',
+    applied_service_tier: 'priority',
+    runtime_match: true,
+    runtime_status: 'matched',
+  });
+  assert.doesNotMatch(JSON.stringify(evidence), /secret prompt/);
+  const resume = harness.child.stdin.writes
+    .map((line) => JSON.parse(line))
+    .find((message) => message.method === 'thread/resume');
+  assert.deepStrictEqual(resume.params, { threadId: 'thread-1', excludeTurns: true });
+  assert.ok(
+    harness.calls.logs.findIndex((entry) => entry.event === 'agent.codex_runtime_applied')
+      < harness.calls.logs.findIndex((entry) => entry.event === 'agent.turn_result'),
+    'runtime verification must complete before the turn result is reported',
+  );
+});
+
+test('codex reports runtime selection as unverified when thread/resume fails', async () => {
+  const harness = buildPersistentHarness({ resumeError: { message: 'resume unavailable' } });
+  const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({
+    agentId: 'agent-no-evidence', conversationId: 'conv-no-evidence', userId: 'user-no-evidence',
+  }, harness.ctx);
+  await runtime.sendPrompt('hello', {
+    version: 2, model: 'gpt-5.6-sol', reasoning_effort: 'low', approval_mode: 'auto', service_tier: 'priority',
+  }, { task_id: 'task-no-evidence' });
+  const unverified = harness.calls.logs.find((entry) => entry.event === 'agent.codex_runtime_unverified');
+  assert.ok(unverified);
+  assert.strictEqual(unverified.payload.runtime_status, 'unverified');
+  assert.strictEqual(unverified.payload.requested_model, 'gpt-5.6-sol');
+  assert.strictEqual('applied_model' in unverified.payload, false);
+  const requests = harness.child.stdin.writes.map((line) => JSON.parse(line));
+  assert.strictEqual(requests.filter((message) => message.method === 'thread/resume').length, 1);
+  assert.ok(
+    harness.calls.logs.findIndex((entry) => entry.event === 'agent.codex_runtime_unverified')
+      < harness.calls.logs.findIndex((entry) => entry.event === 'agent.turn_result'),
+    'failed verification must be reported before the turn result',
+  );
+});
+
+test('codex does not claim applied settings when thread/resume returns no runtime evidence', async () => {
+  const harness = buildPersistentHarness({ resumeUnavailable: true });
+  const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({
+    agentId: 'agent-empty-evidence', conversationId: 'conv-empty-evidence', userId: 'user-empty-evidence',
+  }, harness.ctx);
+  await runtime.sendPrompt('hello', {
+    version: 2, model: 'gpt-5.6-sol', reasoning_effort: 'low', approval_mode: 'auto', service_tier: 'default',
+  }, { task_id: 'task-empty-evidence' });
+
+  assert.strictEqual(
+    harness.calls.logs.filter((entry) => entry.event === 'agent.codex_runtime_unverified').length,
+    1,
+  );
+  assert.strictEqual(
+    harness.calls.logs.filter((entry) => entry.event === 'agent.codex_runtime_applied').length,
+    0,
+  );
+});
+
+test('codex sanitizes hostile applied settings and records a mismatch', async () => {
+  const harness = buildPersistentHarness({
+    resumeSettings: {
+      model: 'hostile-model-with-secret',
+      reasoningEffort: 'hostile-effort-with-secret',
+      serviceTier: 'hostile-tier-with-secret',
+    },
+  });
+  const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({
+    agentId: 'agent-hostile', conversationId: 'conv-hostile', userId: 'user-hostile',
+  }, harness.ctx);
+  await runtime.sendPrompt('hello', {
+    version: 2, model: 'gpt-5.6-sol', reasoning_effort: 'high', approval_mode: 'auto', service_tier: 'priority',
+  }, { task_id: 'task-hostile' });
+
+  const evidence = harness.calls.logs.find((entry) => entry.event === 'agent.codex_runtime_applied');
+  assert.ok(evidence);
+  assert.strictEqual(evidence.payload.applied_model, 'unknown');
+  assert.strictEqual(evidence.payload.applied_effort, 'unknown');
+  assert.strictEqual(evidence.payload.applied_service_tier, 'unknown');
+  assert.strictEqual(evidence.payload.runtime_match, false);
+  assert.strictEqual(evidence.payload.runtime_status, 'mismatch');
+  assert.doesNotMatch(JSON.stringify(evidence), /hostile-.*-with-secret/);
+});
+
+test('codex reports recognized thread/resume settings that differ from the request as a mismatch', async () => {
+  const harness = buildPersistentHarness({
+    resumeSettings: { model: 'gpt-5.6-terra', reasoningEffort: 'medium', serviceTier: null },
+  });
+  const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({
+    agentId: 'agent-mismatch', conversationId: 'conv-mismatch', userId: 'user-mismatch',
+  }, harness.ctx);
+  await runtime.sendPrompt('hello', {
+    version: 2, model: 'gpt-5.6-sol', reasoning_effort: 'high', approval_mode: 'auto', service_tier: 'priority',
+  }, { task_id: 'task-mismatch' });
+
+  const evidence = harness.calls.logs.find((entry) => entry.event === 'agent.codex_runtime_applied');
+  assert.ok(evidence);
+  assert.strictEqual(evidence.payload.applied_model, 'gpt-5.6-terra');
+  assert.strictEqual(evidence.payload.applied_effort, 'medium');
+  assert.strictEqual(evidence.payload.applied_service_tier, 'default');
+  assert.strictEqual(evidence.payload.runtime_match, false);
+  assert.strictEqual(evidence.payload.runtime_status, 'mismatch');
+});
+
+test('codex verifies and finishes only once when app-server repeats a terminal notification', async () => {
+  const events = [];
+  const harness = buildPersistentHarness({ duplicateTerminal: true });
+  const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({
+    agentId: 'agent-duplicate-terminal',
+    conversationId: 'conv-duplicate-terminal',
+    userId: 'user-duplicate-terminal',
+    eventRef: { current: (event) => events.push(event) },
+  }, harness.ctx);
+
+  assert.deepStrictEqual(await runtime.sendPrompt('hello', {
+    version: 2, model: 'gpt-5.6-sol', reasoning_effort: 'high', approval_mode: 'auto', service_tier: 'priority',
+  }), { result: 'hello' });
+
+  const requests = harness.child.stdin.writes.map((line) => JSON.parse(line));
+  assert.strictEqual(requests.filter((message) => message.method === 'thread/resume').length, 1);
+  assert.strictEqual(events.filter((event) => event.type === 'turn_end').length, 1);
+  assert.strictEqual(harness.calls.logs.filter((entry) => entry.event === 'agent.codex_runtime_applied').length, 1);
+  assert.strictEqual(harness.calls.logs.filter((entry) => entry.event === 'agent.turn_result').length, 1);
 });
 
 test('codex runtime config accepts every model exposed by the composer', () => {
@@ -369,6 +554,63 @@ test('codex binds a same-chunk approval request to the turn being started', asyn
 
   assert.strictEqual(requests.length, 1);
   assert.strictEqual(requests[0].task_id, 'current-task');
+});
+
+test('codex preserves same-chunk turn/start response, delta, and terminal notification order', async () => {
+  const events = [];
+  const child = fakeCodexChild((message, activeChild) => {
+    if (message.method === 'initialize') {
+      emitCodexLine(activeChild, { jsonrpc: '2.0', id: message.id, result: {} });
+    } else if (message.method === 'thread/start') {
+      emitCodexLine(activeChild, { jsonrpc: '2.0', id: message.id, result: { thread: { id: 'thread-same-chunk' } } });
+    } else if (message.method === 'turn/start') {
+      queueMicrotask(() => activeChild.stdout.emit('data', [
+        JSON.stringify({ jsonrpc: '2.0', id: message.id, result: { turn: { id: 'turn-same-chunk' } } }),
+        JSON.stringify({ method: 'item/agentMessage/delta', params: { delta: 'same chunk result' } }),
+        JSON.stringify({ method: 'turn/completed', params: { turn: { id: 'turn-same-chunk', status: 'completed' } } }),
+      ].join('\n') + '\n'));
+    } else if (message.method === 'thread/resume') {
+      emitCodexLine(activeChild, {
+        jsonrpc: '2.0',
+        id: message.id,
+        result: {
+          thread: { id: 'thread-same-chunk' },
+          model: 'gpt-5.6-sol',
+          reasoningEffort: 'high',
+          serviceTier: 'priority',
+        },
+      });
+    }
+  });
+  const harness = buildPersistentHarness({ spawn: () => child });
+  const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({
+    agentId: 'agent-same-chunk',
+    conversationId: 'conv-same-chunk',
+    userId: 'user-same-chunk',
+    eventRef: { current: (event) => events.push(event) },
+  }, harness.ctx);
+  let finishCount = 0;
+
+  const response = await Promise.race([
+    runtime.sendPrompt('hello', {
+      version: 2,
+      model: 'gpt-5.6-sol',
+      reasoning_effort: 'high',
+      approval_mode: 'auto',
+      service_tier: 'priority',
+    }).then((value) => {
+      finishCount += 1;
+      return value;
+    }),
+    new Promise((resolve) => setTimeout(() => resolve({ error: 'test timed out' }), 100)),
+  ]);
+
+  assert.deepStrictEqual(response, { result: 'same chunk result' });
+  assert.strictEqual(finishCount, 1);
+  const requests = child.stdin.writes.map((line) => JSON.parse(line));
+  assert.strictEqual(requests.filter((message) => message.method === 'thread/resume').length, 1);
+  assert.strictEqual(harness.calls.logs.filter((entry) => entry.event === 'agent.codex_runtime_applied').length, 1);
+  assert.strictEqual(events.filter((event) => event.type === 'turn_end').length, 1);
 });
 
 test('codex persistent adapter returns an actionable protocol timeout', async () => {

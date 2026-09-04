@@ -552,6 +552,59 @@ func TestDaemonWS_EmptyTaskIsNotDispatched(t *testing.T) {
 	}
 }
 
+func TestDispatchTaskSendsNormalizedRuntimeV2InWebSocketFrame(t *testing.T) {
+	handler, hub, _ := newTestDaemonHandler(t)
+	machineID := "machine-runtime-v2"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
+		if err != nil {
+			return
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "done")
+		client := ws.NewDaemonClient(conn, machineID)
+		client.SetCapabilities([]string{"agent_runtime_controls_v2"})
+		hub.Register(client)
+		clientCtx, clientCancel := context.WithCancel(r.Context())
+		defer clientCancel()
+		go client.WritePump(clientCtx)
+		<-clientCtx.Done()
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	daemonConn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http")+"/ws", nil)
+	if err != nil {
+		t.Fatalf("daemon dial failed: %v", err)
+	}
+	defer daemonConn.Close(websocket.StatusNormalClosure, "test done")
+
+	deadline := time.Now().Add(time.Second)
+	for !hub.IsConnected(machineID) && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	runtimeConfig := model.AgentRuntimeConfig{
+		Version: 2, Model: "gpt-5.6-sol", ReasoningEffort: "high", ApprovalMode: "request", ServiceTier: "priority",
+	}
+	handler.DispatchTask(&model.DaemonTask{
+		ID: "task-runtime-v2", MachineID: machineID, CLITool: "codex",
+		AgentID: "agent-1", ConversationID: "conversation-1", UserID: "user-1",
+		Prompt: "verify runtime", RuntimeConfig: runtimeConfig,
+	})
+
+	var frame struct {
+		Type string `json:"type"`
+		Data struct {
+			RuntimeConfig model.AgentRuntimeConfig `json:"runtime_config"`
+		} `json:"data"`
+	}
+	readWSJSON(t, ctx, daemonConn, &frame)
+	if frame.Type != "task.dispatch" || frame.Data.RuntimeConfig != runtimeConfig {
+		t.Fatalf("outgoing websocket frame lost runtime v2: %#v", frame)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Test 2: Agent started/stopped status updates via WS
 // ---------------------------------------------------------------------------

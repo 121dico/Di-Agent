@@ -8,24 +8,33 @@ export {
   CODEX_MODEL_OPTIONS,
   DEFAULT_AGENT_RUNTIME_CONFIG,
   normalizeAgentRuntimeConfig,
+  supportsPriorityServiceTier,
 } from '@/types/agentRuntime';
 export type {
   AgentApprovalMode,
   AgentReasoningEffort,
   AgentRuntimeConfig,
   AgentRuntimeModel,
+  AgentServiceTier,
 } from '@/types/agentRuntime';
 
 export function runtimePreferenceKey(conversationId: string, agentId: string): string {
+  return `di-agent:runtime:v2:${conversationId}:${agentId}`;
+}
+
+function legacyRuntimePreferenceKey(conversationId: string, agentId: string): string {
   return `di-agent:runtime:v1:${conversationId}:${agentId}`;
 }
 
 export function readRuntimePreference(conversationId: string, agentId: string): AgentRuntimeConfig {
   if (typeof window === 'undefined') return { ...DEFAULT_AGENT_RUNTIME_CONFIG };
   try {
-    return normalizeAgentRuntimeConfig(JSON.parse(
-      window.localStorage.getItem(runtimePreferenceKey(conversationId, agentId)) ?? 'null',
-    ));
+    const currentKey = runtimePreferenceKey(conversationId, agentId);
+    const persisted = window.localStorage.getItem(currentKey)
+      ?? window.localStorage.getItem(legacyRuntimePreferenceKey(conversationId, agentId));
+    const normalized = normalizeAgentRuntimeConfig(JSON.parse(persisted ?? 'null'));
+    if (persisted !== null) window.localStorage.setItem(currentKey, JSON.stringify(normalized));
+    return normalized;
   } catch {
     return { ...DEFAULT_AGENT_RUNTIME_CONFIG };
   }

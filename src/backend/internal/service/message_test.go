@@ -270,6 +270,67 @@ func TestCreateAgentReplyRejectsDaemonWithoutRuntimeControlsCapability(t *testin
 	}
 }
 
+func TestCreateAgentReplyRejectsServiceTierForNonCodexAgent(t *testing.T) {
+	userID := "user-1"
+	agentRepo := &fakeAgentRepoForMsg{
+		agent: &model.Agent{
+			ID: "agent-1", UserID: &userID, Name: "OpenCode Agent", CLITool: "opencode",
+			MachineID: stringPtr("machine-1"),
+		},
+		inConversation: true,
+	}
+	svc := NewMessageService(&fakeMsgRepo{}, &fakeConvRepoForMsg{}, agentRepo)
+
+	_, err := svc.createAgentReply(context.Background(), "conv-1", userID, "agent-1", "hello", "", nil,
+		model.AgentRuntimeConfig{ServiceTier: "priority"})
+	if !errors.Is(err, ErrMsgInvalidRuntime) || !strings.Contains(err.Error(), "暂不支持可配置运行策略") {
+		t.Fatalf("error = %v, want explicit non-Codex service-tier rejection", err)
+	}
+}
+
+func TestSendMessageWithRuntimeRejectsVersionlessServiceTierBeforePersistenceAndDispatch(t *testing.T) {
+	userID := "user-1"
+	msgRepo := &fakeMsgRepo{}
+	convRepo := &fakeConvRepoForMsg{
+		conv: &model.Conversation{ID: "conv-1", UserID: userID, Type: "agent"},
+	}
+	agentRepo := &fakeAgentRepoForMsg{
+		agent: &model.Agent{
+			ID: "agent-1", UserID: &userID, Name: "Codex Agent", CLITool: "codex",
+			MachineID: stringPtr("machine-1"),
+		},
+		inConversation: true,
+	}
+	dispatcher := &fakeDaemonDispatcher{
+		isConnected:        func(string) bool { return true },
+		supportsCapability: func(string, string) bool { return true },
+	}
+	svc := NewMessageService(msgRepo, convRepo, agentRepo)
+	svc.SetDaemonHub(dispatcher)
+
+	result, err := svc.SendMessageWithRuntime(
+		context.Background(), "conv-1", userID, "user", "hello", "", nil, nil, "agent-1", nil,
+		model.AgentRuntimeConfig{ServiceTier: "priority"},
+	)
+
+	if result != nil {
+		t.Fatalf("result = %#v, want nil for invalid versionless service tier", result)
+	}
+	if !errors.Is(err, ErrMsgInvalidRuntime) || !strings.Contains(err.Error(), "service tier requires runtime config v2") {
+		t.Fatalf("error = %v, want synchronous runtime validation failure", err)
+	}
+	if len(msgRepo.messages) != 0 {
+		t.Fatalf("messages = %#v, want no persistence before runtime validation", msgRepo.messages)
+	}
+	if agentRepo.task != nil {
+		t.Fatalf("daemon task = %#v, want no task before runtime validation", agentRepo.task)
+	}
+	calls := dispatcher.Calls()
+	if calls.SendToMachine != 0 || calls.RegisterTaskPromise != 0 {
+		t.Fatalf("dispatcher calls = %#v, want no dispatch before runtime validation", calls)
+	}
+}
+
 func (r *fakeAgentRepoForMsg) GetByID(ctx context.Context, id string) (*model.Agent, error) {
 	if r.agent != nil && r.agent.ID == id {
 		return r.agent, nil
@@ -336,27 +397,18 @@ func TestSendMessageWithAgentCreatesAssistantReply(t *testing.T) {
 	}
 	svc := NewMessageService(msgRepo, convRepo, agentRepo)
 
-	// Wire up DaemonHub for WS-based dispatch
-	hub := ws.NewDaemonHub(slog.Default())
-	hubCtx, hubCancel := context.WithCancel(context.Background())
-	defer hubCancel()
-	go hub.Run(hubCtx)
-	runtimeClient := ws.NewDaemonClient(nil, "machine-1")
-	runtimeClient.SetCapabilities([]string{"agent_runtime_controls_v1"})
-	hub.RegisterTestClient("machine-1", runtimeClient)
-	svc.SetDaemonHub(hub)
-
-	// Resolve the daemon task in background
-	go func() {
-		time.Sleep(10 * time.Millisecond)
-		hub.ResolveTask("task-1", &ws.TaskResult{
-			TaskID: "task-1",
-			Result: "daemon task result",
-		})
-	}()
+	resultCh := make(chan *ws.TaskResult, 1)
+	resultCh <- &ws.TaskResult{TaskID: "task-1", Result: "daemon task result"}
+	dispatcher := &fakeDaemonDispatcher{
+		isConnected:         func(string) bool { return true },
+		supportsCapability:  func(_ string, capability string) bool { return capability == "agent_runtime_controls_v2" },
+		registerTaskPromise: func(string) chan *ws.TaskResult { return resultCh },
+		awaitTaskResult:     func(string) chan *ws.TaskResult { return resultCh },
+	}
+	svc.SetDaemonHub(dispatcher)
 
 	runtimeConfig := model.AgentRuntimeConfig{
-		Version: 1, Model: "gpt-5.6-sol", ReasoningEffort: "high", ApprovalMode: "request",
+		Version: 2, Model: "gpt-5.6-sol", ReasoningEffort: "high", ApprovalMode: "request", ServiceTier: "priority",
 	}
 	result, err := svc.SendMessageWithRuntime(context.Background(), "conv-1", userID, "user", "hello", "", nil, nil, "agent-1", nil, runtimeConfig)
 	if err != nil {
@@ -393,6 +445,23 @@ func TestSendMessageWithAgentCreatesAssistantReply(t *testing.T) {
 	if agentRepo.task == nil || agentRepo.task.RuntimeConfig != runtimeConfig {
 		t.Fatalf("runtime config not preserved on daemon task: %#v", agentRepo.task)
 	}
+	calls := dispatcher.Calls()
+	frameJSON, err := json.Marshal(calls.LastSendMsg)
+	if err != nil {
+		t.Fatalf("marshal outgoing websocket frame: %v", err)
+	}
+	var frame struct {
+		Type string `json:"type"`
+		Data struct {
+			RuntimeConfig model.AgentRuntimeConfig `json:"runtime_config"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(frameJSON, &frame); err != nil {
+		t.Fatalf("decode outgoing websocket frame: %v", err)
+	}
+	if frame.Type != "task.dispatch" || frame.Data.RuntimeConfig != runtimeConfig {
+		t.Fatalf("outgoing websocket frame lost normalized runtime v2: %s", frameJSON)
+	}
 }
 
 func TestSendMessageAgentChatFallsBackToConversationAgent(t *testing.T) {
@@ -413,7 +482,7 @@ func TestSendMessageAgentChatFallsBackToConversationAgent(t *testing.T) {
 	defer hubCancel()
 	go hub.Run(hubCtx)
 	runtimeClient := ws.NewDaemonClient(nil, "machine-1")
-	runtimeClient.SetCapabilities([]string{"agent_runtime_controls_v1"})
+	runtimeClient.SetCapabilities([]string{"agent_runtime_controls_v2"})
 	hub.RegisterTestClient("machine-1", runtimeClient)
 	svc.SetDaemonHub(hub)
 
@@ -564,7 +633,7 @@ func TestCreateAgentReplyPersistsArtifacts(t *testing.T) {
 	svc := NewMessageService(msgRepo, convRepo, agentRepo)
 	daemonHub := ws.NewDaemonHub(slog.Default())
 	runtimeClient := ws.NewDaemonClient(nil, "machine-1")
-	runtimeClient.SetCapabilities([]string{"agent_runtime_controls_v1"})
+	runtimeClient.SetCapabilities([]string{"agent_runtime_controls_v2"})
 	daemonHub.RegisterTestClient("machine-1", runtimeClient)
 	svc.SetDaemonHub(daemonHub)
 
@@ -849,7 +918,7 @@ func TestCreateAgentReplyMergesDaemonAndTextCards(t *testing.T) {
 	svc := NewMessageService(msgRepo, convRepo, agentRepo)
 	daemonHub := ws.NewDaemonHub(slog.Default())
 	runtimeClient := ws.NewDaemonClient(nil, "machine-1")
-	runtimeClient.SetCapabilities([]string{"agent_runtime_controls_v1"})
+	runtimeClient.SetCapabilities([]string{"agent_runtime_controls_v2"})
 	daemonHub.RegisterTestClient("machine-1", runtimeClient)
 	svc.SetDaemonHub(daemonHub)
 

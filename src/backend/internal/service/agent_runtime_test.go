@@ -98,8 +98,32 @@ func TestNormalizeAgentRuntimeConfigDefaultsSafely(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ReasoningEffort != "medium" || got.ApprovalMode != "auto" || got.Version != 1 {
+	if got.ReasoningEffort != "medium" || got.ApprovalMode != "auto" || got.ServiceTier != "default" || got.Version != 2 {
 		t.Fatalf("unexpected defaults: %#v", got)
+	}
+}
+
+func TestNormalizeAgentRuntimeConfigMigratesV1ToStandardServiceTier(t *testing.T) {
+	got, err := NormalizeAgentRuntimeConfig(model.AgentRuntimeConfig{
+		Version: 1, Model: "gpt-5.6-sol", ReasoningEffort: "high", ApprovalMode: "request",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Version != 2 || got.ServiceTier != "default" {
+		t.Fatalf("unexpected migration: %#v", got)
+	}
+}
+
+func TestNormalizeAgentRuntimeConfigRejectsServiceTierOnLegacyOrVersionlessPayload(t *testing.T) {
+	for _, version := range []int{0, 1} {
+		_, err := NormalizeAgentRuntimeConfig(model.AgentRuntimeConfig{
+			Version: version, Model: "gpt-5.6-sol", ReasoningEffort: "medium",
+			ApprovalMode: "auto", ServiceTier: "priority",
+		})
+		if err == nil {
+			t.Fatalf("version %d with a v2-only service tier must be rejected", version)
+		}
 	}
 }
 
@@ -110,13 +134,32 @@ func TestNormalizeAgentRuntimeConfigAcceptsSupportedCodexValues(t *testing.T) {
 	}
 	for _, modelName := range models {
 		got, err := NormalizeAgentRuntimeConfig(model.AgentRuntimeConfig{
-			Version: 1, Model: modelName, ReasoningEffort: "high", ApprovalMode: "request",
+			Version: 2, Model: modelName, ReasoningEffort: "high", ApprovalMode: "request", ServiceTier: "default",
 		})
 		if err != nil {
 			t.Fatalf("model %q: %v", modelName, err)
 		}
 		if got.Model != modelName || got.ReasoningEffort != "high" || got.ApprovalMode != "request" {
 			t.Fatalf("unexpected normalized config: %#v", got)
+		}
+	}
+}
+
+func TestNormalizeAgentRuntimeConfigAcceptsPriorityOnlyForAdvertisedModels(t *testing.T) {
+	for _, modelName := range []string{"", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4"} {
+		got, err := NormalizeAgentRuntimeConfig(model.AgentRuntimeConfig{
+			Version: 2, Model: modelName, ReasoningEffort: "medium", ApprovalMode: "auto", ServiceTier: "priority",
+		})
+		if err != nil || got.ServiceTier != "priority" {
+			t.Fatalf("priority model %q: got %#v, err %v", modelName, got, err)
+		}
+	}
+	for _, modelName := range []string{"gpt-5.4-mini", "gpt-5.3-codex-spark"} {
+		_, err := NormalizeAgentRuntimeConfig(model.AgentRuntimeConfig{
+			Version: 2, Model: modelName, ReasoningEffort: "medium", ApprovalMode: "auto", ServiceTier: "priority",
+		})
+		if err == nil {
+			t.Fatalf("priority must be rejected for %q", modelName)
 		}
 	}
 }
