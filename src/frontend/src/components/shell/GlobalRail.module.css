@@ -20,6 +20,7 @@
 }
 
 .brandRow {
+  position: relative;
   height: 56px;
   display: flex;
   align-items: center;
@@ -34,12 +35,12 @@
   border-radius: 10px; color: #fff; background: var(--wb-action);
 }
 
-.brandMark { font-size: 15px; font-weight: 700; }
-.railCollapsed :is(.brandMark, .brandLabel) { display: none; }
-.collapsedBrandToggle { position: relative; padding: 0; border: 0; cursor: pointer; }
+.brandMark { font-size: 15px; font-weight: 700; transition: opacity 180ms var(--ease-out); }
+.railCollapsed .brandMark { opacity: 0; }
+.collapsedBrandToggle { position: absolute; right: 16px; padding: 0; border: 0; cursor: pointer; }
 .railToggle {
-  width: 32px; height: 32px; display: grid; place-items: center;
-  margin-left: auto; padding: 0; border: 0; border-radius: 8px;
+  position: absolute; right: 16px; width: 32px; height: 32px; display: grid; place-items: center;
+  padding: 0; border: 0; border-radius: 8px;
   color: var(--wb-text-secondary); background: transparent; cursor: pointer;
 }
 .collapsedBrandToggle:hover { background: var(--wb-action-hover); }

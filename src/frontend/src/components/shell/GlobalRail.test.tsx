@@ -69,6 +69,8 @@ describe('GlobalRail collapse preference', () => {
     expect(railStylesheet).toMatch(/\.collapsedBrandToggle:hover \.brandGlyph/);
     expect(railStylesheet).toMatch(/\.collapsedBrandToggle:focus-visible \.brandToggleIcon/);
     expect(railStylesheet).not.toMatch(/\.railCollapsed \.brandGlyph/);
+    expect(railStylesheet).toMatch(/\.railCollapsed \.brandMark \{ opacity: 0; \}/);
+    expect(railStylesheet).not.toMatch(/\.railCollapsed :is\([^)]*\.brandLabel[^)]*\) \{ display: none; \}/);
   });
 
   it('starts expanded when no preference has been stored', () => {
