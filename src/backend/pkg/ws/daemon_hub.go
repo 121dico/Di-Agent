@@ -388,6 +388,17 @@ func (dh *DaemonHub) ResolveAgentApproval(approvalID, userID, conversationID, de
 // AcknowledgeAgentApproval consumes a request only after its daemon confirms
 // that the decision was written back to the waiting app-server request.
 func (dh *DaemonHub) AcknowledgeAgentApproval(approvalID, machineID, taskID string) (AgentApprovalContext, error) {
+	return dh.consumeAgentApproval(approvalID, machineID, taskID)
+}
+
+// FailAgentApproval consumes a request when the daemon proves that the
+// app-server decision write failed. This keeps the browser from displaying an
+// approval that can no longer be applied while remaining fail-closed.
+func (dh *DaemonHub) FailAgentApproval(approvalID, machineID, taskID string) (AgentApprovalContext, error) {
+	return dh.consumeAgentApproval(approvalID, machineID, taskID)
+}
+
+func (dh *DaemonHub) consumeAgentApproval(approvalID, machineID, taskID string) (AgentApprovalContext, error) {
 	dh.approvalMu.Lock()
 	defer dh.approvalMu.Unlock()
 	value, ok := dh.agentApprovals.Load(approvalID)

@@ -317,6 +317,8 @@ func (h *DaemonHandler) readLoop(ctx context.Context, client *ws.DaemonClient, m
 			h.handleTaskApprovalRequired(ctx, client, envelope.Data)
 		case "task.approval_resolved":
 			h.handleTaskApprovalResolved(client, envelope.Data)
+		case "task.approval_failed":
+			h.handleTaskApprovalFailed(client, envelope.Data)
 		case "agent.started":
 			h.handleAgentStarted(envelope.Data)
 		case "agent.stopped":
@@ -358,6 +360,34 @@ func (h *DaemonHandler) handleTaskApprovalResolved(client *ws.DaemonClient, data
 			Data: map[string]interface{}{
 				"approval_id": req.ApprovalID, "conversation_id": approval.ConversationID,
 				"approvals": approvals, "revision": revision,
+			},
+		})
+	}
+}
+
+func (h *DaemonHandler) handleTaskApprovalFailed(client *ws.DaemonClient, data json.RawMessage) {
+	var req struct {
+		ApprovalID string `json:"approval_id"`
+		TaskID     string `json:"task_id"`
+		Error      string `json:"error"`
+	}
+	if err := json.Unmarshal(data, &req); err != nil || req.ApprovalID == "" || req.TaskID == "" {
+		h.logger.Warn("invalid task approval failure", "error", err)
+		return
+	}
+	approval, err := h.daemonHub.FailAgentApproval(req.ApprovalID, client.MachineID, req.TaskID)
+	if err != nil {
+		h.logger.Warn("task approval failure rejected", "approval_id", req.ApprovalID, "error", err)
+		return
+	}
+	h.logger.Warn("task approval app-server write failed", "approval_id", req.ApprovalID, "error", req.Error)
+	if h.userHub != nil {
+		approvals, revision := h.daemonHub.PendingAgentApprovalsWithRevision(approval.UserID, approval.ConversationID)
+		h.userHub.SendToUser(approval.UserID, ws.WSMessage{
+			Type: "agent.approval_resolved",
+			Data: map[string]interface{}{
+				"approval_id": req.ApprovalID, "conversation_id": approval.ConversationID,
+				"approvals": approvals, "revision": revision, "applied": false,
 			},
 		})
 	}

@@ -103,6 +103,30 @@ describe('AgentApprovalPrompt', () => {
     expect(sent).toHaveLength(2);
   });
 
+  it('accepts a restarted backend revision baseline after websocket reconnect', () => {
+    const staleApproval = {
+      approval_id: 'approval-before-restart', conversation_id: 'conversation-1',
+      task_id: 'task-before-restart', agent_id: 'agent-1', kind: 'command', method: 'command',
+      details: { command: 'pwd' },
+    };
+    useAgentApprovalStore.getState().reconcileConversation('conversation-1', [staleApproval], 5);
+    const wsClient = { send: () => {} };
+    useWsStore.setState({ status: 'disconnected', wsClient: wsClient as never, currentToken: 'token' });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mounted.push({ container, unmount: () => root.unmount() });
+    act(() => root.render(<AgentApprovalPrompt conversationId="conversation-1" />));
+    expect(container.textContent).toContain('pwd');
+
+    act(() => useWsStore.setState({ status: 'connected' }));
+    act(() => dispatchWsEvent('agent.approval_snapshot', {
+      conversation_id: 'conversation-1', approvals: [], revision: 0,
+    }));
+
+    expect(container.querySelector('[aria-label="Agent 审批请求"]')).toBeNull();
+  });
+
   it('reconciles an authoritative empty snapshot after a missed resolution', () => {
     useAgentApprovalStore.getState().upsert({
       approval_id: 'approval-stale', conversation_id: 'conversation-1',

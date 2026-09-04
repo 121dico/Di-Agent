@@ -130,3 +130,18 @@ func TestAgentApprovalSnapshotsCarryMonotonicCompleteState(t *testing.T) {
 		t.Fatalf("resolved snapshot is not newer and complete: %#v revision=%d", resolved, resolvedRevision)
 	}
 }
+
+func TestFailedAgentApprovalIsConsumedWithoutBeingApplied(t *testing.T) {
+	hub := NewDaemonHub(slog.Default())
+	hub.RegisterAgentApproval(AgentApprovalContext{
+		ApprovalID: "approval-failed", MachineID: "machine-1", TaskID: "task-1",
+		ConversationID: "conversation-1", UserID: "user-1", ExpiresAt: time.Now().Add(time.Minute),
+	})
+	failed, err := hub.FailAgentApproval("approval-failed", "machine-1", "task-1")
+	if err != nil || failed.UserID != "user-1" {
+		t.Fatalf("unexpected failure finalization: %#v, %v", failed, err)
+	}
+	if pending := hub.PendingAgentApprovals("user-1", "conversation-1"); len(pending) != 0 {
+		t.Fatalf("failed approval must not linger: %#v", pending)
+	}
+}

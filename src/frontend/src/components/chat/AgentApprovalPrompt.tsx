@@ -51,6 +51,7 @@ export const AgentApprovalPrompt: React.FC<{
   const remove = useAgentApprovalStore((state) => state.remove);
   const replaceConversation = useAgentApprovalStore((state) => state.replaceConversation);
   const reconcileConversation = useAgentApprovalStore((state) => state.reconcileConversation);
+  const resetConversationRevision = useAgentApprovalStore((state) => state.resetConversationRevision);
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const retryTimerRef = useRef<number | null>(null);
   const conversationIdRef = useRef(conversationId);
@@ -92,6 +93,7 @@ export const AgentApprovalPrompt: React.FC<{
         }
         setDecidingId((current) => current === approvalId ? null : current);
         if (retryTimerRef.current) window.clearTimeout(retryTimerRef.current);
+        if (event.applied === false) message.error('审批未能提交到 Agent，请重新发起任务');
         if (applied && resolvedConversationId === conversationIdRef.current) onResolvedRef.current?.();
       }
     });
@@ -115,11 +117,15 @@ export const AgentApprovalPrompt: React.FC<{
 
   useEffect(() => {
     if (!wsClient || wsStatus !== 'connected') return;
+    // Backend revisions are process-local. A new WebSocket generation may be
+    // connected to a restarted server, so establish a fresh baseline from its
+    // authoritative snapshot before comparing live-event revisions.
+    resetConversationRevision(conversationId);
     wsClient.send(JSON.stringify({
       type: 'agent.approval_list',
       data: { conversation_id: conversationId },
     }));
-  }, [conversationId, wsClient, wsStatus]);
+  }, [conversationId, resetConversationRevision, wsClient, wsStatus]);
 
   const active = requests[0];
   const summary = useMemo(() => active ? approvalSummary(active) : null, [active]);

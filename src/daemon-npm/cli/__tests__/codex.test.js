@@ -220,9 +220,11 @@ test('codex persistent adapter answers app-server approval requests through the 
 
 test('codex persistent adapter does not acknowledge an approval when the app-server write fails', async () => {
   const acknowledgements = [];
+  const failures = [];
   const harness = buildPersistentHarness({
     requestApproval: async () => ({ decision: 'accept', approval_id: 'approval-write-failed', task_id: 'task-write-failed' }),
     acknowledgeApproval: (acknowledgement) => acknowledgements.push(acknowledgement),
+    failApproval: (failure) => failures.push(failure),
   });
   const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({
     agentId: 'agent-write-failed', conversationId: 'conv-write-failed', userId: 'user-write-failed',
@@ -249,6 +251,9 @@ test('codex persistent adapter does not acknowledge an approval when the app-ser
   await new Promise((resolve) => setImmediate(resolve));
 
   assert.deepStrictEqual(acknowledgements, []);
+  assert.deepStrictEqual(failures, [{
+    approval_id: 'approval-write-failed', task_id: 'task-write-failed', error: 'write after end',
+  }]);
   assert.ok(harness.calls.logs.some((entry) => entry.event === 'agent.approval_write_failed'));
 });
 

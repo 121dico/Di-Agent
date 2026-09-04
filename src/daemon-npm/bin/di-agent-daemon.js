@@ -1124,6 +1124,7 @@ const completedTaskIDs = new Set();
 const pendingTaskCompletions = new Map(); // taskID → task.complete data, flushed after WS reconnect
 const pendingAgentApprovals = new Map(); // approvalID → { resolve, timer }
 const pendingApprovalAcknowledgements = new Map(); // approvalID → applied decision ack
+const pendingApprovalFailures = new Map(); // approvalID → failed app-server write outcome
 
 function requestAgentApproval(request) {
   return new Promise((resolve) => {
@@ -1163,7 +1164,9 @@ function resolveAgentApproval(data) {
   if (!pending) {
     const acknowledgement = approvalId ? pendingApprovalAcknowledgements.get(approvalId) : null;
     if (acknowledgement) sendApprovalAcknowledgement(acknowledgement);
-    return Boolean(acknowledgement);
+    const failure = approvalId ? pendingApprovalFailures.get(approvalId) : null;
+    if (failure) sendApprovalFailure(failure);
+    return Boolean(acknowledgement || failure);
   }
   pendingAgentApprovals.delete(approvalId);
   clearTimeout(pending.timer);
@@ -1192,6 +1195,17 @@ function sendApprovalAcknowledgement(data) {
 
 function flushPendingApprovalAcknowledgements() {
   for (const data of pendingApprovalAcknowledgements.values()) sendApprovalAcknowledgement(data);
+  for (const data of pendingApprovalFailures.values()) sendApprovalFailure(data);
+}
+
+function sendApprovalFailure(data) {
+  if (!data || !data.approval_id || !data.task_id) return;
+  if (!pendingApprovalFailures.has(data.approval_id)) {
+    pendingApprovalFailures.set(data.approval_id, data);
+    const timer = setTimeout(() => pendingApprovalFailures.delete(data.approval_id), 5 * 60 * 1000);
+    timer.unref();
+  }
+  safeSend(currentDaemonWs, JSON.stringify({ type: 'task.approval_failed', data }));
 }
 
 // Per-conversation session mapping: `${agent_id}:${conversation_id}` → sessionId
@@ -2198,6 +2212,7 @@ const initCliToolsCtx = {
   createAsyncQueue: require('../cli/events').createAsyncQueue,
   requestApproval: requestAgentApproval,
   acknowledgeApproval: sendApprovalAcknowledgement,
+  failApproval: sendApprovalFailure,
   // prompt / context 辅助
   buildPlatformMcpArgs,
   buildDiAgentContextEnv,

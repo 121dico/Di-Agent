@@ -545,12 +545,20 @@ function createCodexCliSpec(ctx) {
           }
         } catch (error) {
           // Keep the server-side approval pending when the app-server did not
-          // receive the decision. The browser can retry after reconnect/recovery.
+          // receive the decision, then explicitly fail it so the prompt does not
+          // linger after this app-server request has become unrecoverable.
           daemonCtx.logFlow('warn', 'agent.approval_write_failed', {
             agent_id: agentId,
             conversation_id: conversationId,
             error: error?.message || String(error),
           });
+          if (approvalResolution && typeof daemonCtx.failApproval === 'function') {
+            daemonCtx.failApproval({
+              approval_id: approvalResolution.approval_id,
+              task_id: approvalResolution.task_id,
+              error: error?.message || String(error),
+            });
+          }
         }
         return true;
       };
@@ -619,7 +627,7 @@ function createCodexCliSpec(ctx) {
       // --- 启动序列：initialize → thread/start ---
       const boot = (async () => {
         const init = await rpcCall('initialize', {
-          clientInfo: { name: 'di-agent-daemon', title: 'Di Agent', version: '0.4.1' },
+          clientInfo: { name: 'di-agent-daemon', title: 'Di Agent', version: '0.4.2' },
         });
         if (init.error) throw new Error(`codex app-server initialize 失败: ${init.error.message}`);
         const thread = await rpcCall('thread/start', { cwd });

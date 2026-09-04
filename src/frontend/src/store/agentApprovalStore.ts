@@ -18,6 +18,7 @@ interface AgentApprovalState {
   remove: (approvalId: string) => void;
   replaceConversation: (conversationId: string, requests: AgentApprovalRequest[]) => void;
   reconcileConversation: (conversationId: string, requests: AgentApprovalRequest[], revision: number) => boolean;
+  resetConversationRevision: (conversationId: string) => void;
   clear: () => void;
 }
 
@@ -62,5 +63,11 @@ export const useAgentApprovalStore = create<AgentApprovalState>((set) => ({
     });
     return applied;
   },
+  resetConversationRevision: (conversationId) => set((state) => {
+    if (!(conversationId in state.revisions)) return state;
+    const revisions = { ...state.revisions };
+    delete revisions[conversationId];
+    return { revisions };
+  }),
   clear: () => set({ pending: {}, revisions: {} }),
 }));
