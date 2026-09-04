@@ -35,11 +35,11 @@
   border-radius: 10px; color: #fff; background: var(--wb-action);
 }
 
-.brandMark { font-size: 15px; font-weight: 700; transition: opacity 180ms var(--ease-out); }
+.brandMark { font-size: 15px; font-weight: 700; }
 .railCollapsed .brandMark { opacity: 0; }
 .collapsedBrandToggle { position: absolute; right: 16px; padding: 0; border: 0; cursor: pointer; }
 .railToggle {
-  position: absolute; right: 16px; width: 32px; height: 32px; display: grid; place-items: center;
+  position: absolute; right: 16px; width: 40px; height: 40px; display: grid; place-items: center;
   padding: 0; border: 0; border-radius: 8px;
   color: var(--wb-text-secondary); background: transparent; cursor: pointer;
 }
@@ -88,7 +88,7 @@
   opacity: 0;
 }
 
-.brandLabel { color: var(--wb-text-primary); font-size: 14px; font-weight: 650; }
+.brandLabel { position: absolute; left: 68px; width: max(0px, calc(100% - 136px)); color: var(--wb-text-primary); font-size: 14px; font-weight: 650; }
 
 .primaryActions {
   display: grid;

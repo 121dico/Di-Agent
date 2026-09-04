@@ -71,6 +71,8 @@ describe('GlobalRail collapse preference', () => {
     expect(railStylesheet).not.toMatch(/\.railCollapsed \.brandGlyph/);
     expect(railStylesheet).toMatch(/\.railCollapsed \.brandMark \{ opacity: 0; \}/);
     expect(railStylesheet).not.toMatch(/\.railCollapsed :is\([^)]*\.brandLabel[^)]*\) \{ display: none; \}/);
+    expect(railStylesheet).toMatch(/\.railToggle \{[^}]*width: 40px; height: 40px;/s);
+    expect(railStylesheet).toMatch(/\.brandLabel \{[^}]*width: max\(0px, calc\(100% - 136px\)\)/s);
   });
 
   it('starts expanded when no preference has been stored', () => {
