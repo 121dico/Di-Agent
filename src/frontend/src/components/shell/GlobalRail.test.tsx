@@ -63,13 +63,12 @@ afterEach(() => {
 });
 
 describe('GlobalRail collapse preference', () => {
-  it('does not keep the collapse icon visible from ordinary pointer focus', () => {
+  it('keeps the collapsed D mark until hover or keyboard-visible focus', () => {
     renderRail();
 
-    expect(railStylesheet).toMatch(/\.brandToggle:focus-visible \.brandGlyph/);
-    expect(railStylesheet).toMatch(/\.brandToggle:focus-visible \.brandToggleIcon/);
-    expect(railStylesheet).not.toMatch(/\.brandToggle:focus(?!-visible) \.brandGlyph/);
-    expect(railStylesheet).not.toMatch(/\.brandToggle:focus(?!-visible) \.brandToggleIcon/);
+    expect(railStylesheet).toMatch(/\.collapsedBrandToggle:hover \.brandGlyph/);
+    expect(railStylesheet).toMatch(/\.collapsedBrandToggle:focus-visible \.brandToggleIcon/);
+    expect(railStylesheet).not.toMatch(/\.railCollapsed \.brandGlyph/);
   });
 
   it('starts expanded when no preference has been stored', () => {
@@ -77,9 +76,13 @@ describe('GlobalRail collapse preference', () => {
 
     const rail = container.querySelector('aside');
     const toggle = container.querySelector<HTMLButtonElement>('[aria-label="收起侧边栏"]');
+    const brandMark = Array.from(container.querySelectorAll('span'))
+      .find((element) => element.textContent === 'D');
 
     expect(rail?.getAttribute('data-collapsed')).toBe('false');
     expect(toggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(toggle?.textContent).not.toContain('D');
+    expect(brandMark?.closest('button')).toBeNull();
     expect(container.textContent).toContain('Di Agent');
     expect(container.textContent).toContain('新建对话');
     expect(container.textContent).toContain('消息');
@@ -93,7 +96,7 @@ describe('GlobalRail collapse preference', () => {
 
     const rail = container.querySelector('aside');
     expect(rail?.getAttribute('data-collapsed')).toBe('true');
-    expect(container.querySelector('[aria-label="展开侧边栏"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="展开侧边栏"]')?.textContent).toContain('D');
     expect(container.querySelector('[aria-label="新建对话"]')).not.toBeNull();
     expect(container.querySelector('[aria-label="消息，3 条未读"]')).not.toBeNull();
     expect(container.querySelector('[aria-label="账户设置，已连接"]')).not.toBeNull();
