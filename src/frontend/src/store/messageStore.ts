@@ -93,6 +93,24 @@ function parseServerBlocksJSON(blocksJSON: string | undefined | null): MessageBl
   }
 }
 
+function reconcileStreamingMessage(serverMessage: Message, localMessage: Message | undefined): Message {
+  if (!localMessage || serverMessage.status !== 'streaming' || localMessage.status !== 'streaming') {
+    return serverMessage;
+  }
+
+  const serverBlocks = parseServerBlocksJSON(serverMessage.blocks_json)
+    ?? (serverMessage.blocks?.length ? serverMessage.blocks : null);
+  return {
+    ...localMessage,
+    ...serverMessage,
+    content: serverMessage.content || localMessage.content,
+    blocks: serverBlocks ?? localMessage.blocks,
+    artifacts_json: serverMessage.artifacts_json ?? localMessage.artifacts_json,
+    username: serverMessage.username ?? localMessage.username,
+    task_id: serverMessage.task_id ?? localMessage.task_id,
+  };
+}
+
 const recentlyRecalled = new Map<string, number>();
 
 function isRecentlyRecalled(messageId: string): boolean {
@@ -133,10 +151,18 @@ export const useMessageStore = create<MessageState>((set, get) => ({
         PAGE_SIZE,
       );
       set((state) => {
-        // before 有值表示翻页加载更多，拼在前面；否则是首次加载，覆盖旧数据
-        const existing = before ? (state.messages[conversationId] ?? []) : [];
+        const current = state.messages[conversationId] ?? [];
+        const localById = new Map(current.map((message) => [message.id, message]));
+        const fetched = before
+          ? list
+          : list.map((message) => reconcileStreamingMessage(message, localById.get(message.id)));
+        const fetchedIds = new Set(fetched.map((message) => message.id));
+        // 翻页时拼接全部现有消息；首次刷新也要保留尚未出现在服务端列表里的本地流式消息。
+        const existing = before
+          ? current
+          : current.filter((message) => message.status === 'streaming' && !fetchedIds.has(message.id));
         // 后端返回 DESC，需要按 created_at ASC 排序保证旧消息在前
-        const merged = [...list, ...existing].sort(
+        const merged = [...fetched, ...existing].sort(
           (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
         );
         // 只在首次加载时裁剪；加载更多时保留历史消息

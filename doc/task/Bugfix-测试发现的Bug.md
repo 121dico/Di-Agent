@@ -1495,3 +1495,9 @@
 - **文件**: `src/frontend/src/components/chat/ChatInput.tsx:118-136`
 - **现象**: `handleSubmit` 先 `setValue('')` 和 `setPendingFiles([])` 清空输入，然后 `await send()`。如果 `send` 抛异常（网络错误），`finally` 只设置 `setSending(false)`。结果是用户输入的内容和附件都丢失了，无法重试。虽然 messageStore 的 optimistic message 会标记为 failed 显示重试按钮，但那只是纯文本内容——附件信息已在 `setPendingFiles([])` 中丢失。
 - **修复**: 将 `setValue('')` 和 `setPendingFiles([])` 移到 `send` 成功后执行；或在 catch 中恢复输入内容和附件
+
+### B111 [P1] 切页返回时空 streaming 占位覆盖已渲染的 Agent 回复
+
+- **文件**: `src/frontend/src/store/messageStore.ts`
+- **现象**: Agent 回复流式生成期间切换到其他页面再返回，`fetchMessages` 会用服务端尚未落库完成的空 `streaming` 占位消息覆盖 Zustand 中已经通过 WebSocket 累积的 `blocks`，导致回复从界面消失
+- **修复**: 首屏刷新时按消息 ID 合并本地与服务端流式消息；服务端仍为 `streaming` 时保留本地已渲染内容及暂未出现在服务端列表中的流式消息，服务端进入终态后再以服务端内容为准

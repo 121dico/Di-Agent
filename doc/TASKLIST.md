@@ -143,6 +143,7 @@
 | B108 | MessageAttachmentView 不支持非图片/PDF 附件——静默丢弃 | P3 | [x] |
 | B109 | ConversationItem archive 错误无用户反馈 | P2 | [x] |
 | B110 | ChatInput handleSubmit 发送失败不清空输入框但清空了 pendingFiles | P2 | [x] |
+| B111 | 切页返回时空 streaming 占位覆盖已渲染的 Agent 回复 | P1 | [x] |
 
 > 详情: [doc/task/Bugfix-测试发现的Bug.md](task/Bugfix-测试发现的Bug.md)
 

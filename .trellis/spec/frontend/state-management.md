@@ -47,6 +47,12 @@ the shared metadata from a layout-level bootstrap hook.
   server data from the previous identity.
 - Message history should be fetched from the backend source of truth when a
   conversation is opened; delivery/offline queues are separate from history.
+- A first-page message refresh must reconcile active local streaming messages
+  with the server response. While both copies are `streaming`, an empty server
+  placeholder must not erase locally accumulated `blocks`, `content`, or Agent
+  metadata; a local streaming message temporarily absent from that page must
+  remain in the store. A terminal server copy is authoritative. Regression
+  tests must cover all three cases.
 - Shared metadata needed for initial render should be loaded by
   `useAppBootstrap` under `AppLayout`.
 
