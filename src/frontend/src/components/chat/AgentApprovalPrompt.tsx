@@ -50,6 +50,7 @@ export const AgentApprovalPrompt: React.FC<{
   const upsert = useAgentApprovalStore((state) => state.upsert);
   const remove = useAgentApprovalStore((state) => state.remove);
   const replaceConversation = useAgentApprovalStore((state) => state.replaceConversation);
+  const reconcileConversation = useAgentApprovalStore((state) => state.reconcileConversation);
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const retryTimerRef = useRef<number | null>(null);
   const conversationIdRef = useRef(conversationId);
@@ -66,7 +67,13 @@ export const AgentApprovalPrompt: React.FC<{
   useEffect(() => {
     if (retryTimerRef.current) window.clearTimeout(retryTimerRef.current);
     const unsubscribeRequired = onWsEvent('agent.approval_required', (value) => {
-      if (isAgentApprovalRequest(value)) upsert(value);
+      if (!value || typeof value !== 'object') return;
+      const event = value as Record<string, unknown>;
+      if (typeof event.conversation_id === 'string' && Array.isArray(event.approvals) && typeof event.revision === 'number') {
+        reconcileConversation(event.conversation_id, event.approvals.filter(isAgentApprovalRequest), event.revision);
+      } else if (isAgentApprovalRequest(value)) {
+        upsert(value);
+      }
     });
     const unsubscribeResolved = onWsEvent('agent.approval_resolved', (value) => {
       const approvalId = value && typeof value === 'object'
@@ -76,17 +83,27 @@ export const AgentApprovalPrompt: React.FC<{
         const resolvedConversationId = value && typeof value === 'object'
           ? String((value as Record<string, unknown>).conversation_id ?? '')
           : '';
-        remove(approvalId);
+        const event = value as Record<string, unknown>;
+        let applied = true;
+        if (Array.isArray(event.approvals) && typeof event.revision === 'number') {
+          applied = reconcileConversation(resolvedConversationId, event.approvals.filter(isAgentApprovalRequest), event.revision);
+        } else {
+          remove(approvalId);
+        }
         setDecidingId((current) => current === approvalId ? null : current);
         if (retryTimerRef.current) window.clearTimeout(retryTimerRef.current);
-        if (resolvedConversationId === conversationIdRef.current) onResolvedRef.current?.();
+        if (applied && resolvedConversationId === conversationIdRef.current) onResolvedRef.current?.();
       }
     });
     const unsubscribeSnapshot = onWsEvent('agent.approval_snapshot', (value) => {
       if (!value || typeof value !== 'object') return;
-      const snapshot = value as { conversation_id?: unknown; approvals?: unknown };
+      const snapshot = value as { conversation_id?: unknown; approvals?: unknown; revision?: unknown };
       if (typeof snapshot.conversation_id !== 'string' || !Array.isArray(snapshot.approvals)) return;
-      replaceConversation(snapshot.conversation_id, snapshot.approvals.filter(isAgentApprovalRequest));
+      if (typeof snapshot.revision === 'number') {
+        reconcileConversation(snapshot.conversation_id, snapshot.approvals.filter(isAgentApprovalRequest), snapshot.revision);
+      } else {
+        replaceConversation(snapshot.conversation_id, snapshot.approvals.filter(isAgentApprovalRequest));
+      }
     });
     return () => {
       if (retryTimerRef.current) window.clearTimeout(retryTimerRef.current);
@@ -94,7 +111,7 @@ export const AgentApprovalPrompt: React.FC<{
       unsubscribeResolved();
       unsubscribeSnapshot();
     };
-  }, [remove, replaceConversation, upsert]);
+  }, [reconcileConversation, remove, replaceConversation, upsert]);
 
   useEffect(() => {
     if (!wsClient || wsStatus !== 'connected') return;

@@ -352,10 +352,12 @@ func (h *DaemonHandler) handleTaskApprovalResolved(client *ws.DaemonClient, data
 		return
 	}
 	if h.userHub != nil {
+		approvals, revision := h.daemonHub.PendingAgentApprovalsWithRevision(approval.UserID, approval.ConversationID)
 		h.userHub.SendToUser(approval.UserID, ws.WSMessage{
 			Type: "agent.approval_resolved",
 			Data: map[string]interface{}{
 				"approval_id": req.ApprovalID, "conversation_id": approval.ConversationID,
+				"approvals": approvals, "revision": revision,
 			},
 		})
 	}
@@ -389,6 +391,7 @@ func (h *DaemonHandler) handleTaskApprovalRequired(ctx context.Context, client *
 		Kind: req.Kind, Method: req.Method, DetailsJSON: string(req.Details), ExpiresAt: expires,
 	})
 	if h.userHub != nil {
+		approvals, revision := h.daemonHub.PendingAgentApprovalsWithRevision(task.UserID, task.ConversationID)
 		h.userHub.SendToUser(task.UserID, ws.WSMessage{
 			Type: "agent.approval_required",
 			Data: map[string]interface{}{
@@ -400,6 +403,8 @@ func (h *DaemonHandler) handleTaskApprovalRequired(ctx context.Context, client *
 				"method":          req.Method,
 				"details":         json.RawMessage(req.Details),
 				"expires_at":      expires,
+				"approvals":       approvals,
+				"revision":        revision,
 			},
 		})
 	}

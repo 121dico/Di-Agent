@@ -527,14 +527,31 @@ function createCodexCliSpec(ctx) {
           ? { permissions: allowed ? (msg.params?.permissions || {}) : {}, scope: 'turn' }
           : { decision: allowed ? decision : 'decline' };
         try {
-          child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: msg.id, result })}\n`);
+          await new Promise((resolve, reject) => {
+            if (!child.stdin || child.stdin.destroyed || child.exitCode !== null) {
+              reject(new Error('codex app-server stdin is not writable'));
+              return;
+            }
+            child.stdin.write(
+              `${JSON.stringify({ jsonrpc: '2.0', id: msg.id, result })}\n`,
+              (error) => error ? reject(error) : resolve(),
+            );
+          });
           if (approvalResolution && typeof daemonCtx.acknowledgeApproval === 'function') {
             daemonCtx.acknowledgeApproval({
               approval_id: approvalResolution.approval_id,
               task_id: approvalResolution.task_id,
             });
           }
-        } catch { /* process teardown resolves the active turn */ }
+        } catch (error) {
+          // Keep the server-side approval pending when the app-server did not
+          // receive the decision. The browser can retry after reconnect/recovery.
+          daemonCtx.logFlow('warn', 'agent.approval_write_failed', {
+            agent_id: agentId,
+            conversation_id: conversationId,
+            error: error?.message || String(error),
+          });
+        }
         return true;
       };
 

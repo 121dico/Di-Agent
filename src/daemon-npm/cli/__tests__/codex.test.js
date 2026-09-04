@@ -47,9 +47,10 @@ function fakeCodexChild(onRequest = () => {}) {
   child.stderr.setEncoding = () => {};
   child.stdin = {
     writes: [],
-    write(line) {
+    write(line, callback) {
       this.writes.push(line);
       onRequest(JSON.parse(line), child);
+      if (typeof callback === 'function') queueMicrotask(() => callback(null));
       return true;
     },
   };
@@ -215,6 +216,40 @@ test('codex persistent adapter answers app-server approval requests through the 
     .find((message) => message.id === 88);
   assert.deepStrictEqual(approvalResponse.result, { decision: 'accept' });
   assert.deepStrictEqual(acknowledgements, [{ approval_id: 'approval-88', task_id: 'task-88' }]);
+});
+
+test('codex persistent adapter does not acknowledge an approval when the app-server write fails', async () => {
+  const acknowledgements = [];
+  const harness = buildPersistentHarness({
+    requestApproval: async () => ({ decision: 'accept', approval_id: 'approval-write-failed', task_id: 'task-write-failed' }),
+    acknowledgeApproval: (acknowledgement) => acknowledgements.push(acknowledgement),
+  });
+  const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({
+    agentId: 'agent-write-failed', conversationId: 'conv-write-failed', userId: 'user-write-failed',
+  }, harness.ctx);
+
+  const response = runtime.sendPrompt('run pwd', {
+    version: 1, model: '', reasoning_effort: 'medium', approval_mode: 'request',
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  const originalWrite = harness.child.stdin.write.bind(harness.child.stdin);
+  harness.child.stdin.write = function writeWithApprovalFailure(line, callback) {
+    const message = JSON.parse(line);
+    if (message.id === 92) {
+      this.writes.push(line);
+      queueMicrotask(() => callback(new Error('write after end')));
+      return false;
+    }
+    return originalWrite(line, callback);
+  };
+  harness.child.stdout.emit('data', `${JSON.stringify({
+    jsonrpc: '2.0', id: 92, method: 'item/commandExecution/requestApproval', params: { command: 'pwd' },
+  })}\n`);
+  await response;
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepStrictEqual(acknowledgements, []);
+  assert.ok(harness.calls.logs.some((entry) => entry.event === 'agent.approval_write_failed'));
 });
 
 test('codex persistent adapter returns a schema-valid empty permission grant when declined', async () => {

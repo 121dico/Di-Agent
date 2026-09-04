@@ -122,6 +122,53 @@ describe('AgentApprovalPrompt', () => {
     expect(container.querySelector('[aria-label="Agent 审批请求"]')).toBeNull();
   });
 
+  it('ignores a stale empty snapshot delivered after a newer required event', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mounted.push({ container, unmount: () => root.unmount() });
+    act(() => root.render(<AgentApprovalPrompt conversationId="conversation-1" />));
+
+    const approval = {
+      approval_id: 'approval-new', conversation_id: 'conversation-1',
+      task_id: 'task-new', agent_id: 'agent-1', kind: 'command', method: 'command',
+      details: { command: 'pwd' },
+    };
+    act(() => dispatchWsEvent('agent.approval_required', {
+      ...approval, approvals: [approval], revision: 2,
+    }));
+    act(() => dispatchWsEvent('agent.approval_snapshot', {
+      conversation_id: 'conversation-1', approvals: [], revision: 1,
+    }));
+
+    expect(container.textContent).toContain('pwd');
+  });
+
+  it('ignores a stale non-empty snapshot delivered after a newer resolution', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mounted.push({ container, unmount: () => root.unmount() });
+    act(() => root.render(<AgentApprovalPrompt conversationId="conversation-1" />));
+
+    const approval = {
+      approval_id: 'approval-old', conversation_id: 'conversation-1',
+      task_id: 'task-old', agent_id: 'agent-1', kind: 'command', method: 'command',
+      details: { command: 'pwd' },
+    };
+    act(() => dispatchWsEvent('agent.approval_required', {
+      ...approval, approvals: [approval], revision: 1,
+    }));
+    act(() => dispatchWsEvent('agent.approval_resolved', {
+      approval_id: 'approval-old', conversation_id: 'conversation-1', approvals: [], revision: 2,
+    }));
+    act(() => dispatchWsEvent('agent.approval_snapshot', {
+      conversation_id: 'conversation-1', approvals: [approval], revision: 1,
+    }));
+
+    expect(container.querySelector('[aria-label="Agent 审批请求"]')).toBeNull();
+  });
+
   it('shows the concrete file root and permission profile before approval', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);

@@ -167,16 +167,18 @@ type daemonBusMsg struct {
 // DaemonHub 管理所有 daemon WebSocket 连接，基于消息总线模式。
 // 与用户 Hub 相同设计：单 goroutine 事件循环 + sync.Map + buffered bus channel。
 type DaemonHub struct {
-	clients        sync.Map // machineID -> *DaemonClient
-	resultChans    sync.Map // taskID -> chan *TaskResult
-	taskMessages   sync.Map // taskID -> messageID（daemon 丢字段时的兜底映射）
-	taskAgents     sync.Map // taskID -> agentName（PR3：message.streaming 广播时携带 agent_name）
-	agentApprovals sync.Map // approvalID -> AgentApprovalContext
-	bus            chan daemonBusMsg
-	logger         *slog.Logger
-	wg             sync.WaitGroup
-	draining       atomic.Bool
-	shutdownOnce   sync.Once
+	clients           sync.Map // machineID -> *DaemonClient
+	resultChans       sync.Map // taskID -> chan *TaskResult
+	taskMessages      sync.Map // taskID -> messageID（daemon 丢字段时的兜底映射）
+	taskAgents        sync.Map // taskID -> agentName（PR3：message.streaming 广播时携带 agent_name）
+	agentApprovals    sync.Map // approvalID -> AgentApprovalContext
+	approvalMu        sync.Mutex
+	approvalRevisions map[string]uint64 // authenticated user/conversation -> monotonic state revision
+	bus               chan daemonBusMsg
+	logger            *slog.Logger
+	wg                sync.WaitGroup
+	draining          atomic.Bool
+	shutdownOnce      sync.Once
 }
 
 // AgentApprovalContext binds a daemon approval request to the authenticated task owner.
@@ -209,8 +211,9 @@ type AgentApprovalPayload struct {
 // NewDaemonHub 创建 DaemonHub 实例
 func NewDaemonHub(logger *slog.Logger) *DaemonHub {
 	return &DaemonHub{
-		bus:    make(chan daemonBusMsg, 256),
-		logger: logger,
+		bus:               make(chan daemonBusMsg, 256),
+		logger:            logger,
+		approvalRevisions: make(map[string]uint64),
 	}
 }
 
@@ -265,6 +268,16 @@ func (dh *DaemonHub) DeleteTaskMessage(taskID string) {
 	dh.taskMessages.Delete(taskID)
 }
 
+func approvalRevisionKey(userID, conversationID string) string {
+	return userID + "\x00" + conversationID
+}
+
+func (dh *DaemonHub) bumpApprovalRevisionLocked(userID, conversationID string) uint64 {
+	key := approvalRevisionKey(userID, conversationID)
+	dh.approvalRevisions[key]++
+	return dh.approvalRevisions[key]
+}
+
 // RegisterAgentApproval records the immutable ownership boundary for a pending request.
 func (dh *DaemonHub) RegisterAgentApproval(value AgentApprovalContext) {
 	if value.ApprovalID == "" || value.MachineID == "" || value.UserID == "" {
@@ -273,27 +286,49 @@ func (dh *DaemonHub) RegisterAgentApproval(value AgentApprovalContext) {
 	if value.ExpiresAt.IsZero() {
 		value.ExpiresAt = time.Now().Add(5 * time.Minute)
 	}
+	dh.approvalMu.Lock()
 	dh.agentApprovals.Store(value.ApprovalID, value)
+	dh.bumpApprovalRevisionLocked(value.UserID, value.ConversationID)
+	dh.approvalMu.Unlock()
 	ttl := time.Until(value.ExpiresAt)
 	if ttl <= 0 {
-		dh.agentApprovals.CompareAndDelete(value.ApprovalID, value)
+		dh.approvalMu.Lock()
+		if dh.agentApprovals.CompareAndDelete(value.ApprovalID, value) {
+			dh.bumpApprovalRevisionLocked(value.UserID, value.ConversationID)
+		}
+		dh.approvalMu.Unlock()
 		return
 	}
 	time.AfterFunc(ttl, func() {
 		// Compare protects a newer request in the improbable event of ID reuse.
-		dh.agentApprovals.CompareAndDelete(value.ApprovalID, value)
+		dh.approvalMu.Lock()
+		if dh.agentApprovals.CompareAndDelete(value.ApprovalID, value) {
+			dh.bumpApprovalRevisionLocked(value.UserID, value.ConversationID)
+		}
+		dh.approvalMu.Unlock()
 	})
 }
 
 // PendingAgentApprovals returns still-valid requests for one authenticated
 // conversation. It supports browser reconnect, refresh, and conversation switch.
 func (dh *DaemonHub) PendingAgentApprovals(userID, conversationID string) []AgentApprovalPayload {
+	result, _ := dh.PendingAgentApprovalsWithRevision(userID, conversationID)
+	return result
+}
+
+// PendingAgentApprovalsWithRevision returns an atomic state snapshot. The
+// revision lets browsers discard snapshots/events that arrive out of order.
+func (dh *DaemonHub) PendingAgentApprovalsWithRevision(userID, conversationID string) ([]AgentApprovalPayload, uint64) {
+	dh.approvalMu.Lock()
+	defer dh.approvalMu.Unlock()
 	now := time.Now()
 	result := make([]AgentApprovalPayload, 0)
 	dh.agentApprovals.Range(func(key, raw any) bool {
 		approval := raw.(AgentApprovalContext)
 		if now.After(approval.ExpiresAt) {
-			dh.agentApprovals.CompareAndDelete(key, approval)
+			if dh.agentApprovals.CompareAndDelete(key, approval) {
+				dh.bumpApprovalRevisionLocked(approval.UserID, approval.ConversationID)
+			}
 			return true
 		}
 		if approval.UserID != userID || approval.ConversationID != conversationID {
@@ -311,28 +346,35 @@ func (dh *DaemonHub) PendingAgentApprovals(userID, conversationID string) []Agen
 		})
 		return true
 	})
-	return result
+	return result, dh.approvalRevisions[approvalRevisionKey(userID, conversationID)]
 }
 
 // ResolveAgentApproval validates the deciding user/conversation and forwards an
 // allowlisted decision. The request remains pending until the daemon confirms
 // that the decision reached the original app-server RPC.
 func (dh *DaemonHub) ResolveAgentApproval(approvalID, userID, conversationID, decision string) error {
+	dh.approvalMu.Lock()
 	value, ok := dh.agentApprovals.Load(approvalID)
 	if !ok {
+		dh.approvalMu.Unlock()
 		return errors.New("approval request not found")
 	}
 	approval := value.(AgentApprovalContext)
 	if approval.UserID != userID || approval.ConversationID != conversationID {
+		dh.approvalMu.Unlock()
 		return errors.New("approval request owner mismatch")
 	}
 	if time.Now().After(approval.ExpiresAt) {
 		dh.agentApprovals.Delete(approvalID)
+		dh.bumpApprovalRevisionLocked(approval.UserID, approval.ConversationID)
+		dh.approvalMu.Unlock()
 		return errors.New("approval request expired")
 	}
 	if decision != "accept" && decision != "acceptForSession" && decision != "decline" {
+		dh.approvalMu.Unlock()
 		return errors.New("invalid approval decision")
 	}
+	dh.approvalMu.Unlock()
 	return dh.SendToMachine(approval.MachineID, WSMessage{
 		Type: "task.approval_decision",
 		Data: map[string]interface{}{
@@ -346,6 +388,8 @@ func (dh *DaemonHub) ResolveAgentApproval(approvalID, userID, conversationID, de
 // AcknowledgeAgentApproval consumes a request only after its daemon confirms
 // that the decision was written back to the waiting app-server request.
 func (dh *DaemonHub) AcknowledgeAgentApproval(approvalID, machineID, taskID string) (AgentApprovalContext, error) {
+	dh.approvalMu.Lock()
+	defer dh.approvalMu.Unlock()
 	value, ok := dh.agentApprovals.Load(approvalID)
 	if !ok {
 		return AgentApprovalContext{}, errors.New("approval request not found")
@@ -357,6 +401,7 @@ func (dh *DaemonHub) AcknowledgeAgentApproval(approvalID, machineID, taskID stri
 	if !dh.agentApprovals.CompareAndDelete(approvalID, approval) {
 		return AgentApprovalContext{}, errors.New("approval request already resolved")
 	}
+	dh.bumpApprovalRevisionLocked(approval.UserID, approval.ConversationID)
 	return approval, nil
 }
 

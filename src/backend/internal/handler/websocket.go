@@ -278,9 +278,11 @@ func (h *WebSocketHandler) readLoop(ctx context.Context, client *ws.Client) {
 			if ok, _ := h.memberChecker.IsConversationMember(ctx, payload.ConversationID, client.UserID); !ok {
 				continue
 			}
+			approvals, revision := h.daemonHub.PendingAgentApprovalsWithRevision(client.UserID, payload.ConversationID)
 			_ = client.Send(ws.WSMessage{Type: "agent.approval_snapshot", Data: map[string]interface{}{
 				"conversation_id": payload.ConversationID,
-				"approvals":       h.daemonHub.PendingAgentApprovals(client.UserID, payload.ConversationID),
+				"approvals":       approvals,
+				"revision":        revision,
 			}})
 		default:
 			h.hub.SendToUser(client.UserID, ws.WSMessage{

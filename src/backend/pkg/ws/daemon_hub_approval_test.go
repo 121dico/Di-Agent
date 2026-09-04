@@ -105,3 +105,28 @@ func TestPendingAgentApprovalsCanBeReplayedAfterBrowserReconnect(t *testing.T) {
 		t.Fatalf("approval leaked to another user: %#v", other)
 	}
 }
+
+func TestAgentApprovalSnapshotsCarryMonotonicCompleteState(t *testing.T) {
+	hub := NewDaemonHub(slog.Default())
+	first, initialRevision := hub.PendingAgentApprovalsWithRevision("user-1", "conversation-1")
+	if len(first) != 0 || initialRevision != 0 {
+		t.Fatalf("unexpected initial snapshot: %#v revision=%d", first, initialRevision)
+	}
+
+	hub.RegisterAgentApproval(AgentApprovalContext{
+		ApprovalID: "approval-revision", MachineID: "machine-1", TaskID: "task-1",
+		ConversationID: "conversation-1", UserID: "user-1", ExpiresAt: time.Now().Add(time.Minute),
+	})
+	pending, requiredRevision := hub.PendingAgentApprovalsWithRevision("user-1", "conversation-1")
+	if len(pending) != 1 || requiredRevision <= initialRevision {
+		t.Fatalf("required snapshot is not newer and complete: %#v revision=%d", pending, requiredRevision)
+	}
+
+	if _, err := hub.AcknowledgeAgentApproval("approval-revision", "machine-1", "task-1"); err != nil {
+		t.Fatal(err)
+	}
+	resolved, resolvedRevision := hub.PendingAgentApprovalsWithRevision("user-1", "conversation-1")
+	if len(resolved) != 0 || resolvedRevision <= requiredRevision {
+		t.Fatalf("resolved snapshot is not newer and complete: %#v revision=%d", resolved, resolvedRevision)
+	}
+}

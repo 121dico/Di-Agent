@@ -13,9 +13,11 @@ export interface AgentApprovalRequest {
 
 interface AgentApprovalState {
   pending: Record<string, AgentApprovalRequest>;
+  revisions: Record<string, number>;
   upsert: (request: AgentApprovalRequest) => void;
   remove: (approvalId: string) => void;
   replaceConversation: (conversationId: string, requests: AgentApprovalRequest[]) => void;
+  reconcileConversation: (conversationId: string, requests: AgentApprovalRequest[], revision: number) => boolean;
   clear: () => void;
 }
 
@@ -28,6 +30,7 @@ export function isAgentApprovalRequest(value: unknown): value is AgentApprovalRe
 
 export const useAgentApprovalStore = create<AgentApprovalState>((set) => ({
   pending: {},
+  revisions: {},
   upsert: (request) => set((state) => ({
     pending: { ...state.pending, [request.approval_id]: request },
   })),
@@ -43,5 +46,21 @@ export const useAgentApprovalStore = create<AgentApprovalState>((set) => ({
     for (const request of requests) pending[request.approval_id] = request;
     return { pending };
   }),
-  clear: () => set({ pending: {} }),
+  reconcileConversation: (conversationId, requests, revision) => {
+    let applied = false;
+    set((state) => {
+      const currentRevision = state.revisions[conversationId] ?? -1;
+      if (!Number.isSafeInteger(revision) || revision < 0 || revision <= currentRevision) return state;
+      const pending = Object.fromEntries(Object.entries(state.pending)
+        .filter(([, request]) => request.conversation_id !== conversationId));
+      for (const request of requests) pending[request.approval_id] = request;
+      applied = true;
+      return {
+        pending,
+        revisions: { ...state.revisions, [conversationId]: revision },
+      };
+    });
+    return applied;
+  },
+  clear: () => set({ pending: {}, revisions: {} }),
 }));
