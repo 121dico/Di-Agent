@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { ComposerContextAction } from './ChatInput';
+import { ContextUsageFooterView } from './ContextUsageFooter';
 import { ComposerConversationActions } from './ComposerConversationActions';
 
 const mounted: Array<{ container: HTMLDivElement; unmount: () => void }> = [];
@@ -17,21 +17,22 @@ afterEach(() => {
 });
 
 describe('ChatInput context action', () => {
-  it('renders a dedicated context control for the composer trailing actions', () => {
+  it('renders context status directly without requiring a button click', () => {
     const markup = renderToStaticMarkup(
-      React.createElement(ComposerContextAction, { onOpen: vi.fn(), active: false }),
+      React.createElement(ContextUsageFooterView, { onOpen: vi.fn(), usages: [] }),
     );
 
-    expect(markup).toContain('aria-label="上下文与检查点"');
-    expect(markup).toContain('上下文');
+    expect(markup).toContain('aria-label="上下文用量"');
+    expect(markup).toContain('暂无用量记录');
+    expect(markup).toContain('<progress');
   });
 
   it('keeps context outside the bordered input container and removes voice UI', () => {
     const source = readFileSync('src/components/chat/ChatInput.tsx', 'utf8');
-    const contextDock = source.indexOf('className={styles.contextDock}');
+    const contextDock = source.indexOf('<ContextUsageFooter');
     const inputRow = source.indexOf('className={styles.inputRow}');
     expect(contextDock).toBeGreaterThan(-1);
-    expect(contextDock).toBeLessThan(inputRow);
+    expect(contextDock).toBeGreaterThan(inputRow);
     expect(source).not.toContain('AudioOutlined');
     expect(source).not.toContain('语音输入即将上线');
     expect(source).not.toContain('styles.voiceBtn');

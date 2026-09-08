@@ -5,7 +5,6 @@ import {
   ArrowUpOutlined,
   CloseOutlined,
   DatabaseOutlined,
-  DashboardOutlined,
   GlobalOutlined,
   LockOutlined,
   RobotOutlined,
@@ -32,6 +31,7 @@ import type { AttachmentPayload } from '@/types/attachment';
 import type { Message, ReplyToPreview } from '@/types/message';
 import { AttachmentPreview, type PendingAttachment } from './AttachmentPreview';
 import { ComposerAddMenu } from './ComposerAddMenu';
+import { ContextUsageFooter } from './ContextUsageFooter';
 import {
   ComposerApprovalControl,
   ComposerRuntimeControls,
@@ -80,7 +80,6 @@ interface ChatInputProps {
   replyTo?: Message | null;
   onCancelReply?: () => void;
   onOpenContext?: () => void;
-  contextActive?: boolean;
   /**
    * 把内部 processFiles 暴露给父级（ChatWindow），让整个聊天窗口的拖放都能复用同一套
    * 校验 + 上传逻辑。传 null 表示注销（卸载时）。
@@ -88,30 +87,11 @@ interface ChatInputProps {
   onRegisterProcessFiles?: (handler: ((files: FileList | File[]) => void) | null) => void;
 }
 
-export const ComposerContextAction: React.FC<{
-  onOpen: () => void;
-  active: boolean;
-}> = ({ onOpen, active }) => (
-  <Tooltip title="上下文用量与检查点">
-    <Button
-      type="text"
-      icon={<DashboardOutlined />}
-      className={styles.contextBtn}
-      aria-label="上下文与检查点"
-      aria-pressed={active}
-      onClick={onOpen}
-    >
-      <span className={styles.contextBtnLabel}>上下文</span>
-    </Button>
-  </Tooltip>
-);
-
 export const ChatInput: React.FC<ChatInputProps> = ({
   conversationId,
   replyTo,
   onCancelReply,
   onOpenContext,
-  contextActive = false,
   onRegisterProcessFiles,
 }) => {
   const [expanded, setExpanded] = useState(false);
@@ -771,11 +751,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           </button>
         </div>
       )}
-      {onOpenContext && (
-        <div className={styles.contextDock}>
-          <ComposerContextAction onOpen={onOpenContext} active={contextActive} />
-        </div>
-      )}
       <div className={styles.inputRow}>
         <TextArea
           ref={textareaRef}
@@ -836,6 +811,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           className={styles.fileInput}
         />
       </div>
+      {onOpenContext && (
+        <ContextUsageFooter key={conversationId} conversationId={conversationId} agentId={directAgentId} onOpen={onOpenContext} />
+      )}
       {mentionVisible && filteredTargets.length > 0 && (
         <div className={styles.mentionDropdown}>
           {filteredTargets.map((target, i) => (

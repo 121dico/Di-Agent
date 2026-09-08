@@ -717,7 +717,6 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onOpenPersonalReport, pe
         replyTo={replyTo}
         onCancelReply={() => setReplyTo(null)}
         onOpenContext={(isAgent || isGroup) ? () => setContextDrawerOpen(true) : undefined}
-        contextActive={contextDrawerOpen}
         onRegisterProcessFiles={registerProcessFiles}
       />
       {isGroup && activeId && (
