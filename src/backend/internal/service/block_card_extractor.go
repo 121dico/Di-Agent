@@ -59,12 +59,25 @@ func SplitTextBlocksByCardFences(blocks []model.MessageBlock) []model.MessageBlo
 			continue
 		}
 		parts := splitTextBlockByCardFences(block.Text)
+		// No valid split occurred: preserve the complete source block, including
+		// observed timing. Rebuilding just kind/text loses replay metadata.
+		if len(parts) == 1 && parts[0].Kind == model.BlockKindText && parts[0].Text == block.Text && strings.TrimSpace(block.Text) != "" {
+			out = append(out, block)
+			continue
+		}
+		firstPart := len(out)
 		for _, part := range parts {
 			// 跳过空文本片段：text 切分时 before/middle/after 可能为空串，落库无意义。
 			if part.Kind == model.BlockKindText && strings.TrimSpace(part.Text) == "" {
 				continue
 			}
 			out = append(out, part)
+		}
+		// Only the source block's outer bounds were observed. Intermediate
+		// card/text split times are unknown; do not give each fragment a fake range.
+		if len(out) > firstPart {
+			out[firstPart].StartedAt = block.StartedAt
+			out[len(out)-1].EndedAt = block.EndedAt
 		}
 	}
 	// 重新计算 Index：保证单调递增无空洞（与 streaming_reducer.nextIndex 行为一致）。

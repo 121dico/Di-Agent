@@ -7,6 +7,7 @@
 package service
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 
@@ -648,5 +649,69 @@ func TestParallelLegacyToolInputsMatchInvocationIDs(t *testing.T) {
 	}, InitialStreamingState())
 	if state.Blocks[0].Text != `{"file_path":"/skills/review/SKILL.md"}` || state.Blocks[1].Text != `{"q":"docs"}` {
 		t.Fatalf("crossed inputs: %+v", state.Blocks)
+	}
+}
+
+func TestTraceTimesComeOnlyFromRealEventsAndMatchParallelCalls(t *testing.T) {
+	var events []model.AgentEvent
+	raw := `[
+ {"type":"thinking","content":"inspect","ts":"2026-09-08T09:00:00Z"},
+ {"type":"thinking","content":" plan","ts":"2026-09-08T09:00:01Z"},
+ {"type":"tool_use","tool":"Read","tool_use_id":"a","ts":"2026-09-08T09:00:02Z"},
+ {"type":"tool_use","tool":"Search","tool_use_id":"b","ts":"2026-09-08T09:00:03Z"},
+ {"type":"tool_use","tool_use_id":"a","input":"{}","ts":"2026-09-08T09:00:04Z"},
+ {"type":"tool_result","tool_use_id":"a","output":"loaded","ts":"2026-09-08T09:00:05Z"},
+ {"type":"text","content":"Done","ts":"2026-09-08T09:00:06Z"},
+ {"type":"text","content":"!","ts":"2026-09-08T09:00:07Z"},
+ {"type":"turn_end","ts":"2026-09-08T09:00:08Z"} ]`
+	if err := json.Unmarshal([]byte(raw), &events); err != nil {
+		t.Fatal(err)
+	}
+	state := ReduceEvents(events, InitialStreamingState())
+	wire, _ := json.Marshal(state.Blocks)
+	var blocks []map[string]any
+	if err := json.Unmarshal(wire, &blocks); err != nil {
+		t.Fatal(err)
+	}
+	if blocks[0]["started_at"] != "2026-09-08T09:00:00Z" || blocks[0]["ended_at"] != "2026-09-08T09:00:01Z" {
+		t.Fatalf("thinking timing: %s", wire)
+	}
+	if blocks[1]["started_at"] != "2026-09-08T09:00:02Z" || blocks[1]["ended_at"] != "2026-09-08T09:00:05Z" {
+		t.Fatalf("parallel call timing: %s", wire)
+	}
+	if _, ok := blocks[2]["ended_at"]; ok {
+		t.Fatalf("unfinished call received invented end: %s", wire)
+	}
+	if blocks[3]["ended_at"] != "2026-09-08T09:00:05Z" {
+		t.Fatalf("result timing: %s", wire)
+	}
+	if blocks[4]["started_at"] != "2026-09-08T09:00:06Z" || blocks[4]["ended_at"] != "2026-09-08T09:00:07Z" {
+		t.Fatalf("text timing: %s", wire)
+	}
+	legacy := ReduceEvents([]model.AgentEvent{{Type: model.AgentEventText, Content: "old"}, {Type: model.AgentEventToolUse, Tool: "Read", ToolUseID: "legacy"}, {Type: model.AgentEventToolResultOld, ToolUseID: "legacy", Output: "old"}}, InitialStreamingState())
+	wire, _ = json.Marshal(legacy.Blocks)
+	if bytes.Contains(wire, []byte("started_at")) || bytes.Contains(wire, []byte("ended_at")) {
+		t.Fatalf("invented legacy timing: %s", wire)
+	}
+}
+
+func TestErrorTraceKeepsObservedTimestampAfterReplay(t *testing.T) {
+	var event model.AgentEvent
+	if err := json.Unmarshal([]byte(`{"type":"error","message":"connection lost","ts":"2026-09-08T09:00:09Z"}`), &event); err != nil {
+		t.Fatal(err)
+	}
+	state := StreamingReducer(InitialStreamingState(), event)
+	wire, _ := json.Marshal(state.Blocks)
+	var blocks []map[string]any
+	if err := json.Unmarshal(wire, &blocks); err != nil {
+		t.Fatal(err)
+	}
+	if blocks[0]["started_at"] != "2026-09-08T09:00:09Z" || blocks[0]["ended_at"] != "2026-09-08T09:00:09Z" {
+		t.Fatalf("error timing lost: %s", wire)
+	}
+	legacy := StreamingReducer(InitialStreamingState(), model.AgentEvent{Type: model.AgentEventError, Message: "old error"})
+	wire, _ = json.Marshal(legacy.Blocks)
+	if bytes.Contains(wire, []byte("started_at")) || bytes.Contains(wire, []byte("ended_at")) {
+		t.Fatalf("invented legacy error time: %s", wire)
 	}
 }

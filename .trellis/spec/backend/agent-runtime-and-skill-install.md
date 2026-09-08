@@ -389,3 +389,15 @@ if blocks[i].ToolUseID == event.ToolUseIDOrAlt() {
     blocks[i].Text += inputDelta
 }
 ```
+
+### Observed timing for visual trajectories
+
+`AgentEvent.ts` is an ISO timestamp observed at the daemon event boundary before
+batching (preserve native timestamps when supplied). It is not a claim about the
+runtime's unobserved internal start time. Reducers preserve optional RFC3339
+`MessageBlock.started_at` / `ended_at` strings in live state and history JSON.
+Text blocks span their first and last observed public delta; tool calls start at
+their start event and end only at the result with the same invocation ID. Input
+fragments must not reset start time. Terminal task events must not invent tool
+completion. Missing legacy timestamps stay absent. The visual trajectory must
+fall back to order-only bars and never derive duration from token/text length.

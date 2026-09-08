@@ -42,6 +42,7 @@ import { isCompletedAssistantMessage, messageText } from './conversationActions'
 // MessageBubble 只依赖 renderBlock 抽象，不直接 import 具体组件。
 import { renderBlock, type BlockRenderContext } from './blocks';
 import { ExecutionTraceButton } from './ExecutionTraceButton';
+import { traceInputFromSource } from './executionTraceTimeline';
 import { escapeHtml } from './highlight';
 import { resolveAgentAvatar, resolveUserAvatar } from '@/components/agent/agentPresentation';
 import {
@@ -453,6 +454,9 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
 }) => {
   // 默认展开：内容不再自动折叠（代码块级折叠已由 CodeBlock 承担）
   const [expanded, setExpanded] = useState(true);
+  const replySourceId = message.reply_to || message.reply_to_message?.id;
+  const traceSource = useMessageStore((s) => s.messages[message.conversation_id]?.find((item) => item.id === replySourceId));
+  const traceInput = useMemo(() => traceInputFromSource(traceSource, !!message.reply_to_message?.deleted_at), [traceSource, message.reply_to_message?.deleted_at]);
   const isSystem = message.role === 'system';
   const isOptimisticSending = optimisticStatus === 'sending';
   const isOptimisticFailed = optimisticStatus === 'failed';
@@ -897,7 +901,7 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
               <Spin size="small" className={styles.sendingSpin} />
             )}
           </div>
-          {message.role === 'assistant' && <ExecutionTraceButton blocks={parsedBlocks} status={isStreaming ? 'streaming' : message.status} />}
+          {message.role === 'assistant' && <ExecutionTraceButton blocks={parsedBlocks} status={isStreaming ? 'streaming' : message.status} input={traceInput} />}
           {isStreaming && !isOptimisticSending && !isOptimisticFailed && (
             <StopButton
               conversationId={message.conversation_id}

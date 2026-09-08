@@ -20,6 +20,7 @@ package service
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
@@ -169,6 +170,7 @@ func applyTextDelta(state StreamingState, event model.AgentEvent) StreamingState
 			Text:  content,
 		})
 	}
+	observeBlockTime(&blocks[len(blocks)-1], event.Ts)
 	state.Blocks = blocks
 	return state
 }
@@ -194,6 +196,7 @@ func applyThinkingDelta(state StreamingState, event model.AgentEvent) StreamingS
 			Text:  content,
 		})
 	}
+	observeBlockTime(&blocks[len(blocks)-1], event.Ts)
 	state.Blocks = blocks
 	return state
 }
@@ -224,6 +227,7 @@ func applyToolUseStart(state StreamingState, event model.AgentEvent) StreamingSt
 		blocks = append(blocks, model.MessageBlock{
 			Index:      nextIndex(blocks),
 			Kind:       model.BlockKindToolUse,
+			StartedAt:  eventTimestamp(event.Ts),
 			Text:       initialToolInput(event.Input),
 			ToolKind:   event.ToolKind,
 			SkillName:  event.SkillName,
@@ -318,6 +322,9 @@ func applyToolResult(state StreamingState, event model.AgentEvent) StreamingStat
 	for i := len(blocks) - 1; i >= 0; i-- {
 		b := blocks[i]
 		if event.ToolUseIDOrAlt() != "" && b.Kind == model.BlockKindToolUse && b.ToolUseID == event.ToolUseIDOrAlt() {
+			if !event.Ts.IsZero() {
+				blocks[i].EndedAt = eventTimestamp(event.Ts)
+			}
 			if event.ToolKind == "" {
 				event.ToolKind = b.ToolKind
 			}
@@ -340,6 +347,8 @@ func applyToolResult(state StreamingState, event model.AgentEvent) StreamingStat
 	blocks = append(blocks, model.MessageBlock{
 		Index:      nextIndex(blocks),
 		Kind:       model.BlockKindToolResult,
+		StartedAt:  eventTimestamp(event.Ts),
+		EndedAt:    eventTimestamp(event.Ts),
 		ToolName:   event.Tool,
 		ToolKind:   event.ToolKind,
 		SkillName:  event.SkillName,
@@ -364,10 +373,12 @@ func applyError(state StreamingState, event model.AgentEvent) StreamingState {
 	}
 	blocks := cloneBlocks(state.Blocks)
 	blocks = append(blocks, model.MessageBlock{
-		Index:   nextIndex(blocks),
-		Kind:    model.BlockKindError,
-		Text:    message,
-		IsError: true,
+		Index:     nextIndex(blocks),
+		Kind:      model.BlockKindError,
+		StartedAt: eventTimestamp(event.Ts),
+		EndedAt:   eventTimestamp(event.Ts),
+		Text:      message,
+		IsError:   true,
 	})
 	state.Blocks = blocks
 	state.Status = model.MessageStatusError
@@ -424,4 +435,23 @@ func initialToolInput(raw json.RawMessage) string {
 		return ""
 	}
 	return input
+}
+
+// 使用 RFC3339 字符串保留旧记录的缺省状态，也避免快照共享可变时间指针。
+func eventTimestamp(ts time.Time) string {
+	if ts.IsZero() {
+		return ""
+	}
+	return ts.Format(time.RFC3339Nano)
+}
+
+func observeBlockTime(block *model.MessageBlock, ts time.Time) {
+	stamp := eventTimestamp(ts)
+	if stamp == "" {
+		return
+	}
+	if block.StartedAt == "" {
+		block.StartedAt = stamp
+	}
+	block.EndedAt = stamp
 }

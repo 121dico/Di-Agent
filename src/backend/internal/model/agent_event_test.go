@@ -126,3 +126,31 @@ func TestAgentEventAcceptsNativeObjectToolResults(t *testing.T) {
 		t.Fatalf("lost native event: %+v", events)
 	}
 }
+
+func TestAgentEventMarshalOmitsMissingTimestamp(t *testing.T) {
+	wire, err := json.Marshal(AgentEvent{Type: AgentEventText, Content: "legacy"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(wire, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := raw["ts"]; ok {
+		t.Fatalf("invented legacy timestamp: %s", wire)
+	}
+	var event AgentEvent
+	if err := json.Unmarshal([]byte(`{"type":"text","content":"live","ts":"2026-09-08T09:00:00Z"}`), &event); err != nil {
+		t.Fatal(err)
+	}
+	wire, err = json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(wire, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if raw["ts"] != "2026-09-08T09:00:00Z" {
+		t.Fatalf("real timestamp lost: %s", wire)
+	}
+}

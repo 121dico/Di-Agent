@@ -211,3 +211,31 @@ func TestSnapshotBlocksJSONFromBufferAppliesCardSplit(t *testing.T) {
 		}
 	}
 }
+
+func TestFinalizedPlainTextRetainsObservedTimeRange(t *testing.T) {
+	var events []model.AgentEvent
+	if err := json.Unmarshal([]byte(`[{"type":"text","content":"I will check","ts":"2026-09-08T09:00:00Z"},{"type":"text","content":" the skill","ts":"2026-09-08T09:00:01Z"},{"type":"tool_use","tool":"get_agent_skill","tool_use_id":"skill","ts":"2026-09-08T09:00:02Z"},{"type":"tool_result","tool_use_id":"skill","output":"loaded","ts":"2026-09-08T09:00:03Z"},{"type":"text","content":"Done","ts":"2026-09-08T09:00:04Z"}]`), &events); err != nil {
+		t.Fatal(err)
+	}
+	buf := NewStreamingBuffer()
+	buf.PushEvents("timed-reply", events)
+	wire := snapshotBlocksJSONFromBuffer(buf, "timed-reply")
+	var blocks []model.MessageBlock
+	if err := json.Unmarshal([]byte(wire), &blocks); err != nil {
+		t.Fatal(err)
+	}
+	if len(blocks) != 4 || blocks[0].StartedAt != "2026-09-08T09:00:00Z" || blocks[0].EndedAt != "2026-09-08T09:00:01Z" || blocks[3].StartedAt != "2026-09-08T09:00:04Z" || blocks[3].EndedAt != "2026-09-08T09:00:04Z" {
+		t.Fatalf("finalized public text lost observed range: %s", wire)
+	}
+}
+
+func TestCardSplitRetainsOnlyKnownOuterTimeBoundaries(t *testing.T) {
+	source := model.MessageBlock{Kind: model.BlockKindText, Text: "intro\n```di_agent\n{\"cards\":[{\"type\":\"info\",\"id\":\"c1\"}]}\n```\noutro", StartedAt: "2026-09-08T09:00:00Z", EndedAt: "2026-09-08T09:00:05Z"}
+	blocks := SplitTextBlocksByCardFences([]model.MessageBlock{source})
+	if len(blocks) != 3 || blocks[0].StartedAt != source.StartedAt || blocks[2].EndedAt != source.EndedAt {
+		t.Fatalf("known boundaries lost: %+v", blocks)
+	}
+	if blocks[0].EndedAt != "" || blocks[1].StartedAt != "" || blocks[1].EndedAt != "" || blocks[2].StartedAt != "" {
+		t.Fatalf("invented split-specific duration: %+v", blocks)
+	}
+}

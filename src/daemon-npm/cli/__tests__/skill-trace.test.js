@@ -50,3 +50,33 @@ test('wire output is always a string accepted by Go AgentEvent.Output', () => {
   assert.equal(typeof JSON.parse(JSON.stringify(result)).output, 'string');
   assert.equal(JSON.parse(result.output).content[0].text, 'result');
 });
+
+test('transport records actual observation times for every event and preserves runtime timestamps', () => {
+  let observedAt = new Date('2026-09-08T09:00:00.000Z');
+  const trace = createToolTrace([], () => observedAt);
+  const start = trace({ type: 'tool_use', tool: 'mcp__github__search', toolUseID: 'timed', input: {} });
+  observedAt = new Date('2026-09-08T09:00:00.250Z');
+  const thinking = trace({ type: 'thinking', content: 'checking' });
+  const text = trace({ type: 'text', content: 'done' });
+  const end = trace({ type: 'tool_result', toolUseID: 'timed', output: 'ok' });
+  assert.equal(start.ts, '2026-09-08T09:00:00.000Z');
+  assert.equal(thinking.ts, '2026-09-08T09:00:00.250Z');
+  assert.equal(text.ts, '2026-09-08T09:00:00.250Z');
+  assert.equal(end.ts, '2026-09-08T09:00:00.250Z');
+  assert.ok(Date.parse(end.ts) > Date.parse(start.ts));
+  assert.equal(trace({ type: 'text', content: 'earlier', ts: '2026-09-08T08:59:00.125Z' }).ts, '2026-09-08T08:59:00.125Z');
+});
+
+test('completion-only evidence never receives a synthetic start timestamp', () => {
+ const trace = createToolTrace([], () => new Date('2026-09-08T09:00:00Z'));
+ const start = trace({type:'tool_use',tool:'shell',toolUseID:'only',timing_incomplete:true});
+ const result = trace({type:'tool_result',toolUseID:'only',output:'done'});
+ assert.equal(start.ts, undefined);
+ assert.equal(result.ts,'2026-09-08T09:00:00.000Z');
+});
+test('normalizes millisecond timestamps and rejects invalid timestamps at Go wire boundary', () => {
+ const trace = createToolTrace([], () => new Date('2026-09-08T09:00:00Z'));
+ assert.equal(trace({type:'text',ts:0}).ts,'1970-01-01T00:00:00.000Z');
+ assert.equal(trace({type:'text',ts:'not-a-date'}).ts,'2026-09-08T09:00:00.000Z');
+ assert.equal(trace({type:'text',ts:'2026'}).ts,'2026-09-08T09:00:00.000Z');
+});

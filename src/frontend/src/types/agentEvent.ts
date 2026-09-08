@@ -47,7 +47,7 @@ export interface AgentEventEnvelope extends ToolTraceMetadata {
   /** 产生事件的 adapter 名（'claude' / 'codex' / ...） */
   adapter?: string;
   /** 毫秒时间戳 */
-  ts?: number;
+  ts?: number | string;
 }
 
 /** AgentEvent：按 type 收窄 payload 的 discriminated union。 */

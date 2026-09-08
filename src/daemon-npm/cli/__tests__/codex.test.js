@@ -831,3 +831,32 @@ test('Codex missing final file extracts only last assistant event, never native 
  assert.equal(spec.parseResult({stdout,stderr:'PRIVATE STDERR'}), 'Final answer');
  assert.equal(spec.parseResult({stdout:JSON.stringify({type:'item.completed',item:{type:'mcp_tool_call',output:'PRIVATE BODY'}})}), '(Agent CLI 没有返回内容)');
 });
+
+test('Codex CLI emits native starts once and matches interleaved completions by ID', () => {
+ const spec = createCodexCliSpec(buildMockCtx());
+ const context = {};
+ const parse = (type, id) => spec.parseStreamEvent(JSON.stringify({type,item:{type:'command_execution',id,command:'pwd',status:type === 'item.started' ? 'in_progress' : 'completed',aggregated_output:'done'}}),context);
+ assert.equal(parse('item.started','a')[0].type, 'tool_use');
+ assert.equal(parse('item.started','b')[0].type, 'tool_use');
+ const resultB = parse('item.completed','b');
+ assert.equal(resultB.length, 1);
+ assert.equal(resultB[0].toolUseID, 'b');
+ assert.equal(resultB[0].type, 'tool_result');
+ assert.equal(parse('item.completed','a').length, 1);
+ const missingStart = parse('item.completed','unknown');
+ assert.equal(missingStart[0].timing_incomplete, true);
+ // A different invocation cannot inherit a reused native ID.
+ assert.equal(spec.parseStreamEvent(JSON.stringify({type:'item.completed',item:{type:'command_execution',id:'a'}}),{})[0].timing_incomplete,true);
+});
+
+test('Codex app-server commands preserve start/completion boundaries without duplicate calls', async () => {
+ const harness = buildPersistentHarness();
+ const events = [];
+ const spec = createCodexCliSpec(harness.ctx);
+ const slot = spec.spawnPersistent({ agentId: 'a', conversationId: 'c', eventRef: {current: ev => events.push(ev)} },harness.ctx);
+ await slot.sendPrompt('hello');
+ harness.child.stdout.emit('data', JSON.stringify({method:'item/started',params:{item:{type:'commandExecution',id:'shell-1',command:'pwd'}}})+'\n');
+ harness.child.stdout.emit('data', JSON.stringify({method:'item/completed',params:{item:{type:'commandExecution',id:'shell-1',command:'pwd',status:'completed',aggregatedOutput:'done'}}})+'\n');
+ assert.equal(events.filter(ev => ev.toolUseID === 'shell-1' && ev.type === 'tool_use').length,1);
+ assert.equal(events.filter(ev => ev.toolUseID === 'shell-1' && ev.type === 'tool_result').length,1);
+});

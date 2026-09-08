@@ -237,7 +237,7 @@ function createOpenCodeCliSpec(ctx) {
       const part = event?.part;
       if (event?.type === 'tool_use' && part?.type === 'tool' && ['completed', 'error'].includes(part.state?.status)) {
         const id = part.callID || part.id;
-        return [toolUseEvent(part.tool, part.state.input || {}, id),
+        return [{ ...toolUseEvent(part.tool, part.state.input || {}, id), timing_incomplete: true },
           { ...toolResultEvent(part.tool, part.state.status === 'error' ? part.state.error : part.state.output, part.state.status === 'error'), toolUseID: id }];
       }
       if (event?.type === 'text' && typeof part?.text === 'string') return [textEvent(part.text)];

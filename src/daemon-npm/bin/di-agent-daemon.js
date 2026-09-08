@@ -2324,10 +2324,11 @@ async function executeTask(task, taskCtx, onEvent) {
   // 解析为 AgentEvent 并推给 onEvent（StreamBuffer → task.progress → 前端）。
   // 仅当 cli spec 实现了 parseStreamEventAll 且上层提供了 onEvent 时启用。
   const streamCliSpec = cliTools.getCliTool(task.cli_tool);
+  const streamContext = { ...initCliToolsCtx };
   const streamLineCb = (typeof onEvent === 'function'
     && streamCliSpec && typeof streamCliSpec.parseStreamEventAll === 'function')
     ? (line) => {
-        const events = streamCliSpec.parseStreamEventAll(line, initCliToolsCtx);
+        const events = streamCliSpec.parseStreamEventAll(line, streamContext);
         for (const ev of events) {
           try { onEvent(ev); } catch { /* 回调异常不阻断进程 */ }
         }

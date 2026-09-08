@@ -135,3 +135,33 @@ detail / real execution Drawer fit the viewport; expanded JSON results wrapped
 without horizontal overflow. Long local card descriptions are capped at three
 lines and paths at two; detail retains full metadata. Temporary browser viewport
 overrides are reset after acceptance.
+
+## Harness-style visual trajectory refinement
+
+Added four colored lanes, time/order views, searchable typed event rows, bar-to-row
+selection, keyboard selection, collapsible details, and parallel-call subtracks.
+Only a complete, loaded user source message supplies the input lane; truncated
+reply previews and Agent-to-Agent dispatch replies are not relabeled user input.
+Missing timestamps are explicitly separated from the time axis; legacy traces
+retain equal-width order mode. Native starts are used when available, while
+completion-only adapters leave call-start time absent rather than reporting 0ms.
+
+Real browser tests on the isolated Codex runtime verified Skill success, MCP
+success, Skill failure, observed intervals, input/result detail, search, type
+filtering, bar selection, and a 390 CSS pixel viewport without page/drawer
+horizontal overflow. Old history remains usable in order mode. New trace source
+and history preserve exact invocation IDs. Frontend: 57 files / 251 tests passed;
+npm daemon: 219 tests passed; backend model/service passed. Final isolated build
+passed. Previously documented unrelated backend deployment test remains unchanged.
+
+Review/acceptance fixes included numeric native timestamps normalized to ISO,
+zero Go timestamps omitted, error timestamps replayed, a summary-row fold toggle,
+and preservation of public text times through the production card-split/finalize
+snapshot. Tests exercise that final snapshot path; actual card splitting retains
+only known outer boundaries rather than inventing per-fragment timing.
+
+Final live round after the snapshot fix showed seven events: full user input,
+public output, local Skill start/result, MCP start/result, final public output.
+The observed text spans were 674ms and 1.24s; Skill 76ms and MCP 13ms. Reloading
+preserved the same seven entries and exact spans (total observed axis 16.8s).
+These are measurements of that validation run, not hard-coded UI values.

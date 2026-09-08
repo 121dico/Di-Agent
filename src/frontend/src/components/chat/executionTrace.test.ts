@@ -54,3 +54,26 @@ it('never routes an unknown explicit invocation ID into another call', () => {
   ]);
   expect(blocks[0]?.text).toBe('');
 });
+
+it('uses observed timestamps for call duration and preserves text interval through replay', () => {
+  const { blocks } = reduceEvents([
+    { type: 'text', content: 'Begin', ts: '2026-09-08T09:00:00.000Z' },
+    { type: 'text', content: ' now', ts: '2026-09-08T09:00:01.000Z' },
+    { type: 'tool_use', tool: 'search', toolUseID: 'm', ts: '2026-09-08T09:00:02.000Z' },
+    { type: 'tool_result', toolUseID: 'm', output: 'done', ts: '2026-09-08T09:00:04.250Z' },
+  ]);
+  expect(blocks[0]).toMatchObject({ started_at: '2026-09-08T09:00:00.000Z', ended_at: '2026-09-08T09:00:01.000Z' });
+  expect(blocks[1]).toMatchObject({ started_at: '2026-09-08T09:00:02.000Z', ended_at: '2026-09-08T09:00:04.250Z' });
+  expect(blocks[2]).toMatchObject({ started_at: '2026-09-08T09:00:04.250Z', ended_at: '2026-09-08T09:00:04.250Z' });
+});
+
+it('does not persist zero timestamps from an older backend or invent missing timestamps', () => {
+  const { blocks } = reduceEvents([
+    { type: 'text', content: 'old', ts: '0001-01-01T00:00:00Z' },
+    { type: 'tool_use', tool: 'search', toolUseID: 'm' },
+    { type: 'tool_result', toolUseID: 'm', output: 'done', ts: '2026-09-08T09:00:04.250Z' },
+  ]);
+  expect(blocks[0]?.started_at).toBeUndefined();
+  expect(blocks[1]?.started_at).toBeUndefined();
+  expect(blocks[1]?.ended_at).toBe('2026-09-08T09:00:04.250Z');
+});

@@ -59,6 +59,7 @@ export function streamingReducer(
     return state;
   }
 
+  const timestamp = eventTimestamp(event.ts);
   switch (event.type) {
     case 'text':
     case 'text.delta': {
@@ -67,9 +68,9 @@ export function streamingReducer(
       const blocks = [...state.blocks];
       const last = blocks[blocks.length - 1];
       if (last && last.kind === 'text') {
-        blocks[blocks.length - 1] = { ...last, text: last.text + text };
+        blocks[blocks.length - 1] = { ...last, text: last.text + text, started_at: last.started_at ?? timestamp, ended_at: timestamp ?? last.ended_at };
       } else {
-        blocks.push({ index: nextIndex(blocks), kind: 'text', text });
+        blocks.push({ index: nextIndex(blocks), kind: 'text', text, started_at: timestamp, ended_at: timestamp });
       }
       return { ...state, blocks };
     }
@@ -81,9 +82,9 @@ export function streamingReducer(
       const blocks = [...state.blocks];
       const last = blocks[blocks.length - 1];
       if (last && last.kind === 'thinking') {
-        blocks[blocks.length - 1] = { ...last, text: last.text + text };
+        blocks[blocks.length - 1] = { ...last, text: last.text + text, started_at: last.started_at ?? timestamp, ended_at: timestamp ?? last.ended_at };
       } else {
-        blocks.push({ index: nextIndex(blocks), kind: 'thinking', text });
+        blocks.push({ index: nextIndex(blocks), kind: 'thinking', text, started_at: timestamp, ended_at: timestamp });
       }
       return { ...state, blocks };
     }
@@ -97,6 +98,7 @@ export function streamingReducer(
         blocks.push({
           index: nextIndex(blocks),
           kind: 'tool_use',
+          started_at: timestamp,
           text: initialToolInput(event.input, event.content),
           tool_kind: event.tool_kind,
           skill_name: event.skill_name,
@@ -155,9 +157,14 @@ export function streamingReducer(
             ? event.content
             : '';
       const isError = event.is_error === true || event.isError === true;
+      const callID = event.tool_use_id || event.toolUseID;
+      const callIndex = callID ? findToolUseBlock(blocks, callID) : -1;
+      if (callIndex !== -1 && timestamp) blocks[callIndex] = { ...blocks[callIndex]!, ended_at: timestamp };
       blocks.push({
         index: nextIndex(blocks),
         kind: 'tool_result',
+        started_at: timestamp,
+        ended_at: timestamp,
         text: output,
         tool_use_id: event.tool_use_id || event.toolUseID,
         tool_kind: event.tool_kind,
@@ -174,6 +181,8 @@ export function streamingReducer(
       blocks.push({
         index: nextIndex(blocks),
         kind: 'error',
+        started_at: timestamp,
+        ended_at: timestamp,
         text: event.message ?? '生成失败',
         is_error: true,
       });
@@ -252,4 +261,10 @@ function initialToolInput(input: unknown, content?: string): string {
   const text = typeof input === 'string' ? input : input != null ? JSON.stringify(input) : content ?? '';
   // Claude start 事件的空对象只是占位符，后续 JSON 参数增量从空串开始。
   return text === '{}' ? '' : text;
+}
+
+function eventTimestamp(ts: number | string | undefined): string | undefined {
+  if (ts === undefined) return undefined;
+  const date = new Date(ts);
+  return Number.isFinite(date.getTime()) && date.getUTCFullYear() > 1 ? date.toISOString() : undefined;
 }

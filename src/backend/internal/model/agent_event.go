@@ -54,7 +54,7 @@ type AgentEvent struct {
 	Type         string          `json:"type"`
 	Seq          int64           `json:"seq,omitempty"`
 	Adapter      string          `json:"adapter,omitempty"`
-	Ts           time.Time       `json:"ts,omitempty"`
+	Ts           time.Time       `json:"ts,omitempty,omitzero"`
 	Content      string          `json:"content,omitempty"`
 	Text         string          `json:"text,omitempty"`
 	Tool         string          `json:"tool,omitempty"`

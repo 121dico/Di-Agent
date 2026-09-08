@@ -1,4 +1,5 @@
 'use strict';
+const { codexToolEvents } = require('./codex-tool-events');
 
 // CodexCliSpec: OpenAI Codex CLI 的 spec 实现。
 // 对应：
@@ -28,8 +29,6 @@ const { execSync } = require('child_process');
 const {
   textEvent,
   thinkingEvent,
-  toolUseEvent,
-  toolResultEvent,
   errorEvent,
   turnEndEvent,
   sessionEndEvent,
@@ -539,6 +538,7 @@ function createCodexCliSpec(ctx) {
         queue.push(ev);
       };
 
+      const nativeToolStarts = new Set();
       const handleNotification = (msg) => {
         const method = msg.method;
         const p = msg.params || {};
@@ -552,14 +552,8 @@ function createCodexCliSpec(ctx) {
           return;
         }
         if (method === 'item/started' || method === 'item/completed') {
-          const item = p.item || {};
-          if (item.type === 'mcpToolCall' || item.type === 'mcp_tool_call') {
-            const name = item.tool || item.name || item.tool_name || 'mcp_tool_call';
-            const meta = { tool_kind: 'mcp', server_name: item.server || item.server_name || '', toolUseID: item.id };
-            if (method === 'item/started') dispatchEvent({ ...toolUseEvent(name, item.arguments || item.input || {}, item.id), ...meta });
-            else dispatchEvent({ ...toolResultEvent(name, item.result || item.output || item.error || '', item.status === 'failed' || Boolean(item.error) || Boolean(item.result?.isError)), ...meta });
-            return;
-          }
+          const events = codexToolEvents(p.item || {}, method === 'item/started' ? 'started' : 'completed', nativeToolStarts);
+          if (events) { for (const event of events) dispatchEvent(event); return; }
         }
         if (method === 'item/completed') {
           const item = p.item || {};
@@ -571,20 +565,6 @@ function createCodexCliSpec(ctx) {
               ? item.summary.map((s) => (s && typeof s.text === 'string' ? s.text : '')).filter(Boolean).join('\n')
               : '');
             if (summaryText) dispatchEvent(thinkingEvent(summaryText));
-          } else if (item.type === 'commandExecution' || item.type === 'command_execution') {
-            dispatchEvent(toolUseEvent('shell', typeof item.command === 'string' ? item.command : '', item.id));
-            // 注意：app-server 的 status 是字符串（"completed"/"failed"），
-            // 退出码在 exitCode 字段——不能拿 status 做数值判断（NaN 恒≠0 会全部误报失败）。
-            const cmdExitCode = item.exitCode != null ? Number(item.exitCode) : null;
-            const cmdFailed = (typeof item.status === 'string' && item.status !== 'completed')
-              || (cmdExitCode !== null && cmdExitCode !== 0);
-            dispatchEvent({ ...toolResultEvent(
-              'shell',
-              typeof (item.aggregatedOutput || item.aggregated_output || item.output) === 'string'
-                ? (item.aggregatedOutput || item.aggregated_output || item.output)
-                : '',
-              cmdFailed,
-            ), toolUseID: item.id });
           }
           return;
         }
@@ -896,7 +876,7 @@ function createCodexCliSpec(ctx) {
       };
     },
 
-    parseStreamEvent(line, _ctx) {
+    parseStreamEvent(line, streamContext = {}) {
       if (!line || !line.trim()) return null;
       let event;
       try {
@@ -906,6 +886,11 @@ function createCodexCliSpec(ctx) {
       }
       if (!event || typeof event !== 'object') return null;
 
+      if ((event.type === 'item.started' || event.type === 'item.completed') && event.item) {
+        streamContext.nativeToolStarts ||= new Set();
+        const tools = codexToolEvents(event.item, event.type === 'item.started' ? 'started' : 'completed', streamContext.nativeToolStarts);
+        if (tools) return tools;
+      }
       if (event.type === 'item.completed' && event.item && typeof event.item === 'object') {
         const item = event.item;
         switch (item.type) {
@@ -913,24 +898,6 @@ function createCodexCliSpec(ctx) {
             return [textEvent(typeof item.text === 'string' ? item.text : '')];
           case 'reasoning':
             return [thinkingEvent(typeof item.text === 'string' ? item.text : '')];
-          case 'command_execution': {
-            const exitCode = item.exitCode != null ? Number(item.exitCode) : null;
-            const failed = (typeof item.status === 'string' && item.status !== 'completed')
-              || (exitCode !== null && exitCode !== 0);
-            return [
-              toolUseEvent('shell', typeof item.command === 'string' ? item.command : '', item.id),
-              { ...toolResultEvent('shell', typeof (item.aggregated_output || item.aggregatedOutput) === 'string' ? (item.aggregated_output || item.aggregatedOutput) : '', failed), toolUseID: item.id },
-            ];
-          }
-          case 'function_call':
-          case 'mcp_tool_call': {
-            const toolName = item.tool || item.name || item.tool_name || item.type;
-            const meta = { toolUseID: item.id, ...(item.type === 'mcp_tool_call' ? { tool_kind: 'mcp', server_name: item.server || item.server_name || '' } : {}) };
-            return [
-              { ...toolUseEvent(toolName, item.arguments || item.input || {}, item.id), ...meta },
-              { ...toolResultEvent(toolName, item.result || item.output || item.error || '', item.status === 'failed' || Boolean(item.error) || Boolean(item.result?.isError)), ...meta },
-            ];
-          }
           case 'error':
             return [errorEvent(typeof item.message === 'string' ? item.message : 'codex 执行出错')];
           default:

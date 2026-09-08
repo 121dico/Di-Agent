@@ -2,7 +2,7 @@
 const path = require('node:path');
 
 // The runtime still receives full tool results locally. Only this transport copy is redacted.
-function createToolTrace(skills = []) {
+function createToolTrace(skills = [], now = () => new Date()) {
   const calls = new Map();
   let latest = null;
   let sequence = 0;
@@ -38,8 +38,15 @@ function createToolTrace(skills = []) {
     return meta;
   };
   return event => {
-    if (!event || !['tool_use', 'tool_result'].includes(event.type)) return event;
-    const ev = { ...event };
+    if (!event) return event;
+    // 在缓冲批次之前记录观测时间，保留原生时间；仅在完成时上报的适配器不倒推开始时间。
+    let timestamp;
+    if (typeof event.ts === 'number' && Number.isFinite(event.ts) && Number.isFinite(new Date(event.ts).getTime())) timestamp = new Date(event.ts).toISOString();
+    if (typeof event.ts === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(event.ts) && Number.isFinite(Date.parse(event.ts))) timestamp = event.ts;
+    const ev = { ...event, ts: timestamp ?? now().toISOString() };
+    if (ev.type === 'tool_use' && ev.timing_incomplete) delete ev.ts;
+    delete ev.timing_incomplete;
+    if (!['tool_use', 'tool_result'].includes(ev.type)) return ev;
     if (ev.type === 'tool_use') {
       const id = ev.toolUseID || (!ev.tool && latest) || `trace-${++sequence}`;
       const previous = calls.get(id);

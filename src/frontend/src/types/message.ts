@@ -44,6 +44,9 @@ export type BlockKind = 'text' | 'thinking' | 'tool_use' | 'tool_result' | 'erro
 
 /** 单个累积 block（同 kind 连续 delta 聚合成一个 block）。 */
 export interface MessageBlock extends ToolTraceMetadata {
+  /** daemon观测的事件时间；旧历史可能缺省，不可推算。 */
+  started_at?: string;
+  ended_at?: string;
   /** delta event 在 message 内的序号，用于 React key 与排序 */
   index: number;
   kind: BlockKind;

@@ -33,3 +33,11 @@
 
 ## Verification evidence
 - [Backend, cross-language transport, and baseline test evidence](verification.md). Real UI acceptance remains in the task UI evidence; automated fixtures do not establish production execution.
+
+## 2026-09-08 visual trajectory refinement
+用户提供 Harness 轨迹截图并明确要求可视化颜色条，以看清调用方式。
+- 回复入口继续独立，面板扩为宽轨迹工作区；顶部按输入、模型公开输出、Skill、MCP/工具分泳道，颜色和文字图例共同区分类型。
+- 下方按真实事件顺序显示紧凑行；色条可点选定位详情，支持搜索/类型过滤和输入/结果展开。
+- 新事件在 daemon 观测时记录 ISO ts，服务端与前端累积并保存 blocks.started_at/ended_at。工具耗时只来自对应调用与结果的观测时间；未收到结果不推测结束。
+- 旧历史无时间数据时使用等宽顺序轨迹，明确无耗时；不根据文本长度伪造时长、轮次或模型内部活动。
+- 仅显示有记录的用户输入和模型公开输出；不得用虚构内部思维填充泳道。
