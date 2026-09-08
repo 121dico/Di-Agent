@@ -165,3 +165,19 @@ public output, local Skill start/result, MCP start/result, final public output.
 The observed text spans were 674ms and 1.24s; Skill 76ms and MCP 13ms. Reloading
 preserved the same seven entries and exact spans (total observed axis 16.8s).
 These are measurements of that validation run, not hard-coded UI values.
+
+## Production synchronization
+
+User authorized production deployment. Backed up server, dist, offline daemon
+bundle and installed local daemon under `.tmp/releases/20260908-skills-trace`.
+Installed the validated build, retained old hashed frontend assets for existing
+tabs, updated the offline daemon bundle and restarted the existing launchd daemon.
+Production HTTP :8080 returned 200; HTTPS :8443 served by the same new process.
+Authorized browser login and local-first Skills rendering passed against the
+production database. Daemon reconnected and reported 39 Codex local indices.
+No database migration or skill-body upload was required.
+
+Follow-up clarification: event rows now show local occurrence clock time to
+milliseconds directly. Input and return points are labeled as event types, while
+calls/output ranges show measured duration; a point is not mislabeled as missing
+duration. Regression and isolated build passed before deployment.

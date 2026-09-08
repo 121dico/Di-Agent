@@ -77,3 +77,16 @@ it('lets the native summary collapse and a subsequent bar click reopen the selec
   act(() => root.unmount());
   container.remove();
 });
+
+it('shows occurrence time for a point event without claiming its duration is missing', () => {
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  act(() => root.render(<ExecutionTraceButton blocks={[]} input={{ text: '真实输入', createdAt: '2026-09-08T09:00:00.123Z' }} />));
+  act(() => container.querySelector('button')?.click());
+  const summary = container.querySelector('summary')!;
+  expect(summary.querySelector('time')?.getAttribute('datetime')).toBe('2026-09-08T09:00:00.123Z');
+  expect(summary.querySelector('time')?.textContent).toMatch(/\d{2}:\d{2}:\d{2}\.123/);
+  expect(summary.textContent).toContain('输入事件');
+  expect(summary.textContent).not.toContain('无耗时记录');
+  act(() => root.unmount());
+});

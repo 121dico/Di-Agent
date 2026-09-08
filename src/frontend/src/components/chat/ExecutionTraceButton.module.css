@@ -38,7 +38,7 @@
 .events:empty { display: none; }
 .eventRow { border-bottom: 1px solid var(--color-border-light); min-width: 0; border-left: 3px solid var(--lane-color); }
 .eventRow:last-child { border-bottom: 0; }
-.eventRow summary { display: grid; grid-template-columns: 28px 44px minmax(0, 1fr) 76px 82px; align-items: center; gap: 10px; padding: 12px; cursor: pointer; list-style: none; }
+.eventRow summary { display: grid; grid-template-columns: 28px 44px minmax(0, 1fr) 76px 104px; align-items: center; gap: 10px; padding: 12px; cursor: pointer; list-style: none; }
 .eventRow summary::-webkit-details-marker { display: none; }
 .eventRow summary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
 .eventRow summary:hover, .eventSelected summary { background: color-mix(in srgb, var(--lane-color) 7%, var(--color-bg-chat)); }
@@ -47,6 +47,8 @@
 .eventLabel { min-width: 0; font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
 .eventLabel small { display: block; font-size: 11px; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px; font-weight: 400; }
 .eventState, .eventDuration { font-size: 11px; color: var(--color-text-secondary); text-align: right; }
+.eventDuration time { display: block; font-variant-numeric: tabular-nums; color: var(--color-text); }
+.eventDuration small { display: block; margin-top: 4px; font-size: 11px; }
 .eventState[data-state="error"] { color: var(--color-danger, #c2352a); }
 .eventState[data-state="success"] { color: var(--color-success, #23804f); }
 .eventDetail { padding: 0 16px 16px 94px; overflow-wrap: anywhere; }
