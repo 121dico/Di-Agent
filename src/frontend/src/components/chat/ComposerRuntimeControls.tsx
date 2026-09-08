@@ -76,6 +76,7 @@ export const ComposerRuntimeControls: React.FC<ComposerRuntimeControlsProps> = (
     >
       <Dropdown
         menu={{
+          className: styles.modelMenu,
           items: modelItems,
           selectable: true,
           selectedKeys: [`model:${value.model || 'default'}`],
