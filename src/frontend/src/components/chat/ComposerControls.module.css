@@ -66,6 +66,14 @@
 .dangerButton { color: var(--wb-warning, #d75b16); background: rgba(245, 98, 0, .08); }
 .dangerButton:hover { color: var(--wb-warning, #d75b16) !important; background: rgba(245, 98, 0, .13) !important; }
 .menuOption { display: flex; flex-direction: column; gap: 1px; min-width: 240px; }
+.checkMenu :global(.ant-dropdown-menu-title-content) {
+  margin-inline-start: 0 !important;
+}
+.checkMenu :global(.ant-dropdown-menu-item-icon) {
+  order: 1;
+  margin-inline-start: 12px !important;
+  margin-inline-end: 0 !important;
+}
 .checkMenu :global(.ant-dropdown-menu-item-selected),
 .checkMenu :global(.ant-dropdown-menu-item-selected):hover {
   color: var(--wb-text-primary) !important;
