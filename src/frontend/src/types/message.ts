@@ -1,7 +1,7 @@
 import type { MessageAttachment } from './attachment';
 import type { AttachmentPayload } from './attachment';
 import type { Deployment } from './deployment';
-import type { AgentEvent } from './agentEvent';
+import type { AgentEvent, ToolTraceMetadata } from './agentEvent';
 import type { AgentRuntimeConfig } from './agentRuntime';
 
 // 重新导出，保持现有 `import { AgentEvent } from '@/types/message'` 的兼容性。
@@ -43,7 +43,7 @@ export interface Artifact {
 export type BlockKind = 'text' | 'thinking' | 'tool_use' | 'tool_result' | 'error' | 'card';
 
 /** 单个累积 block（同 kind 连续 delta 聚合成一个 block）。 */
-export interface MessageBlock {
+export interface MessageBlock extends ToolTraceMetadata {
   /** delta event 在 message 内的序号，用于 React key 与排序 */
   index: number;
   kind: BlockKind;

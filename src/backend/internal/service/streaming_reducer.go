@@ -202,7 +202,7 @@ func applyThinkingDelta(state StreamingState, event model.AgentEvent) StreamingS
 //
 //   - tool 非空 → 新 tool_use block（带 tool_name / tool_use_id）
 //     此分支对应 daemon 的 content_block_start 路径（toolUseEvent(name, {}, id)），
-//     此时 Input 是空对象占位 `{}`，不应作为 delta 追加——直接忽略 Input 字段。
+//     空对象 `{}` 是占位符；非空初始参数需要保留供链路回放。
 //   - tool 为空 → input_json_delta（老协议）：
 //     当前 daemon 把 partial_json 放 `input` 字段（events.js toolUseEvent(”,
 //     partial_json) → input = string partial）。reducer 双兼容：优先 `content`，
@@ -220,14 +220,17 @@ func applyToolUseStart(state StreamingState, event model.AgentEvent) StreamingSt
 	blocks := cloneBlocks(state.Blocks)
 	if event.Tool != "" {
 		// 工具名非空 → 开启新 tool_use block（content_block_start 路径）。
-		// 忽略 Input 字段：content_block_start 时 daemon 发的是 `input: {}` 空对象占位，
-		// 不应作为 partial_json delta 追加（真实 input 通过后续 content_block_delta 累积）。
+		// Empty input objects are placeholders; complete initial arguments must survive replay.
 		blocks = append(blocks, model.MessageBlock{
-			Index:     nextIndex(blocks),
-			Kind:      model.BlockKindToolUse,
-			Text:      "",
-			ToolName:  event.Tool,
-			ToolUseID: event.ToolUseIDOrAlt(),
+			Index:      nextIndex(blocks),
+			Kind:       model.BlockKindToolUse,
+			Text:       initialToolInput(event.Input),
+			ToolKind:   event.ToolKind,
+			SkillName:  event.SkillName,
+			ServerName: event.ServerName,
+			SourcePath: event.SourcePath,
+			ToolName:   event.Tool,
+			ToolUseID:  event.ToolUseIDOrAlt(),
 		})
 		state.Blocks = blocks
 		return state
@@ -240,8 +243,18 @@ func applyToolUseStart(state StreamingState, event model.AgentEvent) StreamingSt
 	if inputDelta == "" {
 		return state
 	}
-	if n := len(blocks); n > 0 && blocks[n-1].Kind == model.BlockKindToolUse {
-		blocks[n-1].Text += inputDelta
+	idx := len(blocks) - 1
+	if id := event.ToolUseIDOrAlt(); id != "" {
+		idx = -1
+		for i := len(blocks) - 1; i >= 0; i-- {
+			if blocks[i].Kind == model.BlockKindToolUse && blocks[i].ToolUseID == id {
+				idx = i
+				break
+			}
+		}
+	}
+	if idx >= 0 && blocks[idx].Kind == model.BlockKindToolUse {
+		blocks[idx].Text += inputDelta
 		state.Blocks = blocks
 		return state
 	}
@@ -301,12 +314,40 @@ func applyToolResult(state StreamingState, event model.AgentEvent) StreamingStat
 	}
 	isError := event.IsErrorOrAlt()
 	blocks := cloneBlocks(state.Blocks)
+	// Only an exact invocation ID is evidence; never borrow metadata from an unrelated tool.
+	for i := len(blocks) - 1; i >= 0; i-- {
+		b := blocks[i]
+		if event.ToolUseIDOrAlt() != "" && b.Kind == model.BlockKindToolUse && b.ToolUseID == event.ToolUseIDOrAlt() {
+			if event.ToolKind == "" {
+				event.ToolKind = b.ToolKind
+			}
+			if event.SkillName == "" {
+				event.SkillName = b.SkillName
+			}
+			if event.ServerName == "" {
+				event.ServerName = b.ServerName
+			}
+			if event.SourcePath == "" {
+				event.SourcePath = b.SourcePath
+			}
+			if event.Tool == "" {
+				event.Tool = b.ToolName
+			}
+			break
+		}
+	}
+
 	blocks = append(blocks, model.MessageBlock{
-		Index:     nextIndex(blocks),
-		Kind:      model.BlockKindToolResult,
-		Text:      output,
-		ToolUseID: event.ToolUseIDOrAlt(),
-		IsError:   isError,
+		Index:      nextIndex(blocks),
+		Kind:       model.BlockKindToolResult,
+		ToolName:   event.Tool,
+		ToolKind:   event.ToolKind,
+		SkillName:  event.SkillName,
+		ServerName: event.ServerName,
+		SourcePath: event.SourcePath,
+		Text:       output,
+		ToolUseID:  event.ToolUseIDOrAlt(),
+		IsError:    isError,
 	})
 	state.Blocks = blocks
 	return state
@@ -372,4 +413,15 @@ func cloneBlocks(blocks []model.MessageBlock) []model.MessageBlock {
 	out := make([]model.MessageBlock, len(blocks))
 	copy(out, blocks)
 	return out
+}
+
+func initialToolInput(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	input := decodeInputRawMessage(raw)
+	if input == "{}" {
+		return ""
+	}
+	return input
 }

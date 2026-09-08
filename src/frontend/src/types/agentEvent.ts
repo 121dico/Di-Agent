@@ -32,7 +32,16 @@ export type AgentEventType =
   | 'session_end';
 
 /** 信封字段：daemon 可选注入的元数据，reducer 不强制。 */
-export interface AgentEventEnvelope {
+export interface ToolTraceMetadata {
+  tool_kind?: 'mcp' | 'skill' | 'tool';
+  skill_name?: string;
+  server_name?: string;
+  source_path?: string;
+}
+
+export interface AgentEventEnvelope extends ToolTraceMetadata {
+  /** 兼容 npm daemon 的真实 camelCase 调用 ID。 */
+  toolUseID?: string;
   /** daemon 侧自增序号，用于未来 WS 断点续传（reducer 当前不依赖） */
   seq?: number;
   /** 产生事件的 adapter 名（'claude' / 'codex' / ...） */

@@ -41,6 +41,7 @@ import { isCompletedAssistantMessage, messageText } from './conversationActions'
 // blocks/index.ts 触发各 block 组件的 registerBlock 自注册副作用，
 // MessageBubble 只依赖 renderBlock 抽象，不直接 import 具体组件。
 import { renderBlock, type BlockRenderContext } from './blocks';
+import { ExecutionTraceButton } from './ExecutionTraceButton';
 import { escapeHtml } from './highlight';
 import { resolveAgentAvatar, resolveUserAvatar } from '@/components/agent/agentPresentation';
 import {
@@ -840,6 +841,7 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
             {hasBlocks ? (
               <div className={styles.markdownBody}>
                 {parsedBlocks.map((block, i) => {
+                  if (block.kind === 'tool_use' || block.kind === 'tool_result') return null;
                   // 最后一个 block（且属于可累积 kind）在 streaming 时显示光标。
                   // renderBlock 内部把 streaming prop 传给组件（tool_result / error 忽略之）。
                   const isLast = i === parsedBlocks.length - 1;
@@ -895,6 +897,7 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
               <Spin size="small" className={styles.sendingSpin} />
             )}
           </div>
+          {message.role === 'assistant' && <ExecutionTraceButton blocks={parsedBlocks} status={isStreaming ? 'streaming' : message.status} />}
           {isStreaming && !isOptimisticSending && !isOptimisticFailed && (
             <StopButton
               conversationId={message.conversation_id}

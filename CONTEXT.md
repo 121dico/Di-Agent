@@ -39,3 +39,20 @@ The cumulative distinct DUIDs with an Effective Price-sensitive Label as of an o
 ## First Qualification
 
 The first historical observation date on which a user receives a valid non-null price-sensitivity score. Once established, this event is never reversed by later evidence-window expiry.
+
+## Local Skill
+
+A reusable capability stored on the computer running an Agent. Its catalog entry
+explains its purpose and how to load it; discovery alone does not mean a turn
+has used it.
+
+## Platform-assigned Skill
+
+A platform instruction selected for an Agent by a user. Assignment is separate
+from the Agent's locally available Skills and is not required to use them.
+
+## Reply Execution Trace
+
+The ordered evidence of tool invocations associated with an Agent reply,
+including MCP calls and observed Skill loads. Missing result evidence means an
+invocation is unconfirmed, rather than successfully completed.

@@ -1,0 +1,10 @@
+.container, .detail { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 12px; }
+.card { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 16px; text-align: left; border: 1px solid var(--color-border-light); border-radius: 10px; background: var(--color-bg-chat); color: var(--color-text); cursor: pointer; min-width: 0; overflow-wrap: anywhere; }
+.card:hover, .card:focus-visible { border-color: var(--color-primary); }
+.card span, .card small { color: var(--color-text-secondary); display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; max-width: 100%; }
+.card span { -webkit-line-clamp: 3; }
+.card small { font-size: 11px; -webkit-line-clamp: 2; }
+.detail h3, .detail p { margin: 0; }
+.detail p, .detail code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.detail button { align-self: flex-start; max-width: 100%; white-space: normal; height: auto; min-height: 32px; }

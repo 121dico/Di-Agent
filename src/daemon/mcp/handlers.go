@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/121dico/Di-Agent/src/daemon/scanner"
 )
 
 // APIClient calls the Di Agent backend REST API.
@@ -162,6 +164,7 @@ type platformSkill struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 	Trigger     string `json:"trigger,omitempty"`
+	SourcePath  string `json:"source_path,omitempty"`
 	Detail      string `json:"detail,omitempty"`
 }
 
@@ -199,6 +202,14 @@ func (c *APIClient) AgentSkill(agentID, skillName string) (platformSkill, bool, 
 		agent, ok := item.(map[string]interface{})
 		if !ok || agent["id"] != agentID {
 			continue
+		}
+		cliTool, _ := agent["cli_tool"].(string)
+		local, body, found, loadErr := scanner.LoadSkill(cliTool, skillName)
+		if loadErr != nil {
+			return platformSkill{}, false, loadErr
+		}
+		if found {
+			return platformSkill{Name: local.Name, Description: local.Description, SourcePath: local.SourcePath, Detail: body}, true, nil
 		}
 		raw, _ := agent["custom_skills"].(string)
 		if strings.TrimSpace(raw) == "" {

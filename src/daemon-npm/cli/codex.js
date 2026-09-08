@@ -251,7 +251,9 @@ function createCodexCliSpec(ctx) {
       const roots = [];
       const includeProjectRoots = !ctx.isDiAgentWorkspace(cwd);
       if (includeProjectRoots) ctx.addRoot(roots, ctx.pathJoin(cwd, '.agents', 'skills'));
-      if (home) ctx.addRoot(roots, ctx.pathJoin(home, '.codex', 'skills'));
+      const configured = readDiAgentEnvironment(process.env, 'CODEX_HOME') || process.env.CODEX_HOME;
+      if (configured) ctx.addRoot(roots, ctx.pathJoin(configured, 'skills'));
+      else if (home) ctx.addRoot(roots, ctx.pathJoin(home, '.codex', 'skills'));
       return roots;
     },
 
@@ -309,16 +311,21 @@ function createCodexCliSpec(ctx) {
     },
 
     // parseResult：codex 优先读 outputFile（--output-last-message 已经把 last message
-    // 写入文件），fallback 到 stdio 组合。等价于 daemon.js executeTask 中
-    // spec.outputFile + 最后的 `${stdout}${stderr}`.trim() 分支组合。
+    // 写入文件）。缺少文件时仅提取已完成的 assistant 消息，禁止回传原始工具日志。
     parseResult({ stdout, stderr, outputFile } = {}, _daemonCtx) {
       if (outputFile && ctx.fs.existsSync(outputFile)) {
         const text = ctx.fs.readFileSync(outputFile, 'utf8').trim();
         ctx.fs.rmSync(outputFile, { force: true });
         if (text) return text;
       }
-      const text = `${stdout || ''}${stderr ? `\n${stderr}` : ''}`.trim();
-      return text || '(Agent CLI 没有返回内容)';
+      let finalText = '';
+      for (const line of String(stdout || '').split(/\r?\n/)) {
+        let event;
+        try { event = JSON.parse(line); } catch { continue; }
+        if (event?.type === 'item.completed' && event.item?.type === 'agent_message' && typeof event.item.text === 'string') finalText = event.item.text;
+        if (event?.type === 'turn.completed' && typeof event.result === 'string') finalText = event.result;
+      }
+      return finalText.trim() || '(Agent CLI 没有返回内容)';
     },
 
     // parseStreamEvent：解析 codex exec --json 的 NDJSON 事件行（0.145 格式）。
@@ -544,6 +551,16 @@ function createCodexCliSpec(ctx) {
           dispatchEvent(textEvent(p.delta));
           return;
         }
+        if (method === 'item/started' || method === 'item/completed') {
+          const item = p.item || {};
+          if (item.type === 'mcpToolCall' || item.type === 'mcp_tool_call') {
+            const name = item.tool || item.name || item.tool_name || 'mcp_tool_call';
+            const meta = { tool_kind: 'mcp', server_name: item.server || item.server_name || '', toolUseID: item.id };
+            if (method === 'item/started') dispatchEvent({ ...toolUseEvent(name, item.arguments || item.input || {}, item.id), ...meta });
+            else dispatchEvent({ ...toolResultEvent(name, item.result || item.output || item.error || '', item.status === 'failed' || Boolean(item.error) || Boolean(item.result?.isError)), ...meta });
+            return;
+          }
+        }
         if (method === 'item/completed') {
           const item = p.item || {};
           if (item.type === 'agentMessage') {
@@ -555,19 +572,19 @@ function createCodexCliSpec(ctx) {
               : '');
             if (summaryText) dispatchEvent(thinkingEvent(summaryText));
           } else if (item.type === 'commandExecution' || item.type === 'command_execution') {
-            dispatchEvent(toolUseEvent('shell', typeof item.command === 'string' ? item.command : ''));
+            dispatchEvent(toolUseEvent('shell', typeof item.command === 'string' ? item.command : '', item.id));
             // 注意：app-server 的 status 是字符串（"completed"/"failed"），
             // 退出码在 exitCode 字段——不能拿 status 做数值判断（NaN 恒≠0 会全部误报失败）。
             const cmdExitCode = item.exitCode != null ? Number(item.exitCode) : null;
             const cmdFailed = (typeof item.status === 'string' && item.status !== 'completed')
               || (cmdExitCode !== null && cmdExitCode !== 0);
-            dispatchEvent(toolResultEvent(
+            dispatchEvent({ ...toolResultEvent(
               'shell',
               typeof (item.aggregatedOutput || item.aggregated_output || item.output) === 'string'
                 ? (item.aggregatedOutput || item.aggregated_output || item.output)
                 : '',
               cmdFailed,
-            ));
+            ), toolUseID: item.id });
           }
           return;
         }
@@ -901,16 +918,17 @@ function createCodexCliSpec(ctx) {
             const failed = (typeof item.status === 'string' && item.status !== 'completed')
               || (exitCode !== null && exitCode !== 0);
             return [
-              toolUseEvent('shell', typeof item.command === 'string' ? item.command : ''),
-              toolResultEvent('shell', typeof (item.aggregated_output || item.aggregatedOutput) === 'string' ? (item.aggregated_output || item.aggregatedOutput) : '', failed),
+              toolUseEvent('shell', typeof item.command === 'string' ? item.command : '', item.id),
+              { ...toolResultEvent('shell', typeof (item.aggregated_output || item.aggregatedOutput) === 'string' ? (item.aggregated_output || item.aggregatedOutput) : '', failed), toolUseID: item.id },
             ];
           }
           case 'function_call':
           case 'mcp_tool_call': {
-            const toolName = item.name || item.tool_name || item.type;
+            const toolName = item.tool || item.name || item.tool_name || item.type;
+            const meta = { toolUseID: item.id, ...(item.type === 'mcp_tool_call' ? { tool_kind: 'mcp', server_name: item.server || item.server_name || '' } : {}) };
             return [
-              toolUseEvent(toolName, typeof item.arguments === 'string' ? item.arguments : item.input),
-              toolResultEvent(toolName, typeof item.output === 'string' ? item.output : ''),
+              { ...toolUseEvent(toolName, item.arguments || item.input || {}, item.id), ...meta },
+              { ...toolResultEvent(toolName, item.result || item.output || item.error || '', item.status === 'failed' || Boolean(item.error) || Boolean(item.result?.isError)), ...meta },
             ];
           }
           case 'error':

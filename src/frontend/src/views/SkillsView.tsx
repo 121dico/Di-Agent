@@ -1,101 +1,47 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Avatar,  Input } from 'antd';
-import {  RobotOutlined, SearchOutlined } from '@ant-design/icons';
+import React, { useEffect, useState } from 'react';
+import { Alert, Button, Empty, Select, Spin } from 'antd';
 import { AgentSkillsPanel } from '@/components/agent/AgentSkillsPanel';
+import { getAgentRuntimeIdentity } from '@/components/agent/agentPresentation';
 import { useUIStore } from '@/store/uiStore';
 import { useAgentStore } from '@/store/agentStore';
-import { parseSkills, resolveAgentAvatar } from '@/components/agent/agentPresentation';
-import type { Agent } from '@/types/agent';
-import styles from '@/layout/AppLayout.module.css';
-import skillStyles from '@/layout/SkillsAgentList.module.css';
-import listStyles from '@/components/sidebar/ConversationList.module.css';
+import styles from './SkillsView.module.css';
 
 const SkillsView: React.FC = () => {
   const selectedAgentId = useUIStore((s) => s.selectedAgentId);
   const setSelectedAgent = useUIStore((s) => s.setSelectedAgent);
   const agents = useAgentStore((s) => s.agents);
   const fetchAgents = useAgentStore((s) => s.fetchAgents);
-  const [query, setQuery] = useState('');
-
-  useEffect(() => { fetchAgents().catch(() => {}); }, [fetchAgents]);
-
-  const filtered = useMemo(() => {
-    const n = query.trim().toLowerCase();
-    if (!n) return agents;
-    return agents.filter((agent) => {
-      const platformSkills = parseSkills(agent.custom_skills);
-      return agent.name.toLowerCase().includes(n)
-        || platformSkills.some((skill) => skill.name.toLowerCase().includes(n));
-    });
-  }, [agents, query]);
-
-  const skillData = useMemo(() =>
-    filtered.map((agent) => ({
-      agent,
-      skillCount: parseSkills(agent.custom_skills).length,
-      baseSkillCount: parseSkills(agent.capabilities_json).length,
-    })),
-  [filtered]);
-
-  const handleSelectAgent = (agent: Agent) => setSelectedAgent(agent.id);
-  const selectedAgent = agents.find((a) => a.id === selectedAgentId) ?? null;
-
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const refresh = async () => {
+    setLoading(true);
+    setError(false);
+    try { await fetchAgents(true); } catch { setError(true); } finally { setLoading(false); }
+  };
+  useEffect(() => { void refresh(); }, [fetchAgents]);
+  const selectedAgent = agents.find((a) => a.id === selectedAgentId) ?? agents[0];
   return (
-    <div className={styles.chatPanel}>
-      <div className={styles.convPanel}>
-        <div className={styles.convPanelHeader}>
-          <span className={styles.convPanelTitle}>技能</span>
-        </div>
-        <div className={listStyles.list}>
-        <div className={listStyles.searchWrap}>
-          <Input
-            prefix={<SearchOutlined />}
-            placeholder="搜索技能..."
-            allowClear
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className={listStyles.searchInput}
-          />
-        </div>
-        <div className={listStyles.items}>
-          <div className={skillStyles.grid}>
-            {skillData.length === 0 && (
-              <div className={skillStyles.empty}>{query.trim() ? '无匹配结果' : '暂无 Agent'}</div>
-            )}
-            {skillData.map(({ agent, skillCount, baseSkillCount }) => {
-              const isSelected = agent.id === selectedAgentId;
-              return (
-                <button
-                  key={agent.id}
-                  className={`${skillStyles.card} ${isSelected ? skillStyles.cardActive : ''}`}
-                  type="button"
-                  onClick={() => handleSelectAgent(agent)}
-                >
-                  <Avatar size={36} src={resolveAgentAvatar(agent)} icon={<RobotOutlined />} className={skillStyles.avatar} />
-                  <div className={skillStyles.info}>
-                    <span className={skillStyles.name}>{agent.name}</span>
-                    <span className={skillStyles.meta}>已分配 {skillCount} · 底座 {baseSkillCount}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        </div>
-      </div>
-      {/* 右侧面板 */}
-      <div className={styles.rightPanel}>
-        {selectedAgent ? (
-          <AgentSkillsPanel agent={selectedAgent} />
-        ) : (
-          <div className={styles.skillsEmptyPanel}>
-            <div className={styles.emptyRightTitle}>选择一个 Agent 管理技能</div>
-            <div className={styles.emptyRightDesc}>左侧会展示每个 Agent 的已分配 Skills 和底座 Skills 数量</div>
-          </div>
-        )}
-      </div>
-    </div>
+    <main className={styles.container}>
+      <header className={styles.header}>
+        <h1>Skills</h1>
+        <Select
+          aria-label="选择 Agent"
+          className={styles.selector}
+          showSearch
+          optionFilterProp="label"
+          value={selectedAgent?.id}
+          onChange={setSelectedAgent}
+          placeholder="选择 Agent"
+          options={agents.map((a) => ({ value: a.id, label: `${a.name} · ${getAgentRuntimeIdentity(a).shortVariantLabel}` }))}
+        />
+        {selectedAgent && <span className={styles.identity}>{getAgentRuntimeIdentity(selectedAgent).subtitle} · {selectedAgent.machine_name || '未上报机器'} · 最近连接 {selectedAgent.last_seen_at ? new Date(selectedAgent.last_seen_at).toLocaleString() : '未知'}</span>}
+        <Button loading={loading} onClick={() => void refresh()}>刷新索引</Button>
+      </header>
+      {error && <Alert type="error" title="读取 Agent 失败" action={<Button onClick={() => void refresh()}>重试</Button>} />}
+      <section className={styles.content}>
+        {selectedAgent ? <AgentSkillsPanel key={selectedAgent.id} agent={selectedAgent} /> : loading ? <Spin /> : <Empty description="暂无 Agent，请先连接本地 Agent" />}
+      </section>
+    </main>
   );
 };
-
 export default SkillsView;

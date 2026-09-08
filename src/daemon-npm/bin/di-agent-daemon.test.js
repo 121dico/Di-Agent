@@ -688,3 +688,57 @@ test('ensureGitRepoForTask is no-op on existing git repo', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('local skill catalog excludes bodies and loader reads complete local skill by indexed name', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'di-skill-metadata-'));
+  const specName = 'local-skill-fixture';
+  const file = path.join(dir, 'SKILL.md');
+  const secret = 'LOCAL PRIVATE BODY '.repeat(90);
+  fs.writeFileSync(file, `---\nname: local-fixture\ndescription: Review local changes with focused checks\n---\n${secret}`);
+  cliTools.registerCliTool({ cliTool: specName, skillRoots: () => [dir] });
+  try {
+    const { scanSkills } = require('./di-agent-daemon');
+    const catalog = scanSkills(specName);
+    assert.equal(catalog.length, 1);
+    assert.ok(catalog[0].usage.includes('get_agent_skill'));
+    assert.ok(!JSON.stringify(catalog).includes('LOCAL PRIVATE BODY'));
+    const loader = MCP_TOOLS.find(t => t.name === 'get_agent_skill');
+    const ctx = { agentId: 'fixture', currentAgent: { id: 'fixture', cli_tool: specName, custom_skills: '[]' } };
+    const result = await loader.run({ name: 'local-fixture' }, ctx);
+    assert.ok(result.detail.endsWith(secret));
+    await assert.rejects(loader.run({ name: file }, ctx), /skill not found/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+test('Codex local and enabled plugin skills keep distinct names and load exact namespaced bodies', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'di-plugin-namespace-'));
+  const previous = process.env.DI_AGENT_CODEX_HOME;
+  process.env.DI_AGENT_CODEX_HOME = home;
+  try {
+    const local = path.join(home, 'skills/shared');
+    const plugin = path.join(home, 'plugins/cache/market/writer/1');
+    fs.mkdirSync(local, { recursive: true });
+    fs.mkdirSync(path.join(plugin, '.codex-plugin'), { recursive: true });
+    fs.mkdirSync(path.join(plugin, 'skills/shared'), { recursive: true });
+    fs.writeFileSync(path.join(local, 'SKILL.md'), '---\nname: shared\ndescription: Local review instructions\n---\nLOCAL CONTENT');
+    fs.writeFileSync(path.join(plugin, '.codex-plugin/plugin.json'), JSON.stringify({name:'writer',version:'1',skills:'./skills'}));
+    fs.writeFileSync(path.join(plugin, 'skills/shared/SKILL.md'), '---\nname: shared\ndescription: Plugin review instructions\n---\nPLUGIN CONTENT');
+    fs.writeFileSync(path.join(home, 'config.toml'), '[plugins."writer@market"]\nenabled = true\n');
+    const catalog = require('./di-agent-daemon').scanSkills('codex');
+    assert.ok(catalog.some(s => s.name === 'shared'));
+    assert.ok(catalog.some(s => s.name === 'writer:shared'));
+    assert.ok(!JSON.stringify(catalog).includes('PLUGIN CONTENT'));
+    const result = await MCP_TOOLS.find(t => t.name === 'get_agent_skill').run({name:'writer:shared'}, {agentId:'fixture', currentAgent:{id:'fixture',cli_tool:'codex'}});
+    assert.ok(result.detail.endsWith('PLUGIN CONTENT'));
+  } finally {
+    if (previous === undefined) delete process.env.DI_AGENT_CODEX_HOME; else process.env.DI_AGENT_CODEX_HOME = previous;
+    fs.rmSync(home, {recursive:true,force:true});
+  }
+});
+test('native CLI failure does not upload raw stdout/stderr containing skill bodies', async () => {
+ const {runProcess} = require('./di-agent-daemon');
+ await assert.rejects(runProcess(process.execPath, ['-e', 'process.stdout.write("PRIVATE BODY"); process.stderr.write("PRIVATE STDERR"); process.exit(1)'], '', undefined, undefined, undefined, {cli_tool:'codex'}), error => {
+  assert.match(error.message, /CLI exited with code 1/);
+  assert.ok(!error.message.includes('PRIVATE'));
+  return true;
+ });
+});

@@ -11,12 +11,13 @@ const (
 	daemonInstallSkillTool = "__di_agent_install_skill__"
 )
 
-// DiscoveredSkill 兼容旧 daemon 的字符串能力，也承载真实 SKILL.md 内容。
+// DiscoveredSkill 兼容旧 daemon 的字符串能力，承载本地技能索引（Detail 仅供用户主动分配的平台指令）。
 type DiscoveredSkill struct {
 	Name        string `json:"name"`
 	Category    string `json:"category,omitempty"`
 	Description string `json:"description,omitempty"`
 	Trigger     string `json:"trigger,omitempty"`
+	Usage       string `json:"usage,omitempty"`
 	Detail      string `json:"detail,omitempty"`
 	SourcePath  string `json:"source_path,omitempty"`
 	Auto        bool   `json:"auto,omitempty"`
@@ -129,5 +130,35 @@ func BuildAgentSkillContext(raw string) string {
 	}
 	sb.WriteString("}\n")
 	sb.WriteString("\n")
+	return sb.String()
+}
+
+// localSkillCatalog is an allowlist boundary for both current and older daemons.
+// A generic runtime capability is not evidence of a discovered local Skill.
+func localSkillCatalog(skills []DiscoveredSkill) []DiscoveredSkill {
+	out := make([]DiscoveredSkill, 0, len(skills))
+	for _, skill := range skills {
+		if strings.TrimSpace(skill.Name) == "" || strings.TrimSpace(skill.SourcePath) == "" {
+			continue
+		}
+		out = append(out, DiscoveredSkill{Name: skill.Name, Description: skill.Description,
+			Category: skill.Category, Trigger: skill.Trigger, Usage: skill.Usage, SourcePath: skill.SourcePath, Auto: skill.Auto})
+	}
+	return out
+}
+
+func BuildLocalSkillContext(raw string) string {
+	skills := localSkillCatalog(parseDiscoveredSkills(raw))
+	if len(skills) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("[本地 Skill 索引]\n以下是当前 Agent 本机扫描到的技能目录，目录不代表本轮已加载或使用。根据用途和用法选择；需要时调用本机 MCP get_agent_skill（仅传 name 参数，填写索引名称）加载，或用本地读取工具打开对应路径的 SKILL.md。正文与资源保留在本机，不要上传或在回复中复述全文。平台入库和分配不是使用本地技能的前置条件。\n")
+	for _, skill := range skills {
+		row, _ := json.Marshal(map[string]string{"name": skill.Name, "description": skill.Description, "trigger": skill.Trigger, "usage": skill.Usage, "source_path": skill.SourcePath})
+		sb.WriteString(string(row))
+		sb.WriteByte('\n')
+	}
+	sb.WriteByte('\n')
 	return sb.String()
 }

@@ -22,7 +22,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Knowledge RAG](./knowledge-rag.md) | pgvector schema, Ollama embedding, chunking, retrieval, fallback, and reindex contracts | Filled |
 | [Conversation Context](./conversation-context.md) | Checkpoint lifecycle, Session rollover, token meter, daemon and REST contracts | Filled |
 | [Dispatcher Module](./dispatcher.md) | Router / Dispatcher / AgentQueue split of dispatch responsibilities | Filled |
-| [Agent Runtime and Skill Install](./agent-runtime-and-skill-install.md) | Persisted runtime metrics and confirmed public-GitHub Skill deployment contract | Filled |
+| [Agent Runtime and Skill Install](./agent-runtime-and-skill-install.md) | Runtime metrics, local Skill catalog/loading, execution-trace replay, and GitHub Skill deployment | Filled |
 | [Fixed Data Reporting](./data-reporting.md) | Governed data sources, report definitions, snapshots, scheduling, and downloads | Filled |
 | [Quality Guidelines](./quality-guidelines.md) | Context 传递、错误处理、依赖管理、接口设计 | Filled |
 | [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | To fill |

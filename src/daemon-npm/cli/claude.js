@@ -134,10 +134,9 @@ function createClaudeCliSpec(ctx) {
       return 'claude';
     },
 
-    // parseResult：one-shot 模式的 stdout/stderr fallback。
-    // 等价于 daemon.js executeTask 末尾的 `${stdout || ''}${stderr ? `\n${stderr}` : ''}`.trim()。
+    // One-shot uses --output-format text. Stderr is local diagnostics, never a reply.
     parseResult({ stdout, stderr } = {}, _ctx) {
-      const text = `${stdout || ''}${stderr ? `\n${stderr}` : ''}`.trim();
+      const text = String(stdout || '').trim();
       return text || '(Agent CLI 没有返回内容)';
     },
 
@@ -189,7 +188,9 @@ function createClaudeCliSpec(ctx) {
         // PR5：同步把 block.id（Claude 的 tool_use 稳定 ID）透传给 toolUseEvent，
         // 供未来并行工具调用场景区分。
         if (block.type === 'tool_use') {
-          return [toolUseEvent(block.name || '', {}, block.id || '')];
+          adapter.toolBlocks = adapter.toolBlocks || new Map();
+          adapter.toolBlocks.set(event.index, block.id);
+          return [toolUseEvent(block.name || '', block.input || {}, block.id || '')];
         }
         return null;
       }
@@ -208,7 +209,7 @@ function createClaudeCliSpec(ctx) {
           // partial_json 是工具入参的 JSON 片段，作为 tool_use 的增量入参发出。
           // 前端按 tool_use 事件累积展示，最终在 content_block_stop 拼成完整 JSON。
           adapter.sawToolUseInTurn = true;
-          return [toolUseEvent('', delta.partial_json)];
+          return [toolUseEvent('', delta.partial_json, adapter.toolBlocks?.get(event.index))];
         }
         return null;
       }
@@ -229,7 +230,7 @@ function createClaudeCliSpec(ctx) {
               : (Array.isArray(c.content)
                 ? c.content.map((x) => x?.text || '').join('')
                 : '');
-            out.push(toolResultEvent('', output, Boolean(c.is_error)));
+            out.push({ ...toolResultEvent('', output, Boolean(c.is_error)), toolUseID: c.tool_use_id });
           }
         }
         return out.length > 0 ? out : null;

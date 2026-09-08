@@ -138,3 +138,18 @@ test('opencode.parseResult returns raw text when JSON parse fails', () => {
   assert.strictEqual(result.text, 'not json garbage {{{');
   assert.strictEqual(result.sessionId, '');
 });
+
+test('OpenCode completed native tool parts preserve call IDs and errors', () => {
+  const spec = createOpenCodeCliSpec(buildMockCtx());
+  const events = spec.parseStreamEventAll(JSON.stringify({ type: 'tool_use', part: { type: 'tool', tool: 'skill', callID: 'load-1', state: { status: 'error', input: { name: 'review' }, error: 'missing' } } }));
+  assert.equal(events[0].toolUseID, 'load-1');
+  assert.deepEqual(events[0].input, { name: 'review' });
+  assert.equal(events[1].toolUseID, 'load-1');
+  assert.equal(events[1].isError, true);
+  assert.equal(spec.parseStreamEventAll(JSON.stringify({ type: 'text', part: { text: 'used skill' } }))[0].type, 'text');
+});
+test('OpenCode tool-only output is not returned as raw JSON containing local bodies', () => {
+  const spec = createOpenCodeCliSpec(buildMockCtx());
+  const result = spec.parseResult({ stdout: JSON.stringify({ type: 'tool_use', part: { type: 'tool', tool: 'skill', state: { status: 'completed', output: 'PRIVATE BODY' } } }) });
+  assert.ok(!result.text.includes('PRIVATE BODY'));
+});

@@ -544,18 +544,22 @@ func (h *DaemonHandler) handleTaskProgress(data json.RawMessage, machine *model.
 			"task_id", req.TaskID, "event_bytes", len(req.Events))
 		return
 	}
-	// PR4：把 events 喂给 streamingBuffer 累积。
-	// 解析失败静默跳过（events 已是合法 JSON 数组，但结构异常时不影响透传）。
-	// 同一 taskID 的 events 由 WS read loop 单 goroutine 串行调用 PushEvents，
-	// 满足 buffer 内部 *StreamingState 修改的并发安全约束。
+	// Decode and sanitize once before both storage and live broadcast.
+	var events []model.AgentEvent
+	if err := json.Unmarshal(req.Events, &events); err != nil {
+		h.logger.Debug("task.progress events parse failed", "task_id", req.TaskID, "error", err)
+		return
+	}
+	var previous []model.MessageBlock
 	if h.streamingBuffer != nil {
-		var events []model.AgentEvent
-		if err := json.Unmarshal(req.Events, &events); err == nil && len(events) > 0 {
-			h.streamingBuffer.PushEvents(req.TaskID, events)
-		} else if err != nil {
-			h.logger.Debug("task.progress events parse failed, skip buffer push",
-				"task_id", req.TaskID, "error", err)
+		if state, ok := h.streamingBuffer.GetState(req.TaskID); ok {
+			previous = state.Blocks
 		}
+	}
+	events = service.SanitizeToolTraceEvents(events, previous)
+	req.Events, _ = json.Marshal(events)
+	if h.streamingBuffer != nil {
+		h.streamingBuffer.PushEvents(req.TaskID, events)
 	}
 	// PR3：从 daemonHub 反查 agent_name，透传给前端 placeholder 显示真实 username。
 	// createAgentReply 预创建 streaming message 时同步注册，流式期间被读取，

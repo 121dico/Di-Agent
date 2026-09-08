@@ -1587,7 +1587,7 @@ function scanAgents() {
             ? spec.variantForCommand(command)
             : ((spec && spec.variant) || 'cli')),
           version,
-          capabilities: skills.length > 0 ? skills : candidate.capabilities,
+          capabilities: skills,
         }];
       });
     })
@@ -1597,7 +1597,12 @@ function scanAgents() {
 function scanSkills(cliTool) {
   const skills = [];
   const seen = new Set();
-  for (const root of skillRoots(cliTool)) {
+  const roots = skillRoots(cliTool).map(root => ({ root }));
+  if (cliTool === 'codex') {
+    const codexHome = readDiAgentEnvironment(process.env, 'CODEX_HOME') || process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+    roots.push(...require('../cli/codex-plugin-skills').codexPluginSkillRoots(codexHome));
+  }
+  for (const { root, namespace, plugin_id } of roots) {
     for (const skillPath of findSkillFiles(root)) {
       let content = '';
       try {
@@ -1606,6 +1611,10 @@ function scanSkills(cliTool) {
         continue;
       }
       const skill = parseSkillFile(path.basename(path.dirname(skillPath)), skillPath, content);
+      if (namespace) {
+        skill.name = `${namespace}:${skill.name}`;
+        skill.plugin_id = plugin_id;
+      }
       const key = skill.name.toLowerCase();
       if (!key || seen.has(key)) continue;
       seen.add(key);
@@ -1617,7 +1626,9 @@ function scanSkills(cliTool) {
 
 function findSkillFiles(root) {
   const results = [];
+  const visited = new Set();
   function walk(current) {
+    try { const real = fs.realpathSync(current); if (visited.has(real)) return; visited.add(real); } catch { return; }
     let entries = [];
     try {
       entries = fs.readdirSync(current, { withFileTypes: true });
@@ -1626,7 +1637,9 @@ function findSkillFiles(root) {
     }
     for (const entry of entries) {
       const entryPath = path.join(current, entry.name);
-      if (entry.isDirectory()) {
+      let directory = entry.isDirectory();
+      if (entry.isSymbolicLink()) { try { directory = fs.statSync(entryPath).isDirectory(); } catch { continue; } }
+      if (directory) {
         if (entry.name === '.git') continue;
         walk(entryPath);
         continue;
@@ -1842,7 +1855,7 @@ async function installGitHubSkill(prompt) {
 function parseSkillFile(fallbackName, sourcePath, content) {
   const skill = {
     name: fallbackName,
-    detail: content.length > 500 ? content.slice(0, 500) + "..." : content,
+    usage: 'Call get_agent_skill with this exact name to load the full local SKILL.md; resolve resources relative to source_path.',
     source_path: sourcePath,
     auto: true,
   };
@@ -2792,7 +2805,10 @@ function runProcess(command, args, stdin, sessionId, cwd, extraEnv, meta = {}) {
         resolve({ stdout, stderr });
         return;
       }
-      reject(new Error((stderr || stdout || `CLI exited with code ${code}`).trim()));
+      // Agent stdout/stderr can contain complete local tool results. Do not send
+      // those transcripts upstream through task failure messages.
+      const knownAgent = cliTools.getCliTool(meta.cli_tool);
+      reject(new Error(knownAgent ? `CLI exited with code ${code}; check the local Agent runtime logs for details.` : (stderr || stdout || `CLI exited with code ${code}`).trim()));
     });
     child.stdin.end(stdin || '');
   });
@@ -3404,7 +3420,8 @@ async function handleTaskDispatch(ws, data) {
         },
       })
     : null;
-  const onEvent = shouldStream && streamBuffer ? (ev) => streamBuffer.push(ev) : null;
+  const traceEvent = require('../cli/skill-trace').createToolTrace(scanSkills(task.cli_tool));
+  const onEvent = shouldStream && streamBuffer ? (ev) => streamBuffer.push(traceEvent(ev)) : null;
 
   try {
     let result;
@@ -3818,11 +3835,11 @@ const MCP_TOOLS = [
   },
   {
     name: 'get_agent_skill',
-    description: '查看当前 Agent 已分配平台 Skill 的详细内容。先根据提示词中的 Skill 索引选择 name，再调用本工具渐进加载 detail。',
+    description: '按索引名称加载当前 Agent 的本地 Skill 全文与资源位置；本地未找到时回退到已分配的平台 Skill。',
     inputSchema: {
       type: 'object',
       properties: {
-        name: { type: 'string', description: '平台 Skill 名称，必须属于当前 Agent' },
+        name: { type: 'string', description: '当前 Agent 索引中的 Skill 名称；不可传入文件路径' },
       },
       required: ['name'],
       additionalProperties: false,
@@ -3832,6 +3849,8 @@ const MCP_TOOLS = [
       if (!name) throw new Error('name is required');
       const agent = await resolveCurrentAgent(ctx);
       if (!agent) throw new Error('current agent not found');
+      const local = scanSkills(agent.cli_tool).find((item) => item.name.toLowerCase() === name.toLowerCase());
+      if (local) return { ...local, detail: fs.readFileSync(local.source_path, 'utf8') };
       const skills = parsePlatformSkills(agent.custom_skills);
       const skill = skills.find((item) => item.name.toLowerCase() === name.toLowerCase());
       if (!skill) throw new Error(`skill not found for current agent: ${name}`);
@@ -4903,4 +4922,7 @@ module.exports = {
   runtimeAgentKey,
   runningAgents,
   scanAgents,
+  runProcess,
+  scanSkills,
+  parseSkillFile,
 };

@@ -91,10 +91,10 @@ function eventsForEnvelope(envelope) {
   if (envelope.type === 'tool.updated') {
     const tool = payload.toolName || payload.description || 'tool';
     if (payload.kind === 'scheduled') return [toolUseEvent(tool, payload.input, payload.toolCallId)];
-    if (payload.kind === 'result') return [toolResultEvent(tool, resultText(payload.result), false)];
+    if (payload.kind === 'result') return [{ ...toolResultEvent(tool, resultText(payload.result), false), ...(payload.toolCallId ? { toolUseID: payload.toolCallId } : {}) }];
     if (payload.kind === 'error') {
       const message = payload.error?.message || payload.error || 'ZCode 工具执行失败';
-      return [toolResultEvent(tool, String(message), true)];
+      return [{ ...toolResultEvent(tool, String(message), true), ...(payload.toolCallId ? { toolUseID: payload.toolCallId } : {}) }];
     }
     return [];
   }

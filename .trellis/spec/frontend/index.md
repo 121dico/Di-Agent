@@ -20,6 +20,7 @@ This directory contains guidelines for frontend development. Fill in each file w
 | [State Management](./state-management.md) | Local state, global state, server state | To fill |
 | [Quality Guidelines](./quality-guidelines.md) | 类型安全、API 调用、样式硬性规则 | Filled |
 | [Artifact Preview Contracts](./artifact-preview.md) | PPT/Web/document preview contracts and fallbacks | Filled |
+| [Local Skills and Execution Trace](../backend/agent-runtime-and-skill-install.md#scenario-local-skill-catalog-and-reply-execution-trace) | Local-first Skills page, separate reply drawer, and cross-layer event/replay contract | Filled |
 | [Type Safety](./type-safety.md) | Type patterns, validation | To fill |
 
 ---

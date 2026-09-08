@@ -61,6 +61,7 @@ export interface Skill {
   trigger?: string;
   detail?: string;
   source_path?: string;
+  usage?: string;
   auto?: boolean;
 }
 

@@ -614,3 +614,39 @@ func TestStreamingReducer_PartialStringInputAccumulatesCorrectly(t *testing.T) {
 		t.Fatalf("expected accumulated Text=%q, got %q", want, result.Blocks[0].Text)
 	}
 }
+
+func TestToolTraceMetadataAndInputSurviveHistoryReplay(t *testing.T) {
+	var events []model.AgentEvent
+	err := json.Unmarshal([]byte(`[{"type":"tool_use","tool":"mcp__local__get_agent_skill","tool_use_id":"skill-1","input":{"name":"review"},"tool_kind":"skill","skill_name":"review","server_name":"local","source_path":"/skills/review/SKILL.md"},{"type":"tool_result","tool_use_id":"skill-1","output":"{\"loaded\":true}"},{"type":"tool_use","tool":"mcp__search__query","tool_use_id":"search-1","tool_kind":"mcp","server_name":"search","input":{"q":"docs"}},{"type":"tool_result","tool_use_id":"search-1","output":"network unavailable","is_error":true}]`), &events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := ReduceEvents(events, InitialStreamingState())
+	wire, err := json.Marshal(state.Blocks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var blocks []model.MessageBlock
+	if err := json.Unmarshal(wire, &blocks); err != nil {
+		t.Fatal(err)
+	}
+	if blocks[0].Text != `{"name":"review"}` || blocks[0].ToolKind != "skill" || blocks[1].SkillName != "review" || blocks[1].SourcePath != "/skills/review/SKILL.md" || blocks[1].ServerName != "local" {
+		t.Fatalf("skill trace lost: %+v", blocks)
+	}
+	if blocks[3].ToolKind != "mcp" || blocks[3].ServerName != "search" || !blocks[3].IsError || state.Status != model.MessageStatusStreaming {
+		t.Fatalf("MCP trace lost: %+v", blocks)
+	}
+}
+
+func TestParallelLegacyToolInputsMatchInvocationIDs(t *testing.T) {
+	state := ReduceEvents([]model.AgentEvent{
+		{Type: model.AgentEventToolUse, Tool: "Read", ToolUseID: "a", Input: json.RawMessage(`{}`)},
+		{Type: model.AgentEventToolUse, Tool: "Search", ToolUseID: "b", Input: json.RawMessage(`{}`)},
+		{Type: model.AgentEventToolUse, ToolUseID: "a", Input: json.RawMessage(`"{\"file_path\":\"/skills/review/SKILL.md\"}"`)},
+		{Type: model.AgentEventToolUse, ToolUseID: "b", Input: json.RawMessage(`"{\"q\":\"docs\"}"`)},
+		{Type: model.AgentEventToolUse, ToolUseID: "unknown", Input: json.RawMessage(`"unexpected"`)},
+	}, InitialStreamingState())
+	if state.Blocks[0].Text != `{"file_path":"/skills/review/SKILL.md"}` || state.Blocks[1].Text != `{"q":"docs"}` {
+		t.Fatalf("crossed inputs: %+v", state.Blocks)
+	}
+}

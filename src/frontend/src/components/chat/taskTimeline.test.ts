@@ -186,3 +186,14 @@ describe('projectTaskTimeline', () => {
     expect(task?.result).toBe(messageStatus === 'error' ? '权限不足' : '任务已由用户取消，已完成的步骤记录仍保留。');
   });
 });
+
+it('keeps the chat task timeline renderable when a persisted no-argument MCP call omits text', () => {
+  // 真实 list_agents 事件：Go 的 omitempty 会省略空参数块的 text。
+  const blocks = JSON.parse('[{"index":0,"kind":"tool_use","tool_name":"list_agents","tool_kind":"mcp","tool_use_id":"exec-list"},{"index":1,"kind":"tool_result","text":"[]","tool_use_id":"exec-list"}]');
+  const message: Message = { id: 'assistant-real-mcp', conversation_id: 'agent-conv', role: 'assistant', content: '已查询', artifacts_json: null, created_at: '2026-09-08T09:00:11Z', status: 'complete', blocks };
+  const timeline = projectTaskTimeline({ 'agent-conv': [message] }, conversations);
+  expect(timeline.completed[0]?.steps[0]?.label).toBe('使用 list_agents');
+  expect(timeline.completed[0]?.steps[0]?.detail).toBe('');
+  const replay = projectTaskTimeline({ 'agent-conv': [{ ...message, blocks: undefined, blocks_json: JSON.stringify(blocks) }] }, conversations);
+  expect(replay).toEqual(timeline);
+});

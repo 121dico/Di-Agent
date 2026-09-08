@@ -91,9 +91,9 @@ test('openclaw.parseResult returns raw stdout on JSON parse failure', () => {
   assert.strictEqual(spec.parseResult({ stdout: 'plain text not json' }), 'plain text not json');
 });
 
-test('openclaw.parseResult returns raw stdout when JSON has no recognizable field', () => {
+test('openclaw.parseResult does not leak unrecognized JSON envelopes', () => {
   const spec = createOpenClawCliSpec(buildMockCtx());
   const stdout = JSON.stringify({ unrelated: 'x' });
   // Falls through all branches, returns original text
-  assert.strictEqual(spec.parseResult({ stdout }), stdout);
+  assert.strictEqual(spec.parseResult({ stdout }), '(OpenClaw CLI 没有返回内容)');
 });

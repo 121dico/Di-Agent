@@ -781,7 +781,7 @@ test('codex.parseResult prefers outputFile when present and non-empty', () => {
   assert.strictEqual(result, 'file content');
 });
 
-test('codex.parseResult falls back to stdio when outputFile missing', () => {
+test('codex.parseResult ignores unstructured stdout when outputFile missing', () => {
   const ctx = buildMockCtx({
     fs: {
       existsSync: () => false,
@@ -791,15 +791,15 @@ test('codex.parseResult falls back to stdio when outputFile missing', () => {
   });
   const spec = createCodexCliSpec(ctx);
   const result = spec.parseResult({ stdout: 'stdio only', stderr: '' });
-  assert.strictEqual(result, 'stdio only');
+  assert.strictEqual(result, '(Agent CLI 没有返回内容)');
 });
 
-test('codex.parseResult combines stdout and stderr with newline', () => {
+test('codex.parseResult does not return raw stdout or stderr logs', () => {
   const ctx = buildMockCtx({
     fs: { existsSync: () => false, readFileSync: () => '', rmSync: () => {} },
   });
   const spec = createCodexCliSpec(ctx);
-  assert.strictEqual(spec.parseResult({ stdout: 'out', stderr: 'err' }), 'out\nerr');
+  assert.strictEqual(spec.parseResult({ stdout: 'out', stderr: 'err' }), '(Agent CLI 没有返回内容)');
 });
 
 test('codex.parseResult returns fallback message when empty', () => {
@@ -808,4 +808,26 @@ test('codex.parseResult returns fallback message when empty', () => {
   });
   const spec = createCodexCliSpec(ctx);
   assert.strictEqual(spec.parseResult({}), '(Agent CLI 没有返回内容)');
+});
+
+test('Codex native MCP completion preserves ID, server, input and failure', () => {
+  const spec = createCodexCliSpec(buildMockCtx());
+  const events = spec.parseStreamEvent(JSON.stringify({ type: 'item.completed', item: { id: 'native-mcp-1', type: 'mcp_tool_call', server: 'di_agent', tool: 'get_agent_skill', arguments: { name: 'review' }, status: 'failed', error: { message: 'not found' } } }));
+  assert.equal(events[0].toolUseID, 'native-mcp-1');
+  assert.equal(events[0].server_name, 'di_agent');
+  assert.deepEqual(events[0].input, { name: 'review' });
+  assert.equal(events[1].toolUseID, 'native-mcp-1');
+  assert.equal(events[1].isError, true);
+});
+
+test('Codex missing final file extracts only last assistant event, never native skill output or stderr', () => {
+ const spec = createCodexCliSpec(buildMockCtx());
+ const stdout = [
+  {type:'item.completed',item:{type:'agent_message',text:'checking'}},
+  {type:'item.completed',item:{type:'mcp_tool_call',tool:'get_agent_skill',output:'PRIVATE BODY'}},
+  {type:'item.completed',item:{type:'agent_message',text:'Final answer'}},
+  {type:'turn.completed',usage:{total:42}},
+ ].map(JSON.stringify).join('\n');
+ assert.equal(spec.parseResult({stdout,stderr:'PRIVATE STDERR'}), 'Final answer');
+ assert.equal(spec.parseResult({stdout:JSON.stringify({type:'item.completed',item:{type:'mcp_tool_call',output:'PRIVATE BODY'}})}), '(Agent CLI 没有返回内容)');
 });

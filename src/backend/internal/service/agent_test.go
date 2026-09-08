@@ -11,24 +11,25 @@ import (
 )
 
 type fakeAgentRepo struct {
-	updateResult   *model.Agent
-	currentAgent   *model.Agent
-	daemonTask     *model.DaemonTask
-	deleted        bool
-	registered     []string
-	machines       []model.DaemonMachine
-	machineAgent   []string
-	candidates     []string
-	prunedMachine  string
-	activeRuntimes []model.AgentCandidateRuntime
-	addedPrompt    string
-	addedCLITool   string
-	addedTools     string
-	addedSkills    string
-	updatedUser    string
-	updatedTools   string
-	updatedSkills  string
-	completeOK     *bool
+	updateResult       *model.Agent
+	currentAgent       *model.Agent
+	daemonTask         *model.DaemonTask
+	deleted            bool
+	registered         []string
+	registeredCatalogs []string
+	machines           []model.DaemonMachine
+	machineAgent       []string
+	candidates         []string
+	prunedMachine      string
+	activeRuntimes     []model.AgentCandidateRuntime
+	addedPrompt        string
+	addedCLITool       string
+	addedTools         string
+	addedSkills        string
+	updatedUser        string
+	updatedTools       string
+	updatedSkills      string
+	completeOK         *bool
 }
 
 func (r *fakeAgentRepo) ListAvailable(ctx context.Context, userID string) ([]model.Agent, error) {
@@ -126,6 +127,7 @@ func TestCompleteDaemonTaskRejectsMismatchedTerminalRedelivery(t *testing.T) {
 }
 
 func (r *fakeAgentRepo) UpsertSystemAgent(ctx context.Context, name, cliTool, version, capabilitiesJSON, machineID string) error {
+	r.registeredCatalogs = append(r.registeredCatalogs, capabilitiesJSON)
 	r.registered = append(r.registered, cliTool)
 	return nil
 }
@@ -177,6 +179,7 @@ func (r *fakeAgentRepo) UpsertMachineAgent(ctx context.Context, userID, machineI
 }
 
 func (r *fakeAgentRepo) UpsertMachineAgentCandidate(ctx context.Context, machineID, name, cliTool, variant, version, capabilitiesJSON string) error {
+	r.registeredCatalogs = append(r.registeredCatalogs, capabilitiesJSON)
 	r.candidates = append(r.candidates, machineID+":"+cliTool+":"+variant)
 	return nil
 }
@@ -681,5 +684,43 @@ func TestDeleteCustomReturnsNotFound(t *testing.T) {
 	err := svc.DeleteOwned(context.Background(), "agent-1", "user-1")
 	if !errors.Is(err, ErrAgentNotFound) {
 		t.Fatalf("expected ErrAgentNotFound, got %v", err)
+	}
+}
+
+func TestRegistrationsStoreLocalSkillIndexWithoutBody(t *testing.T) {
+	repo := &fakeAgentRepo{}
+	svc := NewAgentService(repo, nil)
+	agents := []DiscoveredAgent{{Name: "Codex", CLITool: "codex", Capabilities: []DiscoveredSkill{{Name: "review", Description: "Review code", Trigger: "review request", SourcePath: "/skills/review/SKILL.md", Detail: "PRIVATE FULL BODY"}}}}
+	if err := svc.RegisterSystemAgents(context.Background(), "machine", agents); err != nil {
+		t.Fatal(err)
+	}
+	machine, _, err := svc.CreateDaemonMachine(context.Background(), "user-1", "pc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RegisterMachineAgents(context.Background(), machine, "pc", agents); err != nil {
+		t.Fatal(err)
+	}
+	if len(repo.registeredCatalogs) != 2 {
+		t.Fatal(repo.registeredCatalogs)
+	}
+	for _, catalog := range repo.registeredCatalogs {
+		if strings.Contains(catalog, "PRIVATE FULL BODY") || strings.Contains(catalog, "detail") {
+			t.Fatalf("body uploaded: %s", catalog)
+		}
+		if !strings.Contains(catalog, "Review code") || !strings.Contains(catalog, "/skills/review/SKILL.md") {
+			t.Fatal(catalog)
+		}
+	}
+}
+func TestAgentContextIncludesLocalIndexWithoutPlatformAssignment(t *testing.T) {
+	got := BuildAgentConfigText(&model.Agent{CapabilitiesJSON: `[{"name":"review","description":"Review code","usage":"Load then review diff","source_path":"/skills/review/SKILL.md","detail":"PRIVATE BODY"},"coding"]`}, "task", "review")
+	for _, want := range []string{"[本地 Skill 索引]", "Review code", "Load then review diff", "get_agent_skill（仅传 name 参数", "/skills/review/SKILL.md"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %s: %s", want, got)
+		}
+	}
+	if strings.Contains(got, "PRIVATE BODY") || strings.Contains(got, "coding") {
+		t.Fatal(got)
 	}
 }

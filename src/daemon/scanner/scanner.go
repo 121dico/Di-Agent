@@ -18,7 +18,8 @@ const minDescriptionChars = 6
 type SkillInfo struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
-	Detail      string `json:"detail,omitempty"`
+	Detail      string `json:"-"`
+	Usage       string `json:"usage,omitempty"`
 	SourcePath  string `json:"source_path,omitempty"`
 	Auto        bool   `json:"auto,omitempty"`
 }
@@ -97,9 +98,6 @@ func (s *Scanner) Scan(ctx context.Context) ([]AgentInfo, error) {
 		}
 		version := s.readVersion(ctx, candidate.Command)
 		capabilities := s.readSkills(candidate)
-		if len(capabilities) == 0 {
-			capabilities = candidate.Capabilities
-		}
 		agents = append(agents, AgentInfo{
 			Name:         candidate.Name,
 			CLITool:      candidate.CLITool,
@@ -155,6 +153,17 @@ func (s *Scanner) readSkills(candidate Candidate) []SkillInfo {
 		})
 	}
 	return skills
+}
+
+// LoadSkill resolves only entries in the CLI's local inventory; caller paths are never trusted.
+func LoadSkill(cliTool, name string) (SkillInfo, string, bool, error) {
+	for _, skill := range New(nil).readSkills(Candidate{CLITool: cliTool}) {
+		if strings.EqualFold(skill.Name, name) {
+			content, err := os.ReadFile(skill.SourcePath)
+			return skill, string(content), true, err
+		}
+	}
+	return SkillInfo{}, "", false, nil
 }
 
 func skillRoots(cliTool string) []string {
@@ -255,7 +264,7 @@ func openClawInstallSkillRoots(home string) []string {
 }
 
 func parseSkillFile(fallbackName, path, content string) SkillInfo {
-	skill := SkillInfo{Name: fallbackName, Detail: content, SourcePath: path, Auto: true}
+	skill := SkillInfo{Name: fallbackName, SourcePath: path, Auto: true, Usage: "Call get_agent_skill with this exact name to load the full local SKILL.md; resolve resources relative to source_path."}
 	lines := strings.Split(content, "\n")
 	if len(lines) < 2 || strings.TrimSpace(lines[0]) != "---" {
 		skill.Description = normalizeSkillDescription(skill.Name, skill.Description, content)

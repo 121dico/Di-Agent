@@ -47,6 +47,10 @@ import (
 //   - Result          turn_end.result（reducer 当前不消费，保留透传）
 //   - Code            session_end.code（reducer 当前不消费，保留透传）
 type AgentEvent struct {
+	ToolKind     string          `json:"tool_kind,omitempty"`
+	SkillName    string          `json:"skill_name,omitempty"`
+	ServerName   string          `json:"server_name,omitempty"`
+	SourcePath   string          `json:"source_path,omitempty"`
 	Type         string          `json:"type"`
 	Seq          int64           `json:"seq,omitempty"`
 	Adapter      string          `json:"adapter,omitempty"`
@@ -132,4 +136,25 @@ func (e AgentEvent) IsTerminal() bool {
 	default:
 		return false
 	}
+}
+
+// UnmarshalJSON accepts native MCP structured results while preserving the shared
+// string output contract used by broadcast clients and persisted message blocks.
+func (e *AgentEvent) UnmarshalJSON(data []byte) error {
+	type alias AgentEvent
+	var parsed alias
+	wire := struct {
+		*alias
+		Output json.RawMessage `json:"output"`
+	}{alias: &parsed}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	if len(wire.Output) > 0 && string(wire.Output) != "null" {
+		if err := json.Unmarshal(wire.Output, &parsed.Output); err != nil {
+			parsed.Output = string(wire.Output)
+		}
+	}
+	*e = AgentEvent(parsed)
+	return nil
 }

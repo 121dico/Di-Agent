@@ -25,8 +25,8 @@ func TestParseSkillFileReadsFrontmatterAndContent(t *testing.T) {
 	if skill.Description != "Write code safely" {
 		t.Fatalf("expected description, got %q", skill.Description)
 	}
-	if skill.Detail != content {
-		t.Fatalf("expected original content preserved")
+	if skill.Detail != "" || skill.Usage == "" {
+		t.Fatalf("expected metadata only, with local loading instructions")
 	}
 }
 
@@ -103,7 +103,7 @@ func TestReadSkillsReturnsSkillFiles(t *testing.T) {
 	skills := New(nil).readSkills(Candidate{CLITool: "codex"})
 	var found bool
 	for _, skill := range skills {
-		if skill.Name == "coding" && skill.Detail == content {
+		if skill.Name == "coding" && skill.Detail == "" && skill.SourcePath != "" {
 			found = true
 		}
 	}
@@ -176,7 +176,7 @@ func TestReadSkillsFindsClaudePluginMarketplaceSkills(t *testing.T) {
 
 	skills := New(nil).readSkills(Candidate{CLITool: "claude"})
 	for _, skill := range skills {
-		if skill.Name == "frontend-design" && skill.Detail == content {
+		if skill.Name == "frontend-design" && skill.Detail == "" && skill.SourcePath != "" {
 			return
 		}
 	}

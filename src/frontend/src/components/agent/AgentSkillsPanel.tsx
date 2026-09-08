@@ -4,15 +4,10 @@ import { message } from '@/utils/message';
 import {
   FolderOpenOutlined,
   PlusOutlined,
-  DownOutlined,
-  RightOutlined,
   SearchOutlined,
   CloseOutlined,
   SaveOutlined,
   SettingOutlined,
-  CheckCircleFilled,
-  AppstoreFilled,
-  LockFilled,
 } from '@ant-design/icons';
 import type { Agent, PlatformSkill } from '@/types/agent';
 import { useAgentStore } from '@/store/agentStore';
@@ -31,12 +26,13 @@ import type { Skill } from './agentPresentation';
 import { listUserTemplates, type UserTemplate } from '@/api/userTemplate';
 import { installGitHubSkill } from '@/api/agent';
 import styles from './AgentSkillsPanel.module.css';
+import { LocalSkillsPanel } from './LocalSkillsPanel';
 
 interface AgentSkillsPanelProps {
   agent: Agent;
 }
 
-type SkillTab = 'assigned' | 'library';
+type SkillTab = 'local' | 'assigned' | 'library';
 
 export const AgentSkillsPanel: React.FC<AgentSkillsPanelProps> = ({ agent }) => {
   const updateCustomSkills = useAgentStore((s) => s.updateCustomSkills);
@@ -48,10 +44,9 @@ export const AgentSkillsPanel: React.FC<AgentSkillsPanelProps> = ({ agent }) => 
   const [selectedLibrarySkillID, setSelectedLibrarySkillID] = useState<string | null>(null);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [importingDefaults, setImportingDefaults] = useState(false);
-  const [baseExpanded, setBaseExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [openingPath, setOpeningPath] = useState(false);
-  const [activeTab, setActiveTab] = useState<SkillTab>('assigned');
+  const [activeTab, setActiveTab] = useState<SkillTab>('local');
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [detailOpen, setDetailOpen] = useState(false);
@@ -73,7 +68,7 @@ export const AgentSkillsPanel: React.FC<AgentSkillsPanelProps> = ({ agent }) => 
 
   useEffect(() => {
     const nextSkills = parseSkills(agent.custom_skills);
-    setBaseSkills(parseSkills(agent.capabilities_json));
+    setBaseSkills(parseSkills(agent.capabilities_json).filter((skill) => !!skill.source_path));
     setSkills(nextSkills);
     setSelectedSkillIdx(null);
     setSelectedLibrarySkillID(null);
@@ -137,7 +132,7 @@ export const AgentSkillsPanel: React.FC<AgentSkillsPanelProps> = ({ agent }) => 
   }, []);
 
   const skillTemplateOptions = useMemo(() => [
-    { value: 'none', label: '无 Skills' },
+    { value: 'none', label: '无平台附加指令' },
     ...featuredSkillCategories.map((cat) => ({ value: `cat:${cat}`, label: cat })),
     ...categories
       .filter((cat) => !featuredSkillCategories.includes(cat))
@@ -463,36 +458,8 @@ export const AgentSkillsPanel: React.FC<AgentSkillsPanelProps> = ({ agent }) => 
   return (
     <div className={styles.container}>
       <div className={styles.panelActions}>
-        <div className={styles.miniMetrics}>
-          <div className={styles.miniMetric}>
-            <span className={styles.miniMetricIcon} style={{ background: 'rgba(34, 197, 94, 0.12)', color: '#22c55e' }}>
-              <CheckCircleFilled />
-            </span>
-            <span className={styles.miniMetricMeta}>
-              <span className={styles.miniMetricLabel}>已分配</span>
-              <span className={styles.miniMetricValue}>{skills.length}</span>
-            </span>
-          </div>
-          <div className={styles.miniMetric}>
-            <span className={styles.miniMetricIcon} style={{ background: 'rgba(139, 92, 246, 0.12)', color: '#8b5cf6' }}>
-              <AppstoreFilled />
-            </span>
-            <span className={styles.miniMetricMeta}>
-              <span className={styles.miniMetricLabel}>平台库</span>
-              <span className={styles.miniMetricValue}>{librarySkills.length}</span>
-            </span>
-          </div>
-          <div className={styles.miniMetric}>
-            <span className={styles.miniMetricIcon} style={{ background: 'rgba(249, 115, 22, 0.12)', color: '#f97316' }}>
-              <LockFilled />
-            </span>
-            <span className={styles.miniMetricMeta}>
-              <span className={styles.miniMetricLabel}>底座只读</span>
-              <span className={styles.miniMetricValue}>{baseSkills.length}</span>
-            </span>
-          </div>
-        </div>
         <div className={styles.panelActionsRow}>
+          {activeTab !== 'local' && <>
           <Select
             className={styles.templateSelect}
             value={skillTemplate}
@@ -507,19 +474,20 @@ export const AgentSkillsPanel: React.FC<AgentSkillsPanelProps> = ({ agent }) => 
           <Button icon={<SaveOutlined />} loading={saving} onClick={handleSave}>
             保存
           </Button>
+          </>}
           <Button
             icon={<PlusOutlined />}
             onClick={() => setInstallModalOpen(true)}
           >
             从 GitHub 安装
           </Button>
-          <Button
+          {activeTab !== 'local' && <Button
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => { setCreateForm({ name: '', category: '', description: '', trigger: '', detail: '' }); setCreateModalOpen(true); }}
           >
-            新建技能
-          </Button>
+            新建平台指令
+          </Button>}
         </div>
       </div>
 
@@ -566,12 +534,15 @@ export const AgentSkillsPanel: React.FC<AgentSkillsPanelProps> = ({ agent }) => 
       </Modal>
 
       <div className={styles.subTabs}>
+        <button className={`${styles.subTab} ${activeTab === 'local' ? styles.subTabActive : ''}`} type="button" onClick={() => setActiveTab('local')}>
+          本地 Skills <span className={styles.subTabCount}>{baseSkills.length}</span>
+        </button>
         <button
           className={`${styles.subTab} ${activeTab === 'assigned' ? styles.subTabActive : ''}`}
           type="button"
           onClick={() => setActiveTab('assigned')}
         >
-          已分配 Skills <span className={styles.subTabCount}>{skills.length}</span>
+          平台附加指令 <span className={styles.subTabCount}>{skills.length}</span>
         </button>
         <button
           className={`${styles.subTab} ${activeTab === 'library' ? styles.subTabActive : ''}`}
@@ -581,6 +552,8 @@ export const AgentSkillsPanel: React.FC<AgentSkillsPanelProps> = ({ agent }) => 
           平台库 <span className={styles.subTabCount}>{librarySkills.length}</span>
         </button>
       </div>
+
+      {activeTab === 'local' && <LocalSkillsPanel agentId={agent.id} skills={baseSkills} onImport={handleSaveLibrarySkill} />}
 
       {activeTab === 'assigned' && (
         <>
@@ -749,35 +722,6 @@ export const AgentSkillsPanel: React.FC<AgentSkillsPanelProps> = ({ agent }) => 
           </div>
         </>
       )}
-
-      <div className={styles.baseSkills}>
-        <button className={styles.sectionToggle} type="button" onClick={() => setBaseExpanded((v) => !v)}>
-          {baseExpanded ? <DownOutlined /> : <RightOutlined />}
-          <span className={styles.sectionTitleBlock}>
-            <span className={styles.sectionTitle}>底座只读</span>
-            <span className={styles.sectionDescription}>本地 Agent 上报的原始 Skills，可入库后再编辑</span>
-          </span>
-          <span className={styles.sectionCount}>{baseSkills.length}</span>
-        </button>
-        {baseExpanded && baseSkills.length === 0 && (
-          <div className={styles.empty}>当前 Agent 底座没有上报本地 Skills</div>
-        )}
-        {baseExpanded && baseSkills.length > 0 && (
-          <div className={styles.baseSkillGrid}>
-            {baseSkills.map((skill, idx) => (
-              <div className={styles.baseSkillCard} key={`${skill.name}-${idx}`}>
-                <div className={styles.baseSkillInfo}>
-                  <span className={styles.skillCardName}>{skill.name}</span>
-                  <span className={styles.skillCardDesc}>{skill.description || '暂无描述'}</span>
-                </div>
-                <Button size="small" onClick={() => handleSaveLibrarySkill(skill)}>
-                  入库
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
       <Modal
         title="创建新 Skill"

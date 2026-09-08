@@ -1,0 +1,8 @@
+.note { color: var(--color-text-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.timeline { padding-left: 24px; margin: 20px 0; }
+.entry { padding: 0 0 24px 8px; overflow-wrap: anywhere; }
+.heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.entry p { margin: 8px 0; }
+.entry summary { cursor: pointer; color: var(--color-primary); padding: 8px 0; }
+.entry pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--color-bg-chat); border: 1px solid var(--color-border-light); border-radius: 8px; padding: 12px; max-height: 360px; overflow: auto; }
+.entry h4 { margin: 12px 0 8px; }

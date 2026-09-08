@@ -254,12 +254,7 @@ func (s *AgentService) RegisterSystemAgents(ctx context.Context, machineID strin
 		if name == "" || cliTool == "" {
 			continue
 		}
-		// Truncate skill details to keep capabilities_json small.
-		for i := range agent.Capabilities {
-			if len(agent.Capabilities[i].Detail) > 500 {
-				agent.Capabilities[i].Detail = agent.Capabilities[i].Detail[:500] + "..."
-			}
-		}
+		agent.Capabilities = localSkillCatalog(agent.Capabilities)
 		capabilities, err := json.Marshal(agent.Capabilities)
 		if err != nil {
 			return fmt.Errorf("marshal capabilities: %w", err)
@@ -359,14 +354,7 @@ func (s *AgentService) RegisterMachineAgents(ctx context.Context, machine *model
 		if variant != "cli" && variant != "desktop" {
 			return fmt.Errorf("register machine agents: unsupported runtime variant %q", variant)
 		}
-		// Truncate skill details to keep capabilities_json small.
-		// Full content is available on-demand via get_agent_skill.
-		const maxDetailLen = 500
-		for i := range agent.Capabilities {
-			if len(agent.Capabilities[i].Detail) > maxDetailLen {
-				agent.Capabilities[i].Detail = agent.Capabilities[i].Detail[:maxDetailLen] + "..."
-			}
-		}
+		agent.Capabilities = localSkillCatalog(agent.Capabilities)
 		capabilities, err := json.Marshal(agent.Capabilities)
 		if err != nil {
 			return fmt.Errorf("marshal capabilities: %w", err)

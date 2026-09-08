@@ -66,21 +66,18 @@ function compactText(value: string | undefined, cap = 160): string {
 }
 
 function messageBlocks(message: Message): MessageBlock[] {
-  if (message.blocks && message.blocks.length > 0) return message.blocks;
-  if (!message.blocks_json) return [];
-  try {
-    const parsed: unknown = JSON.parse(message.blocks_json);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((block): block is MessageBlock => {
-      if (!block || typeof block !== 'object') return false;
-      const candidate = block as Partial<MessageBlock>;
-      return typeof candidate.kind === 'string'
-        && validBlockKinds.has(candidate.kind as MessageBlock['kind'])
-        && typeof candidate.text === 'string';
-    });
-  } catch {
-    return [];
+  let parsed: unknown = message.blocks;
+  if (!message.blocks?.length && message.blocks_json) {
+    try { parsed = JSON.parse(message.blocks_json); } catch { return []; }
   }
+  if (!Array.isArray(parsed)) return [];
+  return parsed.flatMap((block): MessageBlock[] => {
+    if (!block || typeof block !== 'object') return [];
+    const candidate = block as Partial<MessageBlock>;
+    if (typeof candidate.kind !== 'string' || !validBlockKinds.has(candidate.kind)) return [];
+    // Go omitempty 会省略无参数工具的空 text；实时完成消息和历史必须使用同一规范化入口。
+    return [{ ...candidate, index: typeof candidate.index === 'number' ? candidate.index : 0, kind: candidate.kind, text: typeof candidate.text === 'string' ? candidate.text : '' }];
+  });
 }
 
 function agentName(message: Message): string {

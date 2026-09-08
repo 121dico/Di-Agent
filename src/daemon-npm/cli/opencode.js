@@ -1,4 +1,5 @@
 'use strict';
+const { textEvent, thinkingEvent, toolUseEvent, toolResultEvent, errorEvent } = require('./events');
 
 const { readDiAgentEnvironment } = require('./environment');
 
@@ -214,7 +215,7 @@ function createOpenCodeCliSpec(ctx) {
           finalText = updatedText;
         } else {
           const chunkText = partChunks.join('').trim();
-          finalText = chunkText || text;
+          finalText = chunkText || '(OpenCode CLI 没有返回文本)';
         }
       }
 
@@ -228,11 +229,23 @@ function createOpenCodeCliSpec(ctx) {
       return { text: finalText, sessionId };
     },
 
-    // parseStreamEvent / parseStreamEventAll：占位（PR5留）。
-    // OpenCode 目前是 one-shot run --format json，不支持 stream-json persistent 模式。
-    // 未来实现 OpenCodeStreamAdapter 时在此补全（待 sst/opencode 流式协议调研）。
-    parseStreamEvent(_line, _ctx) { return null; },
-    parseStreamEventAll(_line, _ctx) { return []; },
+    // Official run --format json emits completed tool parts, not live start events.
+    // https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/cli/cmd/run.ts
+    parseStreamEvent(line) {
+      let event;
+      try { event = JSON.parse(line); } catch { return null; }
+      const part = event?.part;
+      if (event?.type === 'tool_use' && part?.type === 'tool' && ['completed', 'error'].includes(part.state?.status)) {
+        const id = part.callID || part.id;
+        return [toolUseEvent(part.tool, part.state.input || {}, id),
+          { ...toolResultEvent(part.tool, part.state.status === 'error' ? part.state.error : part.state.output, part.state.status === 'error'), toolUseID: id }];
+      }
+      if (event?.type === 'text' && typeof part?.text === 'string') return [textEvent(part.text)];
+      if (event?.type === 'reasoning' && typeof part?.text === 'string') return [thinkingEvent(part.text)];
+      if (event?.type === 'error') return [errorEvent(event.error?.data?.message || event.error?.name || 'OpenCode 执行出错')];
+      return null;
+    },
+    parseStreamEventAll(line) { return this.parseStreamEvent(line) || []; },
   };
 }
 

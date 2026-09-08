@@ -234,8 +234,8 @@ func RegisterAgentCreationTools(r *Registry, api *APIClient, ts *ToolsetStore) {
 // RegisterSkillTools registers platform-skill query tools.
 func RegisterSkillTools(r *Registry, api *APIClient, agentID string) {
 	r.Register(
-		T("get_agent_skill", "查看当前 Agent 已分配平台 Skill 的详细内容。先根据提示词中的 Skill 索引选择 name，再调用本工具渐进加载 detail",
-			Schema(map[string]map[string]interface{}{"name": Prop("平台 Skill 名称（必填，必须属于当前 Agent）")}, "name")),
+		T("get_agent_skill", "按索引名称加载当前 Agent 的本地 Skill 全文；本地未找到时回退到已分配的平台 Skill",
+			Schema(map[string]map[string]interface{}{"name": Prop("当前 Agent 索引中的 Skill 名称（必填，不可传入文件路径）")}, "name")),
 		makeGetAgentSkillHandler(api, agentID),
 	)
 	RegisterRoutes(r, api,

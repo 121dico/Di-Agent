@@ -97,9 +97,13 @@ export function streamingReducer(
         blocks.push({
           index: nextIndex(blocks),
           kind: 'tool_use',
-          text: '',
+          text: initialToolInput(event.input, event.content),
+          tool_kind: event.tool_kind,
+          skill_name: event.skill_name,
+          server_name: event.server_name,
+          source_path: event.source_path,
           tool_name: toolName,
-          tool_use_id: event.tool_use_id,
+          tool_use_id: event.tool_use_id || event.toolUseID,
         });
         return { ...state, blocks };
       }
@@ -113,9 +117,10 @@ export function streamingReducer(
             ? event.input
             : '';
       if (!inputDelta) return state;
-      const last = blocks[blocks.length - 1];
-      if (last && last.kind === 'tool_use') {
-        blocks[blocks.length - 1] = { ...last, text: last.text + inputDelta };
+      const idx = findToolUseBlock(blocks, event.tool_use_id || event.toolUseID);
+      const target = blocks[idx];
+      if (target) {
+        blocks[idx] = { ...target, text: target.text + inputDelta };
         return { ...state, blocks };
       }
       // 找不到 tool_use block 容错：忽略（与 appendDeltas 行为一致）
@@ -128,7 +133,7 @@ export function streamingReducer(
       const delta = event.delta ?? '';
       if (!delta) return state;
       // 找到匹配 tool_use_id 的 tool_use block；找不到则回退到最后一个 tool_use block
-      const idx = findToolUseBlock(blocks, event.tool_use_id);
+      const idx = findToolUseBlock(blocks, event.tool_use_id || event.toolUseID);
       if (idx === -1) return state;
       const target = blocks[idx]!;
       blocks[idx] = { ...target, text: target.text + delta };
@@ -154,6 +159,11 @@ export function streamingReducer(
         index: nextIndex(blocks),
         kind: 'tool_result',
         text: output,
+        tool_use_id: event.tool_use_id || event.toolUseID,
+        tool_kind: event.tool_kind,
+        skill_name: event.skill_name,
+        server_name: event.server_name,
+        source_path: event.source_path,
         is_error: isError,
       });
       return { ...state, blocks };
@@ -226,6 +236,8 @@ function findToolUseBlock(blocks: MessageBlock[], toolUseId?: string): number {
         return i;
       }
     }
+    // 已知 ID 不匹配时不能把参数接到另一个并发调用上。
+    return -1;
   }
   // 回退：最后一个 tool_use block
   for (let i = blocks.length - 1; i >= 0; i--) {
@@ -234,4 +246,10 @@ function findToolUseBlock(blocks: MessageBlock[], toolUseId?: string): number {
     }
   }
   return -1;
+}
+
+function initialToolInput(input: unknown, content?: string): string {
+  const text = typeof input === 'string' ? input : input != null ? JSON.stringify(input) : content ?? '';
+  // Claude start 事件的空对象只是占位符，后续 JSON 参数增量从空串开始。
+  return text === '{}' ? '' : text;
 }

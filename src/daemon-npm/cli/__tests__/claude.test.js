@@ -92,10 +92,10 @@ test('claude buildCommand adds configured overload fallback model', () => {
   }
 });
 
-test('claude.parseResult combines stdout and stderr (fallback behavior)', () => {
+test('claude.parseResult returns text stdout without local stderr diagnostics', () => {
   const { ctx } = buildMockCtx();
   const spec = createClaudeCliSpec(ctx);
-  assert.strictEqual(spec.parseResult({ stdout: 'hello', stderr: 'world' }), 'hello\nworld');
+  assert.strictEqual(spec.parseResult({ stdout: 'hello', stderr: 'world' }), 'hello');
   assert.strictEqual(spec.parseResult({ stdout: 'only' }), 'only');
   assert.strictEqual(spec.parseResult({}), '(Agent CLI 没有返回内容)');
   assert.strictEqual(spec.parseResult({ stdout: '', stderr: '' }), '(Agent CLI 没有返回内容)');

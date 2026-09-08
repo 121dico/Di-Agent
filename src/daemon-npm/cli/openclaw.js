@@ -134,7 +134,7 @@ function createOpenClawCliSpec(ctx) {
       } catch {
         return text;
       }
-      return text;
+      return '(OpenClaw CLI 没有返回内容)';
     },
 
     // parseStreamEvent / parseStreamEventAll：占位（PR5留）。

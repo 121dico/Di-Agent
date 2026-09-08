@@ -115,3 +115,14 @@ func TestAgentEventMarshal_NilInputOmitted(t *testing.T) {
 		t.Fatalf("input field should be omitted when nil, got output: %s", out)
 	}
 }
+
+func TestAgentEventAcceptsNativeObjectToolResults(t *testing.T) {
+	var events []AgentEvent
+	raw := `[{"type":"tool_result","tool_use_id":"local-1","tool_kind":"skill","skill_name":"review","source_path":"/skills/review/SKILL.md","output":{"status":"loaded","content_redacted":true}},{"type":"text","content":"Done"}]`
+	if err := json.Unmarshal([]byte(raw), &events); err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 2 || events[0].Output != `{"status":"loaded","content_redacted":true}` || events[0].SkillName != "review" || events[1].Content != "Done" {
+		t.Fatalf("lost native event: %+v", events)
+	}
+}
