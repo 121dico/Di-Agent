@@ -66,21 +66,18 @@
 .dangerButton { color: var(--wb-warning, #d75b16); background: rgba(245, 98, 0, .08); }
 .dangerButton:hover { color: var(--wb-warning, #d75b16) !important; background: rgba(245, 98, 0, .13) !important; }
 .menuOption { display: flex; flex-direction: column; gap: 1px; min-width: 240px; }
-.modelMenu :global(.ant-dropdown-menu-item-selected),
-.modelMenu :global(.ant-dropdown-menu-item-selected):hover {
+.checkMenu :global(.ant-dropdown-menu-item-selected),
+.checkMenu :global(.ant-dropdown-menu-item-selected):hover {
   color: var(--wb-text-primary) !important;
   background: transparent !important;
 }
 .menuOption > span:last-child { color: var(--wb-text-tertiary); font-size: 12px; }
 .dangerText { color: var(--wb-warning, #d75b16); }
 .dangerMenuItem { color: var(--wb-warning, #d75b16) !important; }
-.dangerMenuItem:hover,
-.dangerMenuItem:global(.ant-dropdown-menu-item-selected) {
+.checkMenu .dangerMenuItem:global(.ant-dropdown-menu-item-selected),
+.checkMenu .dangerMenuItem:global(.ant-dropdown-menu-item-selected):hover {
   color: var(--wb-warning, #d75b16) !important;
-  background: rgba(245, 98, 0, .1) !important;
-}
-.dangerMenuItem:global(.ant-dropdown-menu-item-selected):hover {
-  background: rgba(245, 98, 0, .14) !important;
+  background: transparent !important;
 }
 
 @media (max-width: 720px) {

@@ -86,10 +86,10 @@ describe('Composer runtime controls', () => {
     expect(markup).toContain('完全访问');
   });
 
-  it('scopes the selected and hover full-access row to a pale warning surface', () => {
+  it('keeps the selected full-access row transparent with warning text', () => {
     const css = readFileSync('src/components/chat/ComposerControls.module.css', 'utf8');
     expect(css).toContain('.dangerMenuItem:global(.ant-dropdown-menu-item-selected)');
-    expect(css).toContain('background: rgba(245, 98, 0, .1) !important;');
+    expect(css).toMatch(/\.checkMenu \.dangerMenuItem[^}]*color: var\(--wb-warning, #d75b16\) !important;\s*background: transparent !important;/);
     expect(css).not.toMatch(/dangerMenuItem[^}]*background:\s*(?:#000|black|rgba\(0,\s*0,\s*0)/);
   });
 

@@ -76,7 +76,7 @@ export const ComposerRuntimeControls: React.FC<ComposerRuntimeControlsProps> = (
     >
       <Dropdown
         menu={{
-          className: styles.modelMenu,
+          className: styles.checkMenu,
           items: modelItems,
           selectable: true,
           selectedKeys: [`model:${value.model || 'default'}`],
@@ -95,6 +95,7 @@ export const ComposerRuntimeControls: React.FC<ComposerRuntimeControlsProps> = (
       </Dropdown>
       <Dropdown
         menu={{
+          className: styles.checkMenu,
           items: effortItems,
           selectable: true,
           selectedKeys: [`effort:${value.reasoning_effort}`],
@@ -153,6 +154,7 @@ export const ComposerApprovalControl: React.FC<ComposerRuntimeControlsProps> = (
   return (
     <Dropdown
       menu={{
+        className: styles.checkMenu,
         items: approvalItems,
         selectable: true,
         selectedKeys: [value.approval_mode],
