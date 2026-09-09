@@ -821,3 +821,41 @@ func truncateRunes(s string, maxRunes int) string {
 	}
 	return string(runes[:maxRunes]) + "..."
 }
+
+// 只读取当前用户仍可见的文本，跨分页统计；附件正文与平台注入不混入。
+func (r *MessageRepo) ListOwnMessageTexts(ctx context.Context, userID, conversationID string) ([]string, error) {
+	var texts []string
+	err := r.db.SelectContext(ctx, &texts, `SELECT m.content FROM messages m
+ WHERE m.conversation_id=$1 AND m.sender_id=$2 AND m.role='user' AND m.deleted_at IS NULL
+ AND NOT EXISTS (SELECT 1 FROM message_hides h WHERE h.message_id=m.id AND h.user_id=$2)`, conversationID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list own message texts: %w", err)
+	}
+	return texts, nil
+}
+
+func (r *MessageRepo) ListAgentReplyTexts(ctx context.Context, userID, conversationID, agentID string) ([]model.Message, error) {
+	var messages []model.Message
+	err := r.db.SelectContext(ctx, &messages, `SELECT m.content,m.sender_id,COALESCE(m.artifacts_json,'') AS artifacts_json,COALESCE(m.blocks_json,'') AS blocks_json FROM messages m
+ WHERE m.conversation_id=$1 AND m.role='assistant' AND m.deleted_at IS NULL
+ AND m.status IN ('complete','error','canceled')
+ AND NOT EXISTS(SELECT 1 FROM message_hides h WHERE h.message_id=m.id AND h.user_id=$2)`, conversationID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list visible agent replies: %w", err)
+	}
+	visible := make([]model.Message, 0, len(messages))
+	for _, message := range messages {
+		if message.SenderID != nil && *message.SenderID == agentID {
+			visible = append(visible, message)
+			continue
+		}
+		// 历史及私聊回复把 Agent 身份放在 artifacts_json，sender_id 为空。
+		var identity struct {
+			AgentID string `json:"agent_id"`
+		}
+		if message.SenderID == nil && json.Unmarshal([]byte(message.ArtifactsJSON), &identity) == nil && identity.AgentID == agentID {
+			visible = append(visible, message)
+		}
+	}
+	return visible, nil
+}

@@ -101,7 +101,8 @@ function normalizeRuntimeConfig(value) {
 
 function runtimeConfigFingerprint(value) {
   const config = normalizeRuntimeConfig(value);
-  return JSON.stringify(config);
+  // 模型、推理和服务层级由 turn/start 更新，不应因此清空历史。
+  return JSON.stringify({ approval_mode: config.approval_mode });
 }
 
 function codexTurnControls(value) {
@@ -353,6 +354,8 @@ function createCodexCliSpec(ctx) {
     // 契约与 ClaudeCliSpec.spawnPersistent 一致：{child, sessionId, sendPrompt, events}。
     // ------------------------------------------------------------------
     spawnPersistent({
+      sessionId: savedThreadId,
+      resume,
       agentId,
       systemPrompt,
       conversationId,
@@ -405,11 +408,12 @@ function createCodexCliSpec(ctx) {
       let nextRpcId = 1;
       const pendingCalls = new Map(); // rpc id -> { resolve }
       let threadId = null;
-      const usageMeter = createCodexUsageMeter();
+      let observedModel;
+      const usageMeter = createCodexUsageMeter({ resumed: Boolean(resume && savedThreadId) });
       let currentTurn = null; // {turnId, resolve, timer, text}
       let pendingTurnApprovalContext = null;
       let pendingRuntimeVerification = null;
-      let firstTurn = true;
+      let firstTurn = !resume;
       let processSettled = false;
 
       const rpcCall = (method, params) => new Promise((resolve) => {
@@ -464,6 +468,7 @@ function createCodexCliSpec(ctx) {
       };
 
       const logRuntimeApplied = (verification, settings) => {
+        if (typeof settings.model === 'string' && settings.model) observedModel=settings.model;
         if (!verification || verification.verified || verification.unverifiedLogged) return;
         const appliedModel = typeof settings.model === 'string'
           && settings.model !== ''
@@ -545,12 +550,15 @@ function createCodexCliSpec(ctx) {
         const method = msg.method;
         const p = msg.params || {};
         if (method === 'thread/tokenUsage/updated' && currentTurn && (!p.threadId || p.threadId === threadId)) {
-          const event = usageEvent(usageMeter.observe(p.tokenUsage));
+          const event = usageEvent(usageMeter.observe({ ...p.tokenUsage, model: observedModel }));
           if (event) dispatchEvent(event);
           return;
         }
+        if (method==='item/started' && p.item?.type==='contextCompaction') {
+          const event=usageEvent(usageMeter.compact('running',p.item.id));if(event)dispatchEvent(event);
+        }
         if (method === 'thread/compacted' || (method === 'item/completed' && p.item?.type === 'contextCompaction')) {
-          const event = usageEvent(usageMeter.compact());
+          const event = usageEvent(usageMeter.compact('complete',p.item?.id));
           if (event) dispatchEvent(event);
         }
         if (method === 'item/reasoning/summaryTextDelta' && typeof p.delta === 'string') {
@@ -597,7 +605,7 @@ function createCodexCliSpec(ctx) {
             await verifyRuntimeAfterTurn(turn.runtimeVerification);
             if (currentTurn !== turn) return;
             const resultText = turn.text || '';
-            const usage = usageEvent(usageMeter.finish(!turnError));
+            const usage = usageEvent(usageMeter.finish(!turnError, observedModel));
             if (usage) dispatchEvent(usage);
             dispatchEvent(turnEndEvent({ result: resultText, error: turnError }));
             finishTurn(turnError ? { error: String(turnError) } : { result: resultText });
@@ -768,10 +776,12 @@ function createCodexCliSpec(ctx) {
           clientInfo: { name: 'di-agent-daemon', title: 'Di Agent', version: '0.4.4' },
         });
         if (init.error) throw new Error(`codex app-server initialize 失败: ${init.error.message}`);
-        const thread = await rpcCall('thread/start', { cwd });
+        const thread = resume && savedThreadId
+          ? await rpcCall('thread/resume', { threadId: savedThreadId })
+          : await rpcCall('thread/start', { cwd });
         threadId = thread && thread.result && thread.result.thread && thread.result.thread.id;
         if (!threadId) {
-          throw new Error(`codex app-server thread/start 失败: ${JSON.stringify(thread && thread.error || {}).slice(0, 120)}`);
+          throw new Error(`codex app-server 会话启动/恢复失败: ${JSON.stringify(thread && thread.error || {}).slice(0, 120)}`);
         }
         daemonCtx.logFlow('info', 'agent.codex_thread_ready', {
           agent_id: agentId,
@@ -805,6 +815,7 @@ function createCodexCliSpec(ctx) {
               : `${CODEX_MCP_FALLBACK}${prompt}`;
             firstTurn = false;
           }
+          observedModel = undefined;
           usageMeter.beginTurn();
           const controls = codexTurnControls(runtimeConfig);
           pendingTurnApprovalContext = approvalContext || {};
@@ -884,7 +895,8 @@ function createCodexCliSpec(ctx) {
 
       return {
         child,
-        sessionId: daemonCtx.crypto.randomUUID(), // 存储兼容用；codex 上下文由 thread 承载
+        get sessionId() { return threadId; },
+        ready: boot,
         sendPrompt,
         events: queue.iter,
       };

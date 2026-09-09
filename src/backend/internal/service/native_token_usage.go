@@ -30,7 +30,15 @@ func (s *ContextMeterService) RecordNativeUsage(ctx context.Context, task *model
 	if err != nil {
 		return err
 	}
-	return repo.SaveNativeUsage(ctx, session, task.ID, usage)
+	if err := repo.SaveNativeUsage(ctx, session, task.ID, usage); err != nil {
+		return err
+	}
+	if models, ok := s.repo.(interface {
+		SaveObservedModel(context.Context, string, *model.TokenUsage) error
+	}); ok {
+		return models.SaveObservedModel(ctx, task.AgentID, usage)
+	}
+	return nil
 }
 
 // 历史字符估算不能作为当前上下文或真实累计。原生容量和当前快照缺一时不算百分比。
@@ -73,4 +81,16 @@ func (s *ContextMeterService) presentUsage(ctx context.Context, session *model.A
 		}
 	}
 	return session, nil
+}
+
+func (s *ContextMeterService) RecordConfiguredModel(ctx context.Context, agentID, machineID, name string) error {
+	if len(name) > 200 {
+		return ErrContextMeterInvalidInput
+	}
+	if repo, ok := s.repo.(interface {
+		SaveConfiguredModel(context.Context, string, string, string) error
+	}); ok {
+		return repo.SaveConfiguredModel(ctx, agentID, machineID, name)
+	}
+	return nil
 }

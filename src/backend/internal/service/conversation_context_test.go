@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
@@ -144,5 +145,68 @@ func TestConversationContextImportAttachesToCurrentSession(t *testing.T) {
 	}
 	if checkpoints.input.Mode != "current_session" {
 		t.Fatalf("import mode = %q, want current_session", checkpoints.input.Mode)
+	}
+}
+
+type fakeOwnMessageTexts struct{ user, conversation string }
+
+func (f *fakeOwnMessageTexts) ListOwnMessageTexts(_ context.Context, user, conversation string) ([]string, error) {
+	f.user, f.conversation = user, conversation
+	return []string{"你好", "test"}, nil
+}
+func TestListUsageSeparatesMyMessagesFromNativeContext(t *testing.T) {
+	meter := NewContextMeterService(&fakeContextMeterRepo{})
+	svc := NewConversationContextService(fakeConversationContextAgents{agents: []model.ConversationAgent{{AgentID: "agent"}}}, nil, nil, meter, nil, nil)
+	texts := &fakeOwnMessageTexts{}
+	svc.SetOwnMessageSource(texts)
+	rows, err := svc.ListUsage(context.Background(), "me", "conv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if texts.user != "me" || texts.conversation != "conv" {
+		t.Fatal("must scope by authenticated user and conversation")
+	}
+	if rows[0].MyMessages == nil || rows[0].MyMessages.EstimatedTokens != 3 || rows[0].MyMessages.MessageCount != 2 {
+		t.Fatalf("wrong own count: %+v", rows[0])
+	}
+	if rows[0].ActiveContextTokens != 0 {
+		t.Fatal("own count must not overwrite native context")
+	}
+}
+
+func (f *fakeOwnMessageTexts) ListAgentReplyTexts(context.Context, string, string, string) ([]model.Message, error) {
+	return []model.Message{{Content: "hidden reasoning and hello", BlocksJSON: `[{"kind":"thinking","text":"hidden reasoning"},{"kind":"text","text":"hello"},{"kind":"tool_result","text":"secret tool output"}]`}}, nil
+}
+
+type fakeChatTokenizer struct{ texts []string }
+
+func (f *fakeChatTokenizer) Count(_ context.Context, _ string, texts []string) ([]int64, string, error) {
+	f.texts = texts
+	return []int64{1, 1, 1}, "verified-test-vocabulary", nil
+}
+func TestChatTokenizationUsesCompleteVisibleMessagesOnly(t *testing.T) {
+	repo := &nativeMeterFake{}
+	meter := NewContextMeterService(repo)
+	n := int64(25000)
+	if err := meter.RecordNativeUsage(context.Background(), &model.DaemonTask{ID: "t", ConversationID: "conv", AgentID: "agent", CLITool: "claude"}, &model.TokenUsage{Provider: "claude", Source: "actual", Model: "deepseek-v4-pro", ContextTokens: &n, ObservedAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	svc := NewConversationContextService(fakeConversationContextAgents{agents: []model.ConversationAgent{{AgentID: "agent"}}}, nil, nil, meter, nil, nil)
+	svc.SetOwnMessageSource(&fakeOwnMessageTexts{})
+	tokenizer := &fakeChatTokenizer{}
+	svc.SetChatTokenizer(tokenizer)
+	rows, err := svc.ListUsage(context.Background(), "me", "conv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := rows[0].MyMessages
+	if got.Source != "tokenizer" || got.InputTokens != 2 || got.OutputTokens != 1 || got.OutputCharacters != 5 {
+		t.Fatalf("wrong visible counts: %+v", got)
+	}
+	if strings.Join(tokenizer.texts, "|") != "你好|test|hello" {
+		t.Fatalf("hidden data entered tokenizer: %v", tokenizer.texts)
+	}
+	if rows[0].ActiveContextTokens != 25000 {
+		t.Fatal("native pressure must remain separate")
 	}
 }

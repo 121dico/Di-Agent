@@ -12,20 +12,30 @@ import { notifyTaskChanged } from '@/store/wsStore';
 
 const usage: ContextUsage = {
   conversation_id: 'chat-a', agent_id: 'agent-a', generation: 1,
+  my_messages: { estimated_tokens: 3, message_count: 2 },
   active_context_tokens: 25000, context_window_tokens: 100000,
   usage_ratio: .25, status: 'normal', source: 'estimated', compaction_count: 0,
 };
 
 describe('ContextUsageFooter', () => {
-  it('shows token counts and a matching progress meter without opening details', () => {
+  it('shows only my text estimate without a misleading window percentage', () => {
     const html = renderToStaticMarkup(<ContextUsageFooterView usages={[usage]} onOpen={() => {}} />);
-    expect(html).toContain('25.0K / 100K · 25%');
+    expect(html).toContain('聊天内容');
+    expect(html).toContain('3 tokens');
+    expect(html).not.toContain('25.0K');
     expect(html).toContain('估算');
-    expect(html).toContain('value="25"');
+    expect(html).not.toContain('<progress');
+  });
+
+  it('labels every agent in group readings', () => {
+    const html = renderToStaticMarkup(<ContextUsageFooterView usages={[{...usage, agent_name:'Alpha'}, {...usage, agent_id:'b', agent_name:'Beta', my_messages:{estimated_tokens:3,message_count:2,output_tokens:7}}]} onOpen={() => {}} />);
+    expect(html).toContain('Alpha');
+    expect(html).toContain('Beta');
+    expect(html).toContain('10 tokens');
   });
 
   it('does not report unknown or failed usage as zero percent', () => {
-    const unknown = renderToStaticMarkup(<ContextUsageFooterView usages={[{ ...usage, status: 'unknown' }]} onOpen={() => {}} />);
+    const unknown = renderToStaticMarkup(<ContextUsageFooterView usages={[{ ...usage, status: 'unknown', my_messages: undefined }]} onOpen={() => {}} />);
     expect(unknown).toContain('暂无用量记录');
     expect(unknown).not.toContain('25%');
     const failed = renderToStaticMarkup(<ContextUsageFooterView usages={[]} failed onOpen={() => {}} />);
@@ -43,7 +53,7 @@ describe('ContextUsageFooter', () => {
     const onOpen = vi.fn();
     try {
       await act(async () => root.render(<ContextUsageFooter key="a" conversationId="chat-a" onOpen={onOpen} />));
-      expect(container.textContent).toContain('25%');
+      expect(container.textContent).toContain('3 tokens');
       let resolveOld: (value: ContextUsage[]) => void = () => {};
       api.mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }));
       act(() => notifyTaskChanged('chat-a'));

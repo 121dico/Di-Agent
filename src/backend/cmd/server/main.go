@@ -307,6 +307,8 @@ func main() {
 	knowledgeHandler := handler.NewKnowledgeHandler(knowledgeSvc, repository.NewGroupRepo(db))
 	internalHandler := handler.NewInternalHandler(taskCardQueue)
 	checkpointHandler := handler.NewConversationCheckpointHandler(checkpointSvc)
+	contextSvc.SetOwnMessageSource(msgRepo)
+	contextSvc.SetChatTokenizer(&service.OfficialChatTokenizer{Python: os.Getenv("DI_AGENT_TOKENIZER_PYTHON"), Script: filepath.Join("tokenizers", "count.py")})
 	contextHandler := handler.NewConversationContextHandler(contextSvc)
 
 	// 路由设置

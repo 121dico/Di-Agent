@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+const { configuredModel } = require('../cli/model-discovery');
+const { recoverCodexThread } = require('../cli/session-recovery');
 
 const { execFileSync, spawn, spawnSync } = require('node:child_process');
 const { EventEmitter } = require('node:events');
@@ -2031,23 +2033,11 @@ function requestJSON(method, url, body, bearerToken) {
   });
 }
 
-function truncateStr(s, max) {
-  if (!s || s.length <= max) return s || '';
-  return s.slice(0, max) + '...';
-}
-
 function buildPromptParts(task) {
   let ctx = task.context_messages;
   ctx = typeof ctx === 'string' ? ctx : '';
 
-  // 长度保护：超过 8000 字符时截断中间部分，保留头部和尾部
-  const maxCtxLen = 8000;
-  if (ctx.length > maxCtxLen) {
-    const headLen = Math.floor(maxCtxLen * 0.4);
-    const tailLen = Math.floor(maxCtxLen * 0.4);
-    ctx = ctx.slice(0, headLen) + '\n...[上下文已截断]...\n' + ctx.slice(ctx.length - tailLen);
-  }
-
+  // 不按字符裁掉用户约束；窗口压力交给原生语义压缩处理。
   // 从 context_messages 中提取系统指令和工具配置作为 system prompt
   let systemPrompt = '';
   let remainingCtx = ctx;
@@ -2087,8 +2077,8 @@ function buildPromptParts(task) {
     if (handoffs !== null && Array.isArray(handoffs)) {
       parts.push('[历史 Agent 交接]');
       for (const h of handoffs) {
-        const req = truncateStr(h.user_request, 100);
-        const res = truncateStr(h.result, 200);
+        const req = String(h.user_request || '');
+        const res = String(h.result || '');
         parts.push(`- ${h.agent_name}: 用户问 "${req}" → 回复：${res}`);
       }
       parts.push('');
@@ -3030,6 +3020,9 @@ async function dispatchToPersistentSlotUnlocked(ws, agentId, conversationId, use
       slot = legacySlot;
     }
   }
+  if (slot?.cliTool && slot.cliTool !== cliTool) {
+    throw new Error('运行器已改变，请使用检查点续接以保留对话上下文');
+  }
   if (runtimeVariant && slot && slot.runtimeVariant !== runtimeVariant) {
     logFlow('info', 'agent.runtime_variant_changed', {
       agent_id: agentId,
@@ -3045,9 +3038,6 @@ async function dispatchToPersistentSlotUnlocked(ws, agentId, conversationId, use
       conversation_id: conversationId,
     });
     stopRuntimeSlot(slotKey);
-    conversationSessions.delete(sessionKey);
-    saveSessionMap();
-    validSessionId = null;
     slot = null;
   }
 
@@ -3121,24 +3111,29 @@ async function dispatchToPersistentSlotUnlocked(ws, agentId, conversationId, use
   if (validSessionId) {
     try {
       result = spawnStreamJsonProcess(agentId, validSessionId, systemPrompt, true, conversationId, userId, taskCtx, eventRef, cliTool, runtimeVariant);
-      // Wait briefly to detect immediate resume failure
-      await sleep(2000);
+      // 原生适配器就绪后再保存真实会话 ID。
+      if (result.ready) await result.ready;
+      else await sleep(2000);
       if (result.child.exitCode !== null) {
         throw new Error('Resume failed');
       }
-    } catch {
-      // Resume failed — spawn fresh with new session ID
-      logFlow('warn', 'agent.resume_failed', {
-        agent_id: agentId,
-        conversation_id: conversationId,
-        session_id: validSessionId,
-      });
-      result = spawnStreamJsonProcess(agentId, null, systemPrompt, false, conversationId, userId, taskCtx, eventRef, cliTool, runtimeVariant);
+    } catch (error) {
+      // 保留映射，恢复失败不能静默清空上下文，也不能重复执行原请求。
+      try { result?.child?.kill(); } catch { /* ignore */ }
+      const recovered = cliTool === 'codex' ? recoverCodexThread(path.join(os.homedir(), '.di-agent', 'daemon.log'), agentId, conversationId) : null;
+      if (!recovered || recovered === validSessionId) {
+        throw new Error(`原会话恢复失败，历史仍保留，请从检查点续接：${error.message}`);
+      }
+      // 旧版保存的是兼容 UUID。仅在恢复失败且尚未派发提示时，尝试日志中同一对话的真实 thread。
+      result = spawnStreamJsonProcess(agentId, recovered, systemPrompt, true, conversationId, userId, taskCtx, eventRef, cliTool, runtimeVariant);
+      if (result.ready) await result.ready;
+      validSessionId = recovered;
     }
   } else {
     result = spawnStreamJsonProcess(agentId, null, systemPrompt, false, conversationId, userId, taskCtx, eventRef, cliTool, runtimeVariant);
   }
 
+  if (result.ready) await result.ready;
   const { child, sessionId, sendPrompt, close } = result;
 
   // Handle process exit
@@ -3157,6 +3152,8 @@ async function dispatchToPersistentSlotUnlocked(ws, agentId, conversationId, use
     });
     safeSend(currentDaemonWs, JSON.stringify({ type: 'agent.stopped', data: { agent_id: agentId, exit_code: code } }));
   });
+
+  safeSend(ws, JSON.stringify({type:'agent.started',data:{agent_id:agentId,configured_model:configuredModel(cliTool)}}));
 
   // Register in runningAgents with conversation tracking.
   runningAgents.set(slotKey, {
@@ -3250,6 +3247,7 @@ async function handleAgentStart(ws, payload) {
     // delta 全部丢弃，用户看到"一次性出结果"而非流式。
     const eventRef = { current: null };
     const result = spawnStreamJsonProcess(agent_id, null, system_prompt, false, null, null, null, eventRef, cli_tool, runtime_variant);
+    if (result.ready) await result.ready;
     const { child, sessionId, sendPrompt, close } = result;
 
     // Wait briefly to detect immediate startup failure (same pattern as dispatchToPersistentSlot)
@@ -3293,7 +3291,7 @@ async function handleAgentStart(ws, payload) {
     agentTurnStates.set(agent_id, 'idle');
 
     logFlow('info', 'agent.started', { agent_id, cli_tool, session_id: sessionId, pid: child.pid });
-    safeSend(ws, JSON.stringify({ type: 'agent.started', data: { agent_id } }));
+    safeSend(ws, JSON.stringify({ type: 'agent.started', data: { agent_id, configured_model: configuredModel(cli_tool) } }));
   } catch (error) {
     logFlow('error', 'agent.start_failed', { agent_id, cli_tool, error: errorMessage(error) });
     safeSend(ws, JSON.stringify({ type: 'agent.started', data: { agent_id, error: errorMessage(error) } }));

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -123,6 +124,12 @@ func (r *AgentRuntimeRepo) GetRuntimeOverview(
 		agentID, since, userID, recentLimit,
 	); err != nil {
 		return nil, fmt.Errorf("list recent agent runs: %w", err)
+	}
+	var runtime model.AgentModelRuntime
+	if err := r.db.GetContext(ctx, &runtime, `SELECT configured_model,observed_model,context_window,observed_at FROM agent_model_runtime WHERE agent_id=$1`, agentID); err == nil {
+		overview.ModelRuntime = &runtime
+	} else if err != sql.ErrNoRows {
+		return nil, fmt.Errorf("get model runtime: %w", err)
 	}
 	return overview, nil
 }

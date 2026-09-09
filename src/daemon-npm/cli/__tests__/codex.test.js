@@ -873,3 +873,14 @@ test('Codex app-server commands preserve start/completion boundaries without dup
  assert.equal(events.filter(ev => ev.toolUseID === 'shell-1' && ev.type === 'tool_use').length,1);
  assert.equal(events.filter(ev => ev.toolUseID === 'shell-1' && ev.type === 'tool_result').length,1);
 });
+
+test('Codex resumes the saved native thread and applies model changes without losing that thread', async () => {
+ const h = buildPersistentHarness();
+ const s = createCodexCliSpec(h.ctx).spawnPersistent({agentId:'a',conversationId:'c',sessionId:'saved-thread',resume:true},h.ctx);
+ await s.ready;
+ await s.sendPrompt('keep my goal',{model:'gpt-5.6-sol'});
+ const messages=h.child.stdin.writes.map(line=>JSON.parse(line));
+ assert.equal(messages.some(m=>m.method==='thread/start'),false);
+ assert.equal(messages.find(m=>m.method==='thread/resume').params.threadId,'saved-thread');
+ assert.equal(s.sessionId,'thread-1');
+});

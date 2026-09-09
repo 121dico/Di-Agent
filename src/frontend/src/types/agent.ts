@@ -154,6 +154,7 @@ export interface AgentRuntimeRecentRun {
 }
 
 export interface AgentRuntimeOverview {
+ model_runtime?: { configured_model?: string; observed_model?: string; context_window?: number; observed_at: string };
   period_days: number;
   conversation_count: number;
   execution_count: number;

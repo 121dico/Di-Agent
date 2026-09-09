@@ -62,3 +62,29 @@ test('Claude preserves measured input and final streaming output on interruption
   assert.equal(compact.input_tokens, 1000);
   assert.equal(compact.output_tokens, 15);
 });
+
+test('native compaction remains auditable after the next usage snapshot',()=>{
+ const m=createClaudeUsageMeter();
+ const start=m.observe({type:'system',subtype:'status',status:'compacting'});
+ assert.equal(start.context_events[0].status,'running');
+ m.observe({type:'system',subtype:'compact_boundary'});
+ m.observe({type:'assistant',message:{model:'m',usage:{input_tokens:5,cache_creation_input_tokens:0,cache_read_input_tokens:0}}});
+ const u=m.observe({type:'result',usage:{input_tokens:5,cache_creation_input_tokens:0,cache_read_input_tokens:0,output_tokens:2}});
+ assert.equal(u.context_events[0].status,'complete');
+ assert.ok(u.context_events[0].ended_at);
+ assert.equal(u.context_tokens,5);
+});
+
+test('resumed Codex history is not billed again and final model comes from post-turn confirmation', () => {
+ const meter=createCodexUsageMeter({resumed:true});
+ meter.beginTurn();
+ meter.observe({total:{inputTokens:1000,outputTokens:30},last:{inputTokens:400}});
+ meter.observe({total:{inputTokens:1500,outputTokens:40},last:{inputTokens:500}});
+ const first=meter.finish(true,'confirmed-model');
+ assert.equal(first.input_tokens,undefined);
+ assert.equal(first.model,'confirmed-model');
+ assert.equal(first.context_tokens,500);
+ meter.beginTurn();
+ meter.observe({total:{inputTokens:2100,outputTokens:50},last:{inputTokens:600}});
+ assert.equal(meter.finish().input_tokens,600);
+});

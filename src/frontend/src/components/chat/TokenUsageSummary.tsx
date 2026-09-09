@@ -16,5 +16,6 @@ export function TokenUsageSummary({ usage, title }: { usage?: TokenUsage; title:
       </dl>
       <p>缓存已包含在输入中，推理已包含在输出中。{usage.model ? `模型：${usage.model}。` : ''}</p>
     </> : <p>此记录没有原生 token 统计，不能从回复字数还原真实消耗。</p>}
-  </section>;
+  {Array.isArray(usage?.context_events) && usage.context_events.length > 0 && <div aria-label="上下文整理记录">{usage.context_events.map((event) => <p key={event.id}>上下文整理 · {event.status === 'complete' ? '已完成，继续当前对话' : '整理中'}{event.ended_at ? ` · ${new Date(event.ended_at).toLocaleTimeString()}` : ''}</p>)}</div>}
+    </section>;
 }

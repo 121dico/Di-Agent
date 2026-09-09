@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
@@ -31,7 +33,13 @@ type ContinueConversationContextResult struct {
 }
 
 // ConversationContextService 负责把权限、检查点、Session 台账和真实 daemon 派发串成一次续接操作。
+type OwnMessageSource interface {
+	ListOwnMessageTexts(context.Context, string, string) ([]string, error)
+}
+
 type ConversationContextService struct {
+	tokenizer     ChatTextTokenizer
+	ownMessages   OwnMessageSource
 	conversations ConversationContextAgentLister
 	checkpoints   ConversationContextCheckpointService
 	agents        ConversationContextAgentStore
@@ -52,6 +60,12 @@ func NewConversationContextService(conversations ConversationContextAgentLister,
 	}
 }
 
+func (s *ConversationContextService) SetChatTokenizer(t ChatTextTokenizer) { s.tokenizer = t }
+
+func (s *ConversationContextService) SetOwnMessageSource(source OwnMessageSource) {
+	s.ownMessages = source
+}
+
 func (s *ConversationContextService) ListUsage(ctx context.Context, userID, conversationID string) ([]model.AgentSession, error) {
 	if strings.TrimSpace(userID) == "" || strings.TrimSpace(conversationID) == "" {
 		return nil, ErrContextMeterInvalidInput
@@ -60,6 +74,20 @@ func (s *ConversationContextService) ListUsage(ctx context.Context, userID, conv
 	if err != nil {
 		return nil, err
 	}
+	var mine *model.OwnMessageUsage
+	var inputs []string
+	if s.ownMessages != nil {
+		texts, err := s.ownMessages.ListOwnMessageTexts(ctx, userID, conversationID)
+		if err != nil {
+			return nil, fmt.Errorf("measure own messages: %w", err)
+		}
+		inputs = texts
+		mine = &model.OwnMessageUsage{MessageCount: int64(len(texts)), Source: "estimated"}
+		for _, text := range texts {
+			mine.EstimatedTokens += EstimateTokens(text)
+			mine.InputCharacters += int64(utf8.RuneCountInString(text))
+		}
+	}
 	result := make([]model.AgentSession, 0, len(agents))
 	for _, agent := range agents {
 		usage, err := s.meter.GetUsage(ctx, conversationID, agent.AgentID, agent.CLITool)
@@ -67,6 +95,57 @@ func (s *ConversationContextService) ListUsage(ctx context.Context, userID, conv
 			return nil, err
 		}
 		usage.AgentName = agent.Name
+		if mine != nil {
+			copy := *mine
+			copy.InputTokens = mine.EstimatedTokens
+			if source, ok := s.ownMessages.(interface {
+				ListAgentReplyTexts(context.Context, string, string, string) ([]model.Message, error)
+			}); ok {
+				rows, err := source.ListAgentReplyTexts(ctx, userID, conversationID, agent.AgentID)
+				if err != nil {
+					return nil, err
+				}
+				var replies []string
+				for _, row := range rows {
+					text := row.Content
+					if row.BlocksJSON != "" {
+						var blocks []model.MessageBlock
+						if json.Unmarshal([]byte(row.BlocksJSON), &blocks) == nil && len(blocks) > 0 {
+							var visible []string
+							for _, b := range blocks {
+								if b.Kind == model.BlockKindText {
+									visible = append(visible, b.Text)
+								}
+							}
+							text = strings.Join(visible, "\n")
+						}
+					}
+					replies = append(replies, text)
+					copy.OutputTokens += EstimateTokens(text)
+					copy.OutputCharacters += int64(utf8.RuneCountInString(text))
+				}
+				copy.OutputMessageCount = int64(len(replies))
+				if usage.NativeUsage != nil {
+					copy.Model = usage.NativeUsage.Model
+				}
+				if s.tokenizer != nil && copy.Model != "" {
+					counts, version, err := s.tokenizer.Count(ctx, copy.Model, append(append([]string{}, inputs...), replies...))
+					if err == nil {
+						copy.InputTokens, copy.OutputTokens = 0, 0
+						for i, n := range counts {
+							if i < len(inputs) {
+								copy.InputTokens += n
+							} else {
+								copy.OutputTokens += n
+							}
+						}
+						copy.Source = "tokenizer"
+						copy.Tokenizer = version
+					}
+				}
+			}
+			usage.MyMessages = &copy
+		}
 		result = append(result, *usage)
 	}
 	return result, nil

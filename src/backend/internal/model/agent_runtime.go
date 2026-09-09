@@ -4,6 +4,7 @@ import "time"
 
 // AgentRuntimeOverview 是 Agent Profile 展示的真实持久化运行统计。
 type AgentRuntimeOverview struct {
+	ModelRuntime      *AgentModelRuntime      `json:"model_runtime,omitempty" db:"-"`
 	PeriodDays        int                     `json:"period_days" db:"-"`
 	ConversationCount int64                   `json:"conversation_count" db:"conversation_count"`
 	ExecutionCount    int64                   `json:"execution_count" db:"execution_count"`

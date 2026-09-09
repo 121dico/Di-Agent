@@ -55,6 +55,7 @@ export type ContextUsageStatus = 'normal' | 'warning' | 'critical' | 'unknown';
 export type ContextUsageSource = 'estimated' | 'actual' | 'reported';
 
 export interface ContextUsage {
+  my_messages?: { estimated_tokens: number; message_count: number; input_tokens?: number; output_tokens?: number; input_characters?: number; output_characters?: number; output_message_count?: number; source?: string; tokenizer?: string; model?: string };
   native_usage?: TokenUsage;
   native_totals?: TokenUsage;
   measured_turns?: number;

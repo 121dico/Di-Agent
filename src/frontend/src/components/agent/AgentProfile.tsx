@@ -511,6 +511,7 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, defaultTab = 
             <section className={styles.overviewCard}>
               <div className={styles.overviewCardHeader}>
                 <span className={styles.overviewCardTitle}>运行概览</span>
+                {runtimeOverview?.model_runtime && <span>模型：{runtimeOverview.model_runtime.observed_model || runtimeOverview.model_runtime.configured_model || '未识别'}（{runtimeOverview.model_runtime.observed_model ? '实际请求确认' : '配置识别，待请求确认'}） · 窗口：{runtimeOverview.model_runtime.context_window ? `${runtimeOverview.model_runtime.context_window.toLocaleString()} tokens` : '等待运行器上报'}</span>}
                 <span className={styles.overviewCardHint}>近 7 天</span>
               </div>
               <div className={styles.metricGrid}>

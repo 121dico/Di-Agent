@@ -22,9 +22,9 @@ describe('ChatInput context action', () => {
       React.createElement(ContextUsageFooterView, { onOpen: vi.fn(), usages: [] }),
     );
 
-    expect(markup).toContain('aria-label="上下文用量"');
+    expect(markup).toContain('aria-label="聊天内容用量"');
     expect(markup).toContain('暂无用量记录');
-    expect(markup).toContain('<progress');
+    expect(markup).not.toContain('<progress');
   });
 
   it('keeps context outside the bordered input container and removes voice UI', () => {

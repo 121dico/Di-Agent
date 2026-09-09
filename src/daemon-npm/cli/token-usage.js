@@ -6,32 +6,56 @@ const positive = (n) => count(n) > 0 ? n : undefined;
 const stamp = (usage) => ({ ...usage, observed_at: new Date().toISOString() });
 const usageEvent = (usage) => usage ? { type: 'usage', usage } : null;
 
-function createCodexUsageMeter() {
+function contextEvents() {
+ const events=[];
+ return {
+  events,
+  record(status,id) {
+   let e=id ? events.find(x=>x.id===id) : events[events.length-1];
+   if (status==='running' && (!e || e.status==='complete')) {
+    e={id:id || `compact-${events.length+1}`,kind:'compaction',status,started_at:new Date().toISOString()};events.push(e);
+   } else if (status==='complete') {
+    if (!e) { e={id:id || 'compact-1',kind:'compaction'};events.push(e); }
+    e.status=status;e.ended_at=new Date().toISOString();
+   }
+   return events.map(x=>({...x}));
+  },
+ };
+}
+
+function createCodexUsageMeter({ resumed = false } = {}) {
   let total = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, reasoningOutputTokens: 0 };
   let baseline = { ...total };
+  let totalKnown = !resumed;
+  let baselineKnown = totalKnown;
   let snapshot;
+  let contexts=contextEvents();
   return {
-    beginTurn() { baseline = { ...total }; snapshot = undefined; },
+    beginTurn() { baseline = { ...total }; baselineKnown = totalKnown; snapshot = undefined; contexts=contextEvents(); },
     observe(wire) {
       const next = wire?.total;
       if (count(next?.inputTokens) === undefined || count(next?.outputTokens) === undefined) return null;
-      const validDelta = next.inputTokens >= baseline.inputTokens && next.outputTokens >= baseline.outputTokens;
+      const validDelta = baselineKnown && next.inputTokens >= baseline.inputTokens && next.outputTokens >= baseline.outputTokens;
       const usage = {
-        provider: 'codex', source: 'actual', complete: false,
+        provider: 'codex', source: 'actual', model: wire.model, context_events: contexts.events.map(x=>({...x})), complete: false,
         input_tokens: validDelta ? next.inputTokens - baseline.inputTokens : undefined,
         output_tokens: validDelta ? next.outputTokens - baseline.outputTokens : undefined,
         context_tokens: count(wire.last?.inputTokens),
         context_window_tokens: positive(wire.modelContextWindow),
       };
       for (const [native, unified] of [['cachedInputTokens', 'cache_read_tokens'], ['reasoningOutputTokens', 'reasoning_tokens']]) {
-        if (count(next[native]) !== undefined && count(baseline[native]) !== undefined && next[native] >= baseline[native]) usage[unified] = next[native] - baseline[native];
+        if (validDelta && count(next[native]) !== undefined && count(baseline[native]) !== undefined && next[native] >= baseline[native]) usage[unified] = next[native] - baseline[native];
       }
       total = { ...next };
+      totalKnown = true;
       snapshot = stamp(usage);
       return snapshot;
     },
-    compact() { if (snapshot) snapshot = stamp({ ...snapshot, context_tokens: undefined }); return snapshot; },
-    finish(success = true) { return snapshot ? stamp({ ...snapshot, complete: success && snapshot.input_tokens !== undefined && snapshot.output_tokens !== undefined }) : null; },
+    compact(status='complete',id) {
+      const events=contexts.record(status,id);
+      snapshot=stamp({...snapshot,provider:'codex',source:'actual',complete:false,context_tokens:undefined,context_events:events});return snapshot;
+    },
+    finish(success = true, model) { return snapshot ? stamp({ ...snapshot, model: model || snapshot.model, complete: success && snapshot.input_tokens !== undefined && snapshot.output_tokens !== undefined }) : null; },
   };
 }
 
@@ -47,11 +71,12 @@ function createClaudeUsageMeter() {
   let model;
   let currentId;
   const requests = new Map();
+  const contexts=contextEvents();
   const partial = () => {
     const samples = [...requests.values()];
     const sum = (field) => samples.length && samples.every((u) => count(u[field]) !== undefined)
       ? count(samples.reduce((n, u) => n + u[field], 0)) : undefined;
-    return stamp({ provider: 'claude', source: 'actual', model, complete: false,
+    return stamp({ provider: 'claude', source: 'actual', model, context_events:contexts.events.map(x=>({...x})), complete: false,
       input_tokens: sum('input'), output_tokens: sum('output'), cache_read_tokens: sum('cache_read_input_tokens'),
       cache_write_tokens: sum('cache_creation_input_tokens'), context_tokens: contextTokens });
   };
@@ -59,7 +84,9 @@ function createClaudeUsageMeter() {
     observe(event) {
       // 子代理不是主循环上下文，不能覆盖主会话窗口快照。
       if (event.parent_tool_use_id) return null;
+      if (event.type==='system' && event.subtype==='status' && event.status==='compacting') {contexts.record('running');return partial();}
       if (event.type === 'system' && event.subtype === 'compact_boundary') {
+        contexts.record('complete');
         contextTokens = undefined;
         return partial();
       }
@@ -91,7 +118,7 @@ function createClaudeUsageMeter() {
       const input = claudeInput(u);
       const output = count(u.output_tokens);
       return stamp({
-        provider: 'claude', source: 'actual', model,
+        provider: 'claude', source: 'actual', model, context_events:contexts.events.map(x=>({...x})),
         input_tokens: input, output_tokens: output,
         cache_read_tokens: count(u.cache_read_input_tokens),
         cache_write_tokens: count(u.cache_creation_input_tokens),

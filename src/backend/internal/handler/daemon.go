@@ -332,7 +332,7 @@ func (h *DaemonHandler) readLoop(ctx context.Context, client *ws.DaemonClient, m
 		case "task.approval_failed":
 			h.handleTaskApprovalFailed(client, envelope.Data)
 		case "agent.started":
-			h.handleAgentStarted(envelope.Data)
+			h.handleAgentStarted(envelope.Data, machine)
 		case "agent.stopped":
 			h.handleAgentStopped(envelope.Data)
 		case "ping":
@@ -679,10 +679,11 @@ func (h *DaemonHandler) handleRegister(ctx context.Context, client *ws.DaemonCli
 	h.logger.Info("daemon agents registered", "machine_id", req.MachineID, "count", len(req.Agents))
 }
 
-func (h *DaemonHandler) handleAgentStarted(data json.RawMessage) {
+func (h *DaemonHandler) handleAgentStarted(data json.RawMessage, machine *model.DaemonMachine) {
 	var req struct {
-		AgentID string `json:"agent_id"`
-		Error   string `json:"error"`
+		ConfiguredModel string `json:"configured_model"`
+		AgentID         string `json:"agent_id"`
+		Error           string `json:"error"`
 	}
 	if err := json.Unmarshal(data, &req); err != nil {
 		h.logger.Warn("invalid agent.started data", "error", err)
@@ -695,6 +696,11 @@ func (h *DaemonHandler) handleAgentStarted(data json.RawMessage) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
+	if machine != nil && h.contextMeter != nil && req.ConfiguredModel != "" {
+		if err := h.contextMeter.RecordConfiguredModel(ctx, req.AgentID, machine.ID, req.ConfiguredModel); err != nil {
+			h.logger.Warn("record configured model failed", "error", err)
+		}
+	}
 	status := "online"
 	if req.Error != "" {
 		status = "error"
