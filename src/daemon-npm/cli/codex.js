@@ -1,4 +1,5 @@
 'use strict';
+const { createCodexUsageMeter, codexExecUsage, usageEvent } = require('./token-usage');
 const { codexToolEvents } = require('./codex-tool-events');
 
 // CodexCliSpec: OpenAI Codex CLI 的 spec 实现。
@@ -404,6 +405,7 @@ function createCodexCliSpec(ctx) {
       let nextRpcId = 1;
       const pendingCalls = new Map(); // rpc id -> { resolve }
       let threadId = null;
+      const usageMeter = createCodexUsageMeter();
       let currentTurn = null; // {turnId, resolve, timer, text}
       let pendingTurnApprovalContext = null;
       let pendingRuntimeVerification = null;
@@ -542,6 +544,15 @@ function createCodexCliSpec(ctx) {
       const handleNotification = (msg) => {
         const method = msg.method;
         const p = msg.params || {};
+        if (method === 'thread/tokenUsage/updated' && currentTurn && (!p.threadId || p.threadId === threadId)) {
+          const event = usageEvent(usageMeter.observe(p.tokenUsage));
+          if (event) dispatchEvent(event);
+          return;
+        }
+        if (method === 'thread/compacted' || (method === 'item/completed' && p.item?.type === 'contextCompaction')) {
+          const event = usageEvent(usageMeter.compact());
+          if (event) dispatchEvent(event);
+        }
         if (method === 'item/reasoning/summaryTextDelta' && typeof p.delta === 'string') {
           dispatchEvent(thinkingEvent(p.delta));
           return;
@@ -586,6 +597,8 @@ function createCodexCliSpec(ctx) {
             await verifyRuntimeAfterTurn(turn.runtimeVerification);
             if (currentTurn !== turn) return;
             const resultText = turn.text || '';
+            const usage = usageEvent(usageMeter.finish(!turnError));
+            if (usage) dispatchEvent(usage);
             dispatchEvent(turnEndEvent({ result: resultText, error: turnError }));
             finishTurn(turnError ? { error: String(turnError) } : { result: resultText });
           })();
@@ -792,6 +805,7 @@ function createCodexCliSpec(ctx) {
               : `${CODEX_MCP_FALLBACK}${prompt}`;
             firstTurn = false;
           }
+          usageMeter.beginTurn();
           const controls = codexTurnControls(runtimeConfig);
           pendingTurnApprovalContext = approvalContext || {};
           pendingRuntimeVerification = {
@@ -906,7 +920,7 @@ function createCodexCliSpec(ctx) {
       }
 
       if (event.type === 'turn.completed') {
-        return [turnEndEvent({ result: '' })];
+        return [usageEvent(codexExecUsage(event.usage)), turnEndEvent({ result: '' })].filter(Boolean);
       }
       return null;
     },

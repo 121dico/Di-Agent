@@ -1,4 +1,5 @@
 'use strict';
+const { createClaudeUsageMeter, usageEvent } = require('./token-usage');
 
 // ClaudeCliSpec: Claude Code CLI 的 spec 实现。
 // 对应原 commandForTask 中 `if (task.cli_tool === 'claude')` 分支（约 :1052-1084）。
@@ -24,6 +25,7 @@ function fallbackModelArgs() {
 }
 
 function createClaudeCliSpec(ctx) {
+  const usageMeters = new Map();
   // Bug 1 fix (per-type dedup): partial 模式（--include-partial-messages）下，
   // daemon 同时通过两条通道发射同一份 content：
   //   1. content_block_start / content_block_delta（增量通道）
@@ -289,8 +291,17 @@ function createClaudeCliSpec(ctx) {
     // （parseStreamEvent 内部对 assistant 事件可能产生多个事件，这里展开成数组。）
     parseStreamEventAll(line, daemonCtx) {
       const ev = this.parseStreamEvent(line, daemonCtx);
-      if (ev === null) return [];
-      return Array.isArray(ev) ? ev : [ev];
+      const events = ev === null ? [] : Array.isArray(ev) ? ev : [ev];
+      try {
+        const raw = JSON.parse(line);
+        const key = raw.session_id || 'default';
+        let meter = usageMeters.get(key);
+        if (!meter) { meter = createClaudeUsageMeter(); usageMeters.set(key, meter); }
+        const usage = usageEvent(meter.observe(raw));
+        if (raw.type === 'result') usageMeters.delete(key);
+        if (usage) events.unshift(usage);
+      } catch { /* 非 JSON 日志不参与计量。 */ }
+      return events;
     },
 
     // spawnPersistent：启动 Claude persistent 进程（stream-json 模式）。

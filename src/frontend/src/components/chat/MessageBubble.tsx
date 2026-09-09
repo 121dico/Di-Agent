@@ -575,7 +575,7 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
       return [];
     }
   }, [message.blocks, message.blocks_json]);
-  const hasBlocks = parsedBlocks.length > 0;
+  const hasBlocks = parsedBlocks.some((block) => block.kind !== 'usage');
   const isStreaming = message.status === 'streaming' || streaming;
 
   // 本地卡片状态：用户交互后的乐观覆盖层。
@@ -845,7 +845,7 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
             {hasBlocks ? (
               <div className={styles.markdownBody}>
                 {parsedBlocks.map((block, i) => {
-                  if (block.kind === 'tool_use' || block.kind === 'tool_result') return null;
+                  if (block.kind === 'tool_use' || block.kind === 'tool_result' || block.kind === 'usage') return null;
                   // 最后一个 block（且属于可累积 kind）在 streaming 时显示光标。
                   // renderBlock 内部把 streaming prop 传给组件（tool_result / error 忽略之）。
                   const isLast = i === parsedBlocks.length - 1;

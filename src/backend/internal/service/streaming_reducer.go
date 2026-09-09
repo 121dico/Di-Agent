@@ -77,6 +77,51 @@ func InitialStreamingState() StreamingState {
 //
 // 终态保护：Status != 'streaming' 时直接返回原 state（与 TS 版一致）。
 func StreamingReducer(state StreamingState, event model.AgentEvent) StreamingState {
+	if event.Type == "usage" {
+		return reduceContentEvent(state, event)
+	}
+	// 将计量元数据留在尾部，不让它成为 Markdown 增量边界。
+	var metadata *model.MessageBlock
+	for _, b := range state.Blocks {
+		if b.Kind == model.BlockKindUsage {
+			copy := b
+			metadata = &copy
+			break
+		}
+	}
+	if metadata == nil {
+		return reduceContentEvent(state, event)
+	}
+	blocks := make([]model.MessageBlock, 0, len(state.Blocks))
+	for _, b := range state.Blocks {
+		if b.Kind != model.BlockKindUsage {
+			blocks = append(blocks, b)
+		}
+	}
+	state.Blocks = blocks
+	state = reduceContentEvent(state, event)
+	metadata.Index = nextIndex(state.Blocks)
+	state.Blocks = append(state.Blocks, *metadata)
+	return state
+}
+
+func reduceContentEvent(state StreamingState, event model.AgentEvent) StreamingState {
+	// 最终统计可能晚于 turn_end；只替换元数据，不能重新打开消息或拆分正文。
+	if event.Type == "usage" && event.Usage.Valid() {
+		blocks := cloneBlocks(state.Blocks)
+		for i := range blocks {
+			if blocks[i].Kind == model.BlockKindUsage {
+				if blocks[i].Usage == nil || !event.Usage.ObservedAt.Before(blocks[i].Usage.ObservedAt) {
+					blocks[i].Usage = event.Usage
+				}
+				state.Blocks = blocks
+				return state
+			}
+		}
+		state.Blocks = append(blocks, model.MessageBlock{Index: nextIndex(blocks), Kind: model.BlockKindUsage, Usage: event.Usage})
+		return state
+	}
+
 	// 终态保护：一旦进入 complete/error/canceled，后续事件忽略。
 	if state.Status != model.MessageStatusStreaming {
 		return state

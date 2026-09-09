@@ -1,3 +1,4 @@
+import type { TokenUsage } from './tokenUsage';
 import type { MessageAttachment } from './attachment';
 import type { AttachmentPayload } from './attachment';
 import type { Deployment } from './deployment';
@@ -40,10 +41,11 @@ export interface Artifact {
 }
 
 /** 流式消息 block 类型——与后端 daemon AgentEvent kind 对齐。 */
-export type BlockKind = 'text' | 'thinking' | 'tool_use' | 'tool_result' | 'error' | 'card';
+export type BlockKind = 'text' | 'thinking' | 'tool_use' | 'tool_result' | 'error' | 'card' | 'usage';
 
 /** 单个累积 block（同 kind 连续 delta 聚合成一个 block）。 */
 export interface MessageBlock extends ToolTraceMetadata {
+  usage?: TokenUsage;
   /** daemon观测的事件时间；旧历史可能缺省，不可推算。 */
   started_at?: string;
   ended_at?: string;

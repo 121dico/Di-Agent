@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
@@ -713,5 +714,23 @@ func TestErrorTraceKeepsObservedTimestampAfterReplay(t *testing.T) {
 	wire, _ = json.Marshal(legacy.Blocks)
 	if bytes.Contains(wire, []byte("started_at")) || bytes.Contains(wire, []byte("ended_at")) {
 		t.Fatalf("invented legacy error time: %s", wire)
+	}
+}
+
+func TestUsageSnapshotReplacesAfterTerminalWithoutChangingText(t *testing.T) {
+	n := int64(12000)
+	u := &model.TokenUsage{Provider: "codex", Source: "actual", InputTokens: &n, OutputTokens: &n, ContextTokens: &n, Complete: true, ObservedAt: time.Now()}
+	state := ReduceEvents([]model.AgentEvent{{Type: "text", Content: "hello"}, {Type: "turn_end"}, {Type: "usage", Usage: u}, {Type: "usage", Usage: u}}, InitialStreamingState())
+	if len(state.Blocks) != 2 || state.Blocks[0].Text != "hello" || state.Blocks[1].Usage == nil || state.Status != model.MessageStatusComplete {
+		t.Fatalf("bad usage replay: %+v", state)
+	}
+}
+
+func TestUsageMetadataDoesNotSplitMarkdown(t *testing.T) {
+	n := int64(0)
+	u := &model.TokenUsage{Provider: "codex", Source: "actual", InputTokens: &n, OutputTokens: &n, ObservedAt: time.Now()}
+	state := ReduceEvents([]model.AgentEvent{{Type: "text", Content: "**hel"}, {Type: "usage", Usage: u}, {Type: "text", Content: "lo**"}}, InitialStreamingState())
+	if len(state.Blocks) != 2 || state.Blocks[0].Text != "**hello**" {
+		t.Fatalf("usage split markdown: %+v", state.Blocks)
 	}
 }

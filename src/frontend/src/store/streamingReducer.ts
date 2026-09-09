@@ -1,3 +1,4 @@
+import { isTokenUsage } from '@/types/tokenUsage';
 // streamingReducer：流式 AgentEvent → StreamingState 的纯函数 reducer。
 //
 // 设计目标：
@@ -49,12 +50,27 @@ export const initialStreamingState: StreamingState = {
  * - cancel：status='canceled'，不产生 block
  * - turn_end / session.end / session_end：status='complete'，不产生 block
  */
-export function streamingReducer(
-  state: StreamingState,
-  event: AgentEvent,
-): StreamingState {
+export function streamingReducer(state: StreamingState, event: AgentEvent): StreamingState {
+  if (event.type === 'usage') return reduceContentEvent(state, event);
+  const metadata = state.blocks.find((block) => block.kind === 'usage');
+  if (!metadata) return reduceContentEvent(state, event);
+  const next = reduceContentEvent({ ...state, blocks: state.blocks.filter((block) => block.kind !== 'usage') }, event);
+  return { ...next, blocks: [...next.blocks, { ...metadata, index: nextIndex(next.blocks) }] };
+}
+
+function reduceContentEvent(state: StreamingState, event: AgentEvent): StreamingState {
   // 终态保护：一旦进入 complete/error/canceled，后续事件忽略。
   // 与 messageStore.completeStreaming / StopButton 流程对齐：终态后不应再 reduce。
+  if (event.type === 'usage') {
+    if (!isTokenUsage(event.usage)) return state;
+    const blocks = [...state.blocks];
+    const index = blocks.findIndex((block) => block.kind === 'usage');
+    const existing = index >= 0 ? blocks[index] : undefined;
+    if (existing?.usage?.observed_at && event.usage.observed_at && Date.parse(existing.usage.observed_at) > Date.parse(event.usage.observed_at)) return state;
+    if (existing) blocks[index] = { ...existing, usage: event.usage };
+    else blocks.push({ index: nextIndex(blocks), kind: 'usage', text: '', usage: event.usage });
+    return { ...state, blocks };
+  }
   if (state.status !== 'streaming') {
     return state;
   }

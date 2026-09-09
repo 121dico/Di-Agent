@@ -1,0 +1,7 @@
+.summary { border-top: 1px solid var(--color-border, #e5e7eb); padding: 16px 0; }
+.heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.heading span, .summary p, .values dt { color: var(--color-text-secondary); font-size: 12px; }
+.values { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 16px; margin: 16px 0 8px; }
+.values dd { margin: 6px 0 0; font-size: 18px; font-variant-numeric: tabular-nums; }
+.summary p { margin: 8px 0 0; line-height: 1.6; }
+@media (max-width: 480px) { .values { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

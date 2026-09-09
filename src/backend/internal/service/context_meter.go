@@ -16,15 +16,7 @@ var ErrContextMeterInvalidInput = errors.New("invalid context meter input")
 const (
 	contextWarningRatio  = 0.70
 	contextCriticalRatio = 0.85
-	defaultContextWindow = int64(128_000)
 )
-
-var cliContextWindows = map[string]int64{
-	"claude":   200_000,
-	"codex":    128_000,
-	"opencode": 128_000,
-	"openclaw": 128_000,
-}
 
 type ContextMeterRepository interface {
 	EnsureActive(ctx context.Context, conversationID, agentID, cliTool string, capacity int64) (*model.AgentSession, error)
@@ -70,12 +62,8 @@ func NewContextMeterService(repo ContextMeterRepository) *ContextMeterService {
 	return &ContextMeterService{repo: repo}
 }
 
-func ContextWindowForCLITool(cliTool string) int64 {
-	if capacity, ok := cliContextWindows[strings.ToLower(strings.TrimSpace(cliTool))]; ok {
-		return capacity
-	}
-	return defaultContextWindow
-}
+// 容量由运行器上报，CLI 名称不足以推断模型窗口。
+func ContextWindowForCLITool(_ string) int64 { return 0 }
 
 // EstimateTokens is deliberately conservative and must be presented as estimated.
 func EstimateTokens(text string) int64 {
@@ -99,13 +87,13 @@ func (s *ContextMeterService) GetUsage(ctx context.Context, conversationID, agen
 		return nil, fmt.Errorf("get context usage: %w", err)
 	}
 	if session != nil {
-		return session, nil
+		return s.presentUsage(ctx, session)
 	}
 	session, err = s.repo.EnsureActive(ctx, conversationID, agentID, cliTool, ContextWindowForCLITool(cliTool))
 	if err != nil {
 		return nil, fmt.Errorf("ensure context usage: %w", err)
 	}
-	return session, nil
+	return s.presentUsage(ctx, session)
 }
 
 // GetActiveUsage 只读取已存在的活动 Session，不会为了查询检查点来源而创建新代次。
@@ -117,7 +105,7 @@ func (s *ContextMeterService) GetActiveUsage(ctx context.Context, conversationID
 	if err != nil {
 		return nil, fmt.Errorf("get active context usage: %w", err)
 	}
-	return session, nil
+	return s.presentUsage(ctx, session)
 }
 
 func (s *ContextMeterService) RecordDispatch(ctx context.Context, in RecordContextUsageInput) (*model.AgentSession, error) {
@@ -142,7 +130,7 @@ func (s *ContextMeterService) RecordDispatch(ctx context.Context, in RecordConte
 	if source != model.ContextUsageActual {
 		source = model.ContextUsageEstimated
 	}
-	active := session.ActiveContextTokens + inputTokens + outputTokens
+	active := inputTokens
 	ratio, status := contextBudget(active, session.ContextWindowTokens)
 	updated, err := s.repo.AddUsage(ctx, session.ID, inputTokens, outputTokens, ratio, status, source)
 	if err != nil {
@@ -200,7 +188,7 @@ func (s *ContextMeterService) SetCLISessionID(ctx context.Context, conversationI
 
 func contextBudget(active, capacity int64) (float64, string) {
 	if capacity <= 0 {
-		capacity = defaultContextWindow
+		return 0, "unknown"
 	}
 	ratio := math.Max(0, float64(active)/float64(capacity))
 	status := model.ContextBudgetNormal

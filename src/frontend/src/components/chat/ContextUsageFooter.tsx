@@ -29,7 +29,7 @@ export const ContextUsageFooterView: React.FC<FooterViewProps> = ({ usages, load
           <div className={styles.reading} key={usage.agent_id}>
             <span>上下文{usages.length > 1 && usage.agent_name ? ` · ${usage.agent_name}` : ''}</span>
             <span className={styles.numbers}>
-              {known ? `${formatTokenCount(usage.active_context_tokens)} / ${formatTokenCount(usage.context_window_tokens)} · ${percentage}%` : '暂无用量记录'}
+              {known ? `${formatTokenCount(usage.active_context_tokens)} / ${formatTokenCount(usage.context_window_tokens)} · ${percentage}%` : usage.native_usage?.context_tokens != null ? `${formatTokenCount(usage.native_usage.context_tokens)} tokens · 容量未上报` : '暂无用量记录'}
               {known && usage.source === 'estimated' ? '（估算）' : ''}
             </span>
             <progress

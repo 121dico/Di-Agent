@@ -3422,7 +3422,11 @@ async function handleTaskDispatch(ws, data) {
       })
     : null;
   const traceEvent = require('../cli/skill-trace').createToolTrace(scanSkills(task.cli_tool));
-  const onEvent = shouldStream && streamBuffer ? (ev) => streamBuffer.push(traceEvent(ev)) : null;
+  let tokenUsage;
+  const onEvent = (ev) => {
+    if (ev?.type === 'usage') tokenUsage = ev.usage;
+    if (streamBuffer) streamBuffer.push(traceEvent(ev));
+  };
 
   try {
     let result;
@@ -3467,11 +3471,13 @@ async function handleTaskDispatch(ws, data) {
       result,
       artifacts,
       cards,
+      token_usage: tokenUsage,
       session_id: conversationSessions.get(sessionKeyForTask(task)) || task._sessionId || '',
     });
   } catch (error) {
     bus.emit('task.failed', {
       task_id: task.id,
+      token_usage: tokenUsage ? { ...tokenUsage, complete: false } : undefined,
       cli_tool: task.cli_tool,
       agent_id: task.agent_id,
       conversation_id: task.conversation_id,
@@ -3546,6 +3552,7 @@ bus.on('task.completed', (info) => {
     result: info.result,
     artifacts: info.artifacts,
     cards: info.cards || [],
+    token_usage: info.token_usage,
     session_id: info.session_id || '',
   });
 });
@@ -3553,6 +3560,7 @@ bus.on('task.failed', (info) => {
   sendTaskComplete({
     task_id: info.task_id,
     error: info.error,
+    token_usage: info.token_usage,
     session_id: info.session_id || '',
   });
 });

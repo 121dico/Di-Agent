@@ -5,6 +5,7 @@ import type { MessageBlock, MessageStatus } from '@/types/message';
 import { ExecutionTraceChart } from './ExecutionTraceChart';
 import { ExecutionTraceEventRow } from './ExecutionTraceEventRow';
 import { filterTraceEvents, traceTimeline, traceGeometry, TRACE_LANES, type TraceInput, type TraceLane, type TraceView } from './executionTraceTimeline';
+import { TokenUsageSummary } from './TokenUsageSummary';
 import styles from './ExecutionTraceButton.module.css';
 
 interface ExecutionTraceButtonProps { blocks: MessageBlock[]; status?: MessageStatus; input?: TraceInput }
@@ -27,6 +28,7 @@ export const ExecutionTraceButton: React.FC<ExecutionTraceButtonProps> = ({ bloc
           <div><h2>执行轨迹</h2><p>模型公开输出与实际 Skill / MCP 调用</p></div>
           <span className={styles.total}>{events.length} 个事件{status === 'streaming' ? ' · 接收中' : ''}</span>
         </div>
+        <TokenUsageSummary title="本次回复 Token 用量" usage={blocks.find((block) => block.kind === 'usage')?.usage} />
         <div className={styles.toolbar}>
           <input aria-label="搜索执行事件" placeholder="搜索名称、参数或结果…" value={query} onChange={(event) => setQuery(event.target.value)} />
           <select aria-label="筛选事件类型" value={lane} onChange={(event) => setLane(event.target.value as TraceLane | 'all')}>

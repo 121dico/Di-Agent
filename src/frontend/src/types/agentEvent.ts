@@ -1,3 +1,4 @@
+import type { TokenUsage } from './tokenUsage';
 // AgentEvent：三端共享的流式事件契约（daemon JS 源、frontend TS 镜像、backend Go 镜像）。
 //
 // 设计原则：
@@ -12,6 +13,7 @@
 
 /** AgentEvent 类型枚举（含老 snake_case 与新 dot.case 双命名）。 */
 export type AgentEventType =
+  | 'usage'
   // 新命名（dot.case）
   | 'session.start'
   | 'session.end'
@@ -52,6 +54,7 @@ export interface AgentEventEnvelope extends ToolTraceMetadata {
 
 /** AgentEvent：按 type 收窄 payload 的 discriminated union。 */
 export type AgentEvent =
+  | (AgentEventEnvelope & { type: 'usage'; usage: TokenUsage })
   // session 开始（新命名）
   | (AgentEventEnvelope & {
       type: 'session.start';

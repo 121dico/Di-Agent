@@ -47,6 +47,7 @@ import (
 //   - Result          turn_end.result（reducer 当前不消费，保留透传）
 //   - Code            session_end.code（reducer 当前不消费，保留透传）
 type AgentEvent struct {
+	Usage        *TokenUsage     `json:"usage,omitempty"`
 	ToolKind     string          `json:"tool_kind,omitempty"`
 	SkillName    string          `json:"skill_name,omitempty"`
 	ServerName   string          `json:"server_name,omitempty"`

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
@@ -33,7 +34,7 @@ func (f *fakeContextMeterRepo) GetActive(_ context.Context, _, _ string) (*model
 }
 
 func (f *fakeContextMeterRepo) AddUsage(_ context.Context, _ string, inputTokens, outputTokens int64, ratio float64, status, source string) (*model.AgentSession, error) {
-	f.active.ActiveContextTokens += inputTokens + outputTokens
+	f.active.ActiveContextTokens = inputTokens
 	f.active.TotalInputTokens += inputTokens
 	f.active.TotalOutputTokens += outputTokens
 	f.active.UsageRatio = ratio
@@ -88,13 +89,13 @@ func TestContextMeterRecordDispatchTracksEstimatedBudget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if usage.ActiveContextTokens != 6 {
-		t.Fatalf("active tokens = %d, want 6", usage.ActiveContextTokens)
+	if usage.ActiveContextTokens != 5 {
+		t.Fatalf("active tokens = %d, want 5", usage.ActiveContextTokens)
 	}
-	if usage.ContextWindowTokens != 200_000 {
-		t.Fatalf("capacity = %d, want 200000", usage.ContextWindowTokens)
+	if usage.ContextWindowTokens != 0 {
+		t.Fatalf("capacity = %d, want unknown (0)", usage.ContextWindowTokens)
 	}
-	if usage.Source != model.ContextUsageEstimated || usage.Status != model.ContextBudgetNormal {
+	if usage.Source != model.ContextUsageEstimated || usage.Status != "unknown" {
 		t.Fatalf("unexpected meter labels: source=%s status=%s", usage.Source, usage.Status)
 	}
 }
@@ -113,8 +114,8 @@ func TestContextMeterUsesActualUsageWhenProvided(t *testing.T) {
 	if usage.Source != model.ContextUsageActual {
 		t.Fatalf("source = %q, want actual", usage.Source)
 	}
-	if usage.Status != model.ContextBudgetWarning {
-		t.Fatalf("status = %q, want warning", usage.Status)
+	if usage.Status != "unknown" {
+		t.Fatalf("status = %q, want unknown capacity", usage.Status)
 	}
 }
 
@@ -156,5 +157,94 @@ func TestContextMeterAttachCheckpointKeepsCurrentGeneration(t *testing.T) {
 	}
 	if usage.Generation != 3 || usage.CheckpointID != "checkpoint-1" {
 		t.Fatalf("generation/checkpoint = %d/%q, want 3/checkpoint-1", usage.Generation, usage.CheckpointID)
+	}
+}
+
+func TestUnreportedContextNeverUsesAccumulatedEstimateAsPercentage(t *testing.T) {
+	repo := &fakeContextMeterRepo{}
+	svc := NewContextMeterService(repo)
+	for i := 0; i < 2; i++ {
+		_, err := svc.RecordDispatch(context.Background(), RecordContextUsageInput{ConversationID: "conv", AgentID: "agent", Prompt: "abcdefgh", Output: "done"})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	usage, err := svc.GetUsage(context.Background(), "conv", "agent", "codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if usage.ActiveContextTokens != 0 || usage.ContextWindowTokens != 0 || usage.Status != "unknown" || usage.EstimatedSubmittedTokens != 2 {
+		t.Fatalf("fabricated context: %+v", usage)
+	}
+}
+
+type nativeMeterFake struct {
+	fakeContextMeterRepo
+	samples map[string]*model.TokenUsage
+	latest  string
+}
+
+func (f *nativeMeterFake) SaveNativeUsage(_ context.Context, _ *model.AgentSession, id string, u *model.TokenUsage) error {
+	if f.samples == nil {
+		f.samples = map[string]*model.TokenUsage{}
+	}
+	f.samples[id] = u
+	f.latest = id
+	return nil
+}
+func (f *nativeMeterFake) ReadNativeUsage(_ context.Context, s *model.AgentSession) error {
+	s.NativeUsage = f.samples[f.latest]
+	var input, output int64
+	for _, u := range f.samples {
+		if u.InputTokens != nil {
+			input += *u.InputTokens
+		}
+		if u.OutputTokens != nil {
+			output += *u.OutputTokens
+		}
+	}
+	s.NativeTotals = &model.TokenUsage{InputTokens: &input, OutputTokens: &output}
+	s.MeasuredTurns = int64(len(f.samples))
+	return nil
+}
+func TestNativeContextAndTurnTotalsStaySeparateOnReplayAndCompaction(t *testing.T) {
+	repo := &nativeMeterFake{}
+	svc := NewContextMeterService(repo)
+	a, b, out, window := int64(10000), int64(12000), int64(1000), int64(1000000)
+	task := &model.DaemonTask{ID: "first", ConversationID: "conv", AgentID: "agent", CLITool: "codex"}
+	u := &model.TokenUsage{Provider: "codex", Source: "actual", InputTokens: &a, OutputTokens: &out, ContextTokens: &a, ContextWindowTokens: &window, ObservedAt: time.Now(), Complete: true}
+	if err := svc.RecordNativeUsage(context.Background(), task, u); err != nil {
+		t.Fatal(err)
+	}
+	task.ID = "second"
+	v := *u
+	v.InputTokens = &b
+	v.ContextTokens = &b
+	for i := 0; i < 2; i++ {
+		if err := svc.RecordNativeUsage(context.Background(), task, &v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	usage, err := svc.GetUsage(context.Background(), "conv", "agent", "codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if usage.ActiveContextTokens != 12000 || usage.TotalInputTokens != 22000 || usage.MeasuredTurns != 2 || usage.UsageRatio != 0.012 {
+		t.Fatalf("wrong scopes: %+v", usage)
+	}
+	active, err := svc.GetActiveUsage(context.Background(), "conv", "agent")
+	if err != nil || active.ActiveContextTokens != 12000 || active.Source != "actual" {
+		t.Fatalf("checkpoint must use native context: %+v, %v", active, err)
+	}
+	v.ContextTokens = nil
+	if err := svc.RecordNativeUsage(context.Background(), task, &v); err != nil {
+		t.Fatal(err)
+	}
+	usage, err = svc.GetUsage(context.Background(), "conv", "agent", "codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if usage.Status != "unknown" || usage.TotalInputTokens != 22000 {
+		t.Fatalf("compaction changed historical consumption: %+v", usage)
 	}
 }

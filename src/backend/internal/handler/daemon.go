@@ -25,6 +25,7 @@ type DaemonHandler struct {
 	daemonHub       *ws.DaemonHub
 	userHub         *ws.Hub
 	taskNotifier    TaskChangedNotifier
+	contextMeter    *service.ContextMeterService
 	streamingBuffer *service.StreamingBuffer
 	convRepo        service.ConvRepoForDaemon
 	ipTracker       service.MachineIPTracker // 可选：记录 daemon 连接来源 IP
@@ -46,6 +47,8 @@ type TaskBoardSyncer interface {
 func (h *DaemonHandler) SetTaskBoardSyncer(t TaskBoardSyncer) {
 	h.taskSync = t
 }
+
+func (h *DaemonHandler) SetContextMeter(s *service.ContextMeterService) { h.contextMeter = s }
 
 // NewDaemonHandler 创建 daemon WebSocket 处理器
 func NewDaemonHandler(agentSvc *service.AgentService, orchSvc *service.OrchestratorService, token string, logger *slog.Logger, allowedOrigins []string, daemonHub *ws.DaemonHub, userHub *ws.Hub, streamingBuffer *service.StreamingBuffer, convRepo service.ConvRepoForDaemon) *DaemonHandler {
@@ -207,8 +210,9 @@ func (h *DaemonHandler) ClaimTask(c *gin.Context, machine *model.DaemonMachine) 
 // CompleteTask 接收电脑 daemon 对真实 CLI 任务的执行结果。
 func (h *DaemonHandler) CompleteTask(c *gin.Context, machine *model.DaemonMachine) {
 	var req struct {
-		Result string `json:"result"`
-		Error  string `json:"error"`
+		Usage  *model.TokenUsage `json:"token_usage"`
+		Result string            `json:"result"`
+		Error  string            `json:"error"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 40041, "message": "任务结果参数错误: " + err.Error(), "data": nil})
@@ -222,6 +226,14 @@ func (h *DaemonHandler) CompleteTask(c *gin.Context, machine *model.DaemonMachin
 		h.logger.Error("complete daemon task failed", "machine", machine.ID, "task", c.Param("id"), "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 50043, "message": "提交 daemon 任务结果失败", "data": nil})
 		return
+	}
+	if req.Error != "" && req.Usage != nil {
+		req.Usage.Complete = false
+	}
+	if h.contextMeter != nil && task.ConversationID != "" && task.AgentID != "" {
+		if err := h.contextMeter.RecordNativeUsage(taskCtx, task, req.Usage); err != nil {
+			h.logger.Warn("persist native usage failed", "error", err)
+		}
 	}
 	h.syncTaskToBoard(taskCtx, task, req.Result, req.Error)
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "success", "data": nil})
@@ -442,6 +454,7 @@ func (h *DaemonHandler) handleTaskApprovalRequired(ctx context.Context, client *
 
 func (h *DaemonHandler) handleTaskComplete(data json.RawMessage, machine *model.DaemonMachine) {
 	var req struct {
+		Usage        *model.TokenUsage   `json:"token_usage"`
 		TaskID       string              `json:"task_id"`
 		Result       string              `json:"result"`
 		Error        string              `json:"error"`
@@ -454,15 +467,6 @@ func (h *DaemonHandler) handleTaskComplete(data json.RawMessage, machine *model.
 		return
 	}
 	h.logger.Info("handleTaskComplete ENTER", "task_id", req.TaskID, "result_len", len(req.Result), "has_error", req.Error != "", "cards_count", len(req.Cards))
-	// Resolve WS promise first (for orchestrator channel-based wait)
-	h.daemonHub.ResolveTask(req.TaskID, &ws.TaskResult{
-		TaskID:       req.TaskID,
-		Result:       req.Result,
-		Error:        req.Error,
-		CLISessionID: req.CLISessionID,
-		Artifacts:    req.Artifacts,
-		Cards:        req.Cards,
-	})
 	// Also persist to DB (for HTTP fallback and audit)
 	if machine != nil {
 		taskCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -471,10 +475,35 @@ func (h *DaemonHandler) handleTaskComplete(data json.RawMessage, machine *model.
 		if err != nil {
 			h.logger.Warn("persist task result failed", "task_id", req.TaskID, "error", err)
 		}
+		if err != nil {
+			return
+		}
+		if req.Error != "" && req.Usage != nil {
+			req.Usage.Complete = false
+		}
+		if h.contextMeter != nil && task.ConversationID != "" && task.AgentID != "" {
+			if err := h.contextMeter.RecordNativeUsage(taskCtx, task, req.Usage); err != nil {
+				h.logger.Warn("persist native usage failed", "task_id", req.TaskID, "error", err)
+			}
+		}
+		if req.Usage.Valid() {
+			if h.streamingBuffer != nil {
+				h.streamingBuffer.PushEvents(req.TaskID, []model.AgentEvent{{Type: "usage", Usage: req.Usage}})
+			}
+		}
 		h.syncTaskToBoard(taskCtx, task, req.Result, req.Error)
 	}
 
-	// Orch worker results are now handled by goroutines using dispatchAndWait.
+	// 先持久化并补齐用量事件，再唤醒等待方，避免最终消息先于用量落盘。
+	h.daemonHub.ResolveTask(req.TaskID, &ws.TaskResult{
+		TaskID:       req.TaskID,
+		Result:       req.Result,
+		Error:        req.Error,
+		CLISessionID: req.CLISessionID,
+		Artifacts:    req.Artifacts,
+		Cards:        req.Cards,
+	})
+
 }
 
 // syncTaskToBoard 统一 WebSocket 与 HTTP polling 两条 daemon 完成路径。
@@ -557,6 +586,13 @@ func (h *DaemonHandler) handleTaskProgress(data json.RawMessage, machine *model.
 		}
 	}
 	events = service.SanitizeToolTraceEvents(events, previous)
+	filtered := events[:0]
+	for _, event := range events {
+		if event.Type != "usage" || event.Usage.Valid() {
+			filtered = append(filtered, event)
+		}
+	}
+	events = filtered
 	req.Events, _ = json.Marshal(events)
 	if h.streamingBuffer != nil {
 		h.streamingBuffer.PushEvents(req.TaskID, events)

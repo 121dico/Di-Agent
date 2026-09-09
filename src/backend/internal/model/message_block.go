@@ -19,6 +19,7 @@ package model
 type BlockKind string
 
 const (
+	BlockKindUsage      BlockKind = "usage"
 	BlockKindText       BlockKind = "text"
 	BlockKindThinking   BlockKind = "thinking"
 	BlockKindToolUse    BlockKind = "tool_use"
@@ -43,6 +44,7 @@ const (
 // 注意：tool_use 的 partial JSON 输入累积到 Text 字段（不是独立 InputJSON 字段），
 // 这与 frontend streamingReducer 行为一致（PR1 已锁死）。
 type MessageBlock struct {
+	Usage *TokenUsage `json:"usage,omitempty"`
 	// Observed event timestamps only; absent on legacy events without a timestamp.
 	StartedAt  string         `json:"started_at,omitempty"`
 	EndedAt    string         `json:"ended_at,omitempty"`

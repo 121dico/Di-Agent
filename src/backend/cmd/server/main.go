@@ -293,6 +293,7 @@ func main() {
 	daemonHandler := handler.NewDaemonHandler(agentSvc, orchSvc, cfg.Daemon.Token, logger, cfg.CORS.AllowedOrigins, daemonHub, hub, streamingBuffer, convRepo)
 	daemonHandler.SetIPTracker(machineTracker)
 	daemonHandler.SetTaskBoardSyncer(taskSvc)
+	daemonHandler.SetContextMeter(contextMeterSvc)
 	// 不再注册 SetDaemonTaskDispatcher：CreateDaemonTask 的每个合法 caller
 	// (createAgentReply / Dispatcher.dispatchCore / agent_browse / agent_skill_open)
 	// 都会自己调 SendToMachine(task.dispatch) 并按需携带 message_id。

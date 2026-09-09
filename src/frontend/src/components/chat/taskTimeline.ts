@@ -110,6 +110,8 @@ function labelForBlock(block: MessageBlock): string {
       return '执行失败';
     case 'card':
       return '生成交互卡片';
+    case 'usage':
+      return '用量统计';
   }
 }
 

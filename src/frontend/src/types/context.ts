@@ -1,3 +1,4 @@
+import type { TokenUsage } from './tokenUsage';
 export type CheckpointScope =
   | 'private_agent'
   | 'task_shared'
@@ -54,6 +55,10 @@ export type ContextUsageStatus = 'normal' | 'warning' | 'critical' | 'unknown';
 export type ContextUsageSource = 'estimated' | 'actual' | 'reported';
 
 export interface ContextUsage {
+  native_usage?: TokenUsage;
+  native_totals?: TokenUsage;
+  measured_turns?: number;
+  estimated_submitted_tokens?: number;
   conversation_id: string;
   agent_id: string;
   agent_name?: string;

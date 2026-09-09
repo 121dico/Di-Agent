@@ -57,13 +57,14 @@ func (r *AgentSessionRepo) GetActive(ctx context.Context, conversationID, agentI
 func (r *AgentSessionRepo) AddUsage(ctx context.Context, sessionID string, inputTokens, outputTokens int64, _ float64, _ string, source string) (*model.AgentSession, error) {
 	var session model.AgentSession
 	err := r.db.QueryRowxContext(ctx, `UPDATE agent_sessions
-		SET active_context_tokens = active_context_tokens + $2 + $3,
+		SET active_context_tokens = $2,
 			total_input_tokens = total_input_tokens + $2,
 			total_output_tokens = total_output_tokens + $3,
-			usage_ratio = (active_context_tokens + $2 + $3)::double precision / context_window_tokens,
+			usage_ratio = COALESCE($2::double precision / NULLIF(context_window_tokens, 0), 0),
 			budget_status = CASE
-				WHEN (active_context_tokens + $2 + $3)::double precision / context_window_tokens >= 0.85 THEN 'critical'
-				WHEN (active_context_tokens + $2 + $3)::double precision / context_window_tokens >= 0.70 THEN 'warning'
+				WHEN context_window_tokens=0 THEN 'unknown'
+				WHEN COALESCE($2::double precision / NULLIF(context_window_tokens, 0), 0) >= 0.85 THEN 'critical'
+				WHEN COALESCE($2::double precision / NULLIF(context_window_tokens, 0), 0) >= 0.70 THEN 'warning'
 				ELSE 'normal'
 			END,
 			usage_source = $4,
