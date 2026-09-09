@@ -2033,6 +2033,12 @@ function requestJSON(method, url, body, bearerToken) {
   });
 }
 
+// 仅用于适配器日志摘要，不能用来截断发送给模型的用户约束。
+function truncateStr(s, max) {
+  if (!s || s.length <= max) return s || '';
+  return s.slice(0, max) + '...';
+}
+
 function buildPromptParts(task) {
   let ctx = task.context_messages;
   ctx = typeof ctx === 'string' ? ctx : '';
