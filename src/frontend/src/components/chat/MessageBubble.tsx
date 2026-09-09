@@ -34,6 +34,7 @@ import { truncateGraphemes } from '@/utils/truncateText';
 import { MessageAttachmentView } from './MessageAttachmentView';
 import { CodeBlock, extractText } from './CodeBlock';
 import { ArtifactCard } from './ArtifactCard';
+import { MessageImage } from './MessageImage';
 import { DeployStatusCard } from './DeployStatusCard';
 import { StopButton } from './StopButton';
 import { MessageFooterActions } from './MessageFooterActions';
@@ -320,6 +321,9 @@ function buildMarkdownComponents(codeArtifacts: Artifact[]): Components {
 }
 
 const sharedMarkdownComponents: Components = {
+  img({ src, alt }) {
+    return src ? <MessageImage src={src} name={alt || 'Agent 图片'} /> : <span>图片地址不可用</span>;
+  },
   a({ href, children, node, ...rest }) {
     const safeHref =
       href && (/^https?:\/\//i.test(href) || /^mailto:/i.test(href))

@@ -10,6 +10,7 @@ import { WebpageFrame } from './WebpageFrame';
 import { ArtifactWorkspace } from './ArtifactWorkspace';
 import { DeployButton } from './DeployButton';
 import styles from './ArtifactCard.module.css';
+import { MessageImage } from './MessageImage';
 
 interface Props {
   artifacts: Artifact[];
@@ -49,6 +50,11 @@ export const ArtifactCard: React.FC<Props> = ({ artifacts, agentName, conversati
     <div className={styles.container}>
       {artifacts.map((artifact, idx) => {
         const key = artifact.id ?? `artifact-${idx}`;
+        if (artifact.type === 'image') {
+          return artifact.url
+            ? <MessageImage key={key} src={artifact.url} name={artifact.filename || artifact.title || 'Agent 图片'} />
+            : <span key={key} role="status">图片暂不可用</span>;
+        }
 
         if (artifact.type === 'webpage') {
           return (

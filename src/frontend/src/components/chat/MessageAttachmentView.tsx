@@ -20,6 +20,7 @@ import {
 } from '@ant-design/icons';
 import { Button, Modal, Tooltip } from 'antd';
 import styles from './MessageAttachmentView.module.css';
+import { MessageImage, safeAttachmentUrl } from './MessageImage';
 
 // 预览库体积较大，只有用户打开弹窗时再加载，避免拉高首屏成本。
 const PptxPreview = lazy(() => import('./PptxPreview'));
@@ -31,9 +32,7 @@ function toUrlPath(p: string): string {
 }
 
 function authUrl(path: string): string {
-  const token = localStorage.getItem('di_agent_token');
-  const sep = path.includes('?') ? '&' : '?';
-  return token ? `${path}${sep}token=${encodeURIComponent(token)}` : path;
+  return safeAttachmentUrl(path);
 }
 
 function attachmentFileUrl(attachment: MessageAttachment): string {
@@ -100,20 +99,7 @@ const ImageAttachment: React.FC<{ attachment: MessageAttachment }> = ({ attachme
   const thumbSrc = attachmentThumbUrl(attachment);
 
   return (
-    <a
-      href={authUrl(filePath)}
-      target="_blank"
-      rel="noopener noreferrer"
-      download={fileName}
-      className={styles.imageLink}
-    >
-      <img
-        src={authUrl(thumbSrc)}
-        alt={fileName}
-        className={styles.imageThumb}
-        loading="lazy"
-      />
-    </a>
+    <MessageImage src={filePath} thumbnail={thumbSrc} name={fileName} />
   );
 };
 

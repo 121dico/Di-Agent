@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -26,6 +27,7 @@ type DaemonHandler struct {
 	userHub         *ws.Hub
 	taskNotifier    TaskChangedNotifier
 	contextMeter    *service.ContextMeterService
+	imageUploads    *service.UploadService
 	streamingBuffer *service.StreamingBuffer
 	convRepo        service.ConvRepoForDaemon
 	ipTracker       service.MachineIPTracker // 可选：记录 daemon 连接来源 IP
@@ -49,6 +51,8 @@ func (h *DaemonHandler) SetTaskBoardSyncer(t TaskBoardSyncer) {
 }
 
 func (h *DaemonHandler) SetContextMeter(s *service.ContextMeterService) { h.contextMeter = s }
+
+func (h *DaemonHandler) SetImageUploads(s *service.UploadService) { h.imageUploads = s }
 
 // NewDaemonHandler 创建 daemon WebSocket 处理器
 func NewDaemonHandler(agentSvc *service.AgentService, orchSvc *service.OrchestratorService, token string, logger *slog.Logger, allowedOrigins []string, daemonHub *ws.DaemonHub, userHub *ws.Hub, streamingBuffer *service.StreamingBuffer, convRepo service.ConvRepoForDaemon) *DaemonHandler {
@@ -467,8 +471,47 @@ func (h *DaemonHandler) handleTaskComplete(data json.RawMessage, machine *model.
 		return
 	}
 	h.logger.Info("handleTaskComplete ENTER", "task_id", req.TaskID, "result_len", len(req.Result), "has_error", req.Error != "", "cards_count", len(req.Cards))
+	if machine == nil {
+		for _, artifact := range req.Artifacts {
+			if artifact.Type == "image" {
+				return
+			}
+		}
+	}
 	// Also persist to DB (for HTTP fallback and audit)
 	if machine != nil {
+		imageCtx, imageCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer imageCancel()
+		for _, artifact := range req.Artifacts {
+			if artifact.Type != "image" {
+				continue
+			}
+			source, authErr := h.agentSvc.GetDaemonTask(imageCtx, req.TaskID)
+			if authErr != nil || source == nil || source.MachineID != machine.ID || source.ConversationID == "" {
+				h.logger.Warn("unauthorized returned image task", "task_id", req.TaskID)
+				return
+			}
+			var imageErr error
+			var persisted []ws.ArtifactResult
+			if h.imageUploads == nil {
+				imageErr = fmt.Errorf("图片存储未配置")
+			} else {
+				persisted, imageErr = h.imageUploads.PersistReturnedImages(imageCtx, req.Artifacts)
+			}
+			if imageErr != nil {
+				req.Result += "\n\n图片未能返回：" + imageErr.Error()
+				filtered := req.Artifacts[:0]
+				for _, candidate := range req.Artifacts {
+					if candidate.Type != "image" {
+						filtered = append(filtered, candidate)
+					}
+				}
+				req.Artifacts = filtered
+			} else {
+				req.Artifacts = persisted
+			}
+			break
+		}
 		taskCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		task, err := h.agentSvc.CompleteDaemonTask(taskCtx, machine, req.TaskID, req.Result, req.Error)

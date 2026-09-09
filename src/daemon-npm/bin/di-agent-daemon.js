@@ -3388,6 +3388,8 @@ async function handleTaskDispatch(ws, data) {
   }
   recentDispatches.set(dedupKey, { ts: now, hasMessageId: Boolean(task.message_id) });
 
+  const imageOutputDir = path.join(os.tmpdir(), 'di-agent-cli-tasks', String(task.id).replace(/[^a-zA-Z0-9_-]/g, '-'), 'image-outputs');
+  task.prompt = (task.prompt || '') + require('../cli/image-output').imageOutputInstruction(imageOutputDir);
   const { systemPrompt, userPrompt } = buildPromptParts(task);
 
   logFlow('info', 'task.dispatch_received', {
@@ -3436,6 +3438,7 @@ async function handleTaskDispatch(ws, data) {
 
   try {
     let result;
+    fs.mkdirSync(imageOutputDir, { recursive: true, mode: 0o700 });
     taskCtx.images = require('../cli/image-input').validateImages(task.images, task.cli_tool);
     validateTaskRuntimeConfig(task);
     const persistentSpec = cliTools.getCliTool(task.cli_tool);
@@ -3465,7 +3468,11 @@ async function handleTaskDispatch(ws, data) {
       result = await executeTaskOnce(task, taskCtx, onEvent);
       if (result === null) return true;
     }
-    const artifacts = parseArtifacts(result);
+    let imageOutput;
+    try { imageOutput = require('../cli/image-output').collectImageOutputs(result, imageOutputDir); }
+    catch { imageOutput = {text: `${result}\n\n图片未返回：本次任务图片输出目录无法读取`, artifacts: []}; }
+    result = imageOutput.text;
+    const artifacts = [...parseArtifacts(result), ...imageOutput.artifacts];
     // MCP subprocess（如 deploy_project）产出的卡片已通过 ctx.emitCard →
     // POST /api/internal/task-cards 直接上报后端 TaskCardQueue，
     // daemon 主进程不再参与卡片收集。
@@ -4918,6 +4925,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  buildPromptParts,
   DEFAULT_AGENT_TIMEOUT_MS,
   commandForTask,
   conversationSessions,

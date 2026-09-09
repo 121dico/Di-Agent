@@ -291,6 +291,7 @@ func main() {
 	toolCategoryHandler := handler.NewToolCategoryHandler(toolCategoryRepo)
 	catalogHandler := catalog.NewHandler(catalogSvc)
 	daemonHandler := handler.NewDaemonHandler(agentSvc, orchSvc, cfg.Daemon.Token, logger, cfg.CORS.AllowedOrigins, daemonHub, hub, streamingBuffer, convRepo)
+	daemonHandler.SetImageUploads(uploadSvc)
 	daemonHandler.SetIPTracker(machineTracker)
 	daemonHandler.SetTaskBoardSyncer(taskSvc)
 	daemonHandler.SetContextMeter(contextMeterSvc)
