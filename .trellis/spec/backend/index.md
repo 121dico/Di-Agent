@@ -25,6 +25,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Agent Runtime and Skill Install](./agent-runtime-and-skill-install.md) | Runtime metrics, local Skill catalog/loading, execution-trace replay, and GitHub Skill deployment | Filled |
 | [Fixed Data Reporting](./data-reporting.md) | Governed data sources, report definitions, snapshots, scheduling, and downloads | Filled |
 | [Quality Guidelines](./quality-guidelines.md) | Context 传递、错误处理、依赖管理、接口设计 | Filled |
+| [Native Chat Images](./chat-image-input.md) | Clipboard/drop uploads and native Codex/Claude image delivery | Filled |
 | [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | To fill |
 
 ---

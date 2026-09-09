@@ -825,7 +825,7 @@ function createCodexCliSpec(ctx) {
           const res = await rpcCall('turn/start', {
             threadId,
             cwd,
-            input: [{ type: 'text', text }],
+            input: require('./image-input').codexImageInput(text, approvalContext?.images),
             ...controls.params,
           });
           const turnId = res && res.result && res.result.turn && res.result.turn.id;

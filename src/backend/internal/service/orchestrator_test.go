@@ -329,6 +329,7 @@ func TestDispatchSingleAgent_SetsReplyToSourceMessage(t *testing.T) {
 		MachineID: stringPtr("machine-1"),
 	}
 	msgRepo := &fakeMsgRepo{}
+	msgRepo.messages = append(msgRepo.messages, model.Message{ID: replyTo, ConversationID: "c1", Role: "user"})
 	taskResult := "worker reply"
 	hub := newTestDaemonHub(t, "machine-1")
 	// P8a: setter 已删除，DaemonHub 通过 OrchestratorDeps 注入。
@@ -357,7 +358,7 @@ func TestDispatchSingleAgent_SetsReplyToSourceMessage(t *testing.T) {
 	if msg.ReplyTo == nil || *msg.ReplyTo != replyTo {
 		t.Fatalf("expected reply_to %q, got %#v", replyTo, msg.ReplyTo)
 	}
-	if len(msgRepo.messages) != 1 || msgRepo.messages[0].ReplyTo == nil || *msgRepo.messages[0].ReplyTo != replyTo {
+	if len(msgRepo.messages) != 2 || msgRepo.messages[1].ReplyTo == nil || *msgRepo.messages[1].ReplyTo != replyTo {
 		t.Fatalf("expected persisted reply_to %q, got %#v", replyTo, msgRepo.messages)
 	}
 }
@@ -386,7 +387,7 @@ func TestHandleOrchestratedDispatchReturnsMessageWhenLifecycleCreateFails(t *tes
 	}
 	created := make(chan createdTask, 4)
 	toResolve := make(chan createdTask, 4)
-	msgRepo := &fakeMsgRepo{}
+	msgRepo := &fakeMsgRepo{messages: []model.Message{{ID: "source-msg", ConversationID: "c1", Role: "user"}}}
 	agentRepo := &fakeOrchAgentRepo{
 		agents: map[string]*model.Agent{
 			"orch-1":  orch,

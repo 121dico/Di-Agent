@@ -127,6 +127,19 @@ function buildPersistentHarness(overrides = {}) {
   return { ctx, calls, get child() { return child; } };
 }
 
+test('codex delivers image bytes natively on first and resumed turns without leaking into text-only turns', async () => {
+  const harness = buildPersistentHarness();
+  const slot = createCodexCliSpec(harness.ctx).spawnPersistent({agentId:'image-agent',conversationId:'image-conv'},harness.ctx);
+  const images = [{mime_type:'image/png',data:Buffer.from('image-fixture').toString('base64')}];
+  await slot.sendPrompt('see image', undefined, {images});
+  await slot.sendPrompt('new image', undefined, {images});
+  await slot.sendPrompt('text only');
+  const turns = harness.child.stdin.writes.map(JSON.parse).filter(x=>x.method==='turn/start');
+  assert.equal(turns.length,3);
+  for(const turn of turns.slice(0,2)) assert.deepStrictEqual(turn.params.input[1], {type:'image',url:`data:image/png;base64,${images[0].data}`});
+  assert.equal(turns[2].params.input.length,1);
+});
+
 test('codex.resolveCommand returns DI_AGENT_CODEX_COMMAND env var when valid', () => {
   process.env.DI_AGENT_CODEX_COMMAND = '/custom/codex';
   const ctx = buildMockCtx({

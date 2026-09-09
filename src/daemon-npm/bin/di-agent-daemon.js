@@ -213,7 +213,7 @@ function detectCapabilities() {
   // older daemon understands per-turn sandbox or approval semantics.
   const caps = readDiAgentEnvironment(process.env, 'DAEMON_DISABLE_STREAM_SLOT') === '1'
     ? []
-    : ['agent_runtime_controls_v1', 'agent_runtime_controls_v2'];
+    : ['agent_runtime_controls_v1', 'agent_runtime_controls_v2', 'image_inputs_v1'];
   if (detectDocker()) caps.push('docker');
   return caps;
 }
@@ -2998,6 +2998,7 @@ async function dispatchToPersistentSlotUnlocked(ws, agentId, conversationId, use
   const sessionKey = `${agentId}:${conversationId}`;
   const slotKey = runtimeAgentKey(agentId, conversationId);
   const approvalContext = {
+    images: taskCtx && taskCtx.images,
     task_id: taskCtx && taskCtx.taskId,
     agent_id: agentId,
     conversation_id: conversationId,
@@ -3326,6 +3327,7 @@ async function handleTaskDispatch(ws, data) {
     runtime_variant: data.runtime_variant,
     prompt: data.prompt,
     context_messages: data.context_messages,
+    images: data.images,
     agent_id: data.agent_id,
     conversation_id: data.conversation_id,
     user_id: data.user_id,
@@ -3430,6 +3432,7 @@ async function handleTaskDispatch(ws, data) {
 
   try {
     let result;
+    taskCtx.images = require('../cli/image-input').validateImages(task.images, task.cli_tool);
     validateTaskRuntimeConfig(task);
     const persistentSpec = cliTools.getCliTool(task.cli_tool);
     if (
@@ -3447,6 +3450,7 @@ async function handleTaskDispatch(ws, data) {
       });
       result = await dispatchToPersistentSlot(ws, task.agent_id, task.conversation_id, task.user_id, userPrompt, systemPrompt, taskCtx, task.cli_tool, onEvent, task.force_fresh_session, task.runtime_variant, task.runtime_config);
     } else {
+      if (taskCtx.images.length) throw new Error('图片输入需要启用新版 daemon 持久会话模式，请更新或启用后重试');
       logFlow('info', 'task.execution_start', {
         task_id: task.id,
         cli_tool: task.cli_tool,

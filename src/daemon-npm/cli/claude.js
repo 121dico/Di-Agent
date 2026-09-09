@@ -506,7 +506,7 @@ function createClaudeCliSpec(ctx) {
       });
 
       let queueTail = Promise.resolve();
-      const sendPromptRaw = (prompt) => new Promise((resolve, reject) => {
+      const sendPromptRaw = (prompt, approvalContext) => new Promise((resolve, reject) => {
         if (child.exitCode !== null) {
           reject(new Error('Agent process not running'));
           return;
@@ -520,7 +520,7 @@ function createClaudeCliSpec(ctx) {
         });
         const msg = JSON.stringify({
           type: 'user',
-          message: { role: 'user', content: [{ type: 'text', text: prompt }] },
+          message: { role: 'user', content: require('./image-input').claudeImageInput(prompt, approvalContext?.images) },
         });
         child.stdin.write(msg + '\n');
         clearResultTimer();
@@ -540,8 +540,8 @@ function createClaudeCliSpec(ctx) {
         resultTimer.unref();
       });
 
-      const sendPrompt = (prompt) => {
-        const run = () => sendPromptRaw(prompt);
+      const sendPrompt = (prompt, runtimeConfig, approvalContext) => {
+        const run = () => sendPromptRaw(prompt, approvalContext);
         queueTail = queueTail.then(run, run);
         return queueTail;
       };

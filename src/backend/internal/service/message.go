@@ -1195,6 +1195,14 @@ func (s *MessageService) buildAgentHandoffs(ctx context.Context, convID string) 
 
 // createAgentReply 生成 Agent 回复消息
 func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, agentID, userContent, contextMessages string, replyTo *string, runtimeConfig ...model.AgentRuntimeConfig) (*model.Message, error) {
+	uploadDir := ""
+	if s.orchSvc != nil {
+		uploadDir = s.orchSvc.uploadDir
+	}
+	images, imageErr := sourceImageInputs(ctx, s.msgRepo, convID, replyTo, uploadDir)
+	if imageErr != nil {
+		return nil, imageErr
+	}
 	if s.agentRepo == nil {
 		return nil, ErrAgentNotFound
 	}
@@ -1220,6 +1228,9 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 	}
 	if agent.Status == "stopped" {
 		return nil, fmt.Errorf("agent %q 已被用户停止", agent.Name)
+	}
+	if err := requireImageCapability(s.daemonHub, *agent.MachineID, images); err != nil {
+		return nil, err
 	}
 
 	selectedRuntime := model.AgentRuntimeConfig{}
@@ -1296,6 +1307,7 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 			"runtime_variant":  agent.RuntimeVariant,
 			"prompt":           userContent,
 			"context_messages": contextMessages,
+			"images":           images,
 			"agent_id":         agent.ID,
 			"conversation_id":  convID,
 			"user_id":          userID,
@@ -1304,14 +1316,18 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 		},
 	}
 	var dispatchErr error
-	if agent.CLITool == "codex" {
+	if agent.CLITool == "codex" || len(images) > 0 {
 		capabilitySender, ok := s.daemonHub.(interface {
 			SendToMachineRequiringCapability(machineID, capability string, msg ws.WSMessage) error
 		})
 		if !ok {
 			dispatchErr = fmt.Errorf("daemon runtime capability sender unavailable")
 		} else {
-			dispatchErr = capabilitySender.SendToMachineRequiringCapability(*agent.MachineID, "agent_runtime_controls_v2", dispatchMessage)
+			capability := "agent_runtime_controls_v2"
+			if len(images) > 0 {
+				capability = "image_inputs_v1"
+			}
+			dispatchErr = capabilitySender.SendToMachineRequiringCapability(*agent.MachineID, capability, dispatchMessage)
 		}
 	} else {
 		dispatchErr = s.daemonHub.SendToMachine(*agent.MachineID, dispatchMessage)

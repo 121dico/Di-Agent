@@ -53,6 +53,17 @@ const { TextArea } = Input;
 const ACCEPTED_TYPES =
   '.jpg,.jpeg,.png,.gif,.webp,.pdf,.pptx,.ppt,.docx,.doc,.xlsx,.xls,.txt,.md,.csv';
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+// 与后端附件图片传输的限制保持一致。
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+const MAX_IMAGES = 4;
+const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+function imageInputError(files: File[]): string | null {
+  const images = files.filter((file) => file.type.startsWith('image/'));
+  if (images.some((file) => !IMAGE_TYPES.has(file.type))) return 'Agent 图片仅支持 PNG、JPEG、GIF 或 WebP，请转换格式后重试。';
+  if (images.length > MAX_IMAGES) return '每条消息最多 4 张图片，请移除部分图片后重试。';
+  if (images.reduce((bytes, file) => bytes + file.size, 0) > MAX_IMAGE_BYTES) return '每条消息图片总大小不能超过 4MiB，请压缩图片后重试。';
+  return null;
+}
 const REPLY_PREVIEW_LIMIT = 50;
 const EMPTY_MESSAGES: Message[] = [];
 
@@ -97,6 +108,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [expanded, setExpanded] = useState(false);
   const [value, setValue] = useState('');
   const [pendingFiles, setPendingFiles] = useState<PendingAttachment[]>([]);
+  const attachmentSequenceRef = useRef(0);
+  const attachmentEpochRef = useRef(0);
+  const attachmentInputsRef = useRef<PendingAttachment[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const pendingImageError = imageInputError(pendingFiles.map((item) => item.file));
   const { send } = useMessages(conversationId);
   const isStreaming = useMessageStore(
     (s) => (s.messages[conversationId] ?? EMPTY_MESSAGES).some((msg) => msg.status === 'streaming'),
@@ -232,6 +248,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   useEffect(() => {
     activeConversationIdRef.current = conversationId;
+    attachmentEpochRef.current += 1;
+    attachmentInputsRef.current = [];
+    setPendingFiles([]);
+    setAttachmentError(null);
     knowledgeRequestEpochRef.current += 1;
     setMembers([]);
     setAgentMembers([]);
@@ -243,6 +263,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     setKbVisible(false);
     setSelectedKnowledgeBases([]);
     setSendError(null);
+    return () => { attachmentEpochRef.current += 1; };
   }, [conversationId]);
 
   // Proactively load agent names when there's an active target (for the target bar display)
@@ -349,30 +370,40 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   }, [sendTypingStart, sendTypingStop, isGroup, mentionVisible, kbVisible, loadMentionTargets, loadKnowledgeBases, sendError]);
 
   // 文件入库通用逻辑：校验大小 → 入 pendingFiles → 逐个上传。
-  // input onChange 与拖拽 onDrop 共用，避免两份逻辑漂移。
+  // 文件选择、拖拽和粘贴共用同一套校验和上传。
   const processFiles = useCallback((files: FileList | File[]) => {
     const list = Array.from(files);
     if (list.length === 0) return;
+    const inputError = imageInputError([...attachmentInputsRef.current.map((item) => item.file), ...list]);
+    if (inputError) {
+      setAttachmentError(inputError);
+      return;
+    }
+    setAttachmentError(null);
 
     const newItems: PendingAttachment[] = [];
-    list.forEach((f, i) => {
+    list.forEach((f) => {
       if (f.size > MAX_FILE_SIZE) {
         message.error(`${f.name} 超过 50MB 限制`);
         return;
       }
-      newItems.push({ uid: `${Date.now()}_${i}_${f.name}`, file: f, status: 'uploading' });
+      newItems.push({ uid: `attachment_${++attachmentSequenceRef.current}`, file: f, status: 'uploading' });
     });
     if (newItems.length === 0) return;
+    attachmentInputsRef.current = [...attachmentInputsRef.current, ...newItems];
     setPendingFiles((prev) => [...prev, ...newItems]);
+    const epoch = attachmentEpochRef.current;
 
     // Upload each file
     newItems.forEach(async (item) => {
       try {
         const payload = await uploadFile(item.file);
+        if (epoch !== attachmentEpochRef.current) return;
         setPendingFiles((prev) =>
           prev.map((p) => (p.uid === item.uid ? { ...p, status: 'done', payload } : p)),
         );
       } catch {
+        if (epoch !== attachmentEpochRef.current) return;
         setPendingFiles((prev) =>
           prev.map((p) => (p.uid === item.uid ? { ...p, status: 'error', error: '上传失败' } : p)),
         );
@@ -388,6 +419,21 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, [processFiles]);
 
+  const handlePaste = useCallback((event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    // 粘贴事件在内网 HTTP 页面同样可用，不依赖安全上下文的 Clipboard API。
+    const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith('image/'));
+    if (files.length === 0) {
+      for (const item of Array.from(event.clipboardData.items)) {
+        if (item.kind !== 'file' || !item.type.startsWith('image/')) continue;
+        const file = item.getAsFile();
+        if (file) files.push(file);
+      }
+    }
+    if (files.length === 0) return; // 普通文本粘贴保留浏览器默认行为。
+    event.preventDefault();
+    processFiles(files);
+  }, [processFiles]);
+
   // 把 processFiles 注册给父级（ChatWindow），让整个聊天窗口的拖放复用同一上传逻辑。
   useEffect(() => {
     onRegisterProcessFiles?.(processFiles);
@@ -395,6 +441,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   }, [onRegisterProcessFiles, processFiles]);
 
   const handleRemoveFile = useCallback((uid: string) => {
+    attachmentInputsRef.current = attachmentInputsRef.current.filter((p) => p.uid !== uid);
     setPendingFiles((prev) => prev.filter((p) => p.uid !== uid));
   }, []);
 
@@ -494,6 +541,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   }, [loadKnowledgeBases]);
 
   const handleSubmit = useCallback(async () => {
+    if (sending || pendingImageError || pendingFiles.some((file) => file.status !== 'done' || !file.payload)) return;
     const submitConversationId = conversationId;
     const trimmed = value.trim();
     const knowledgeBasesForSend = selectedKnowledgeBases;
@@ -527,6 +575,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
     // 立即清空输入框，给用户即时反馈
     setValue('');
+    attachmentInputsRef.current = [];
     setPendingFiles([]);
     setSelectedKnowledgeBases([]);
     onCancelReply?.();
@@ -565,15 +614,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     } catch {
       // 发送失败时恢复输入内容，方便用户重试
       if (activeConversationIdRef.current === submitConversationId) {
-        setValue(trimmed);
-        setSelectedKnowledgeBases(knowledgeBasesForSend);
-        setPendingFiles(pendingFilesForSend);
+        // 请求等待期间仍可编辑下一条草稿；恢复失败内容时合并，不能覆盖新输入。
+        setValue((draft) => [trimmed, draft].filter(Boolean).join('\n\n'));
+        setSelectedKnowledgeBases((draft) => [...knowledgeBasesForSend, ...draft.filter(
+          (kb) => !knowledgeBasesForSend.some((previous) => previous.kbId === kb.kbId),
+        )]);
+        attachmentInputsRef.current = [...pendingFilesForSend, ...attachmentInputsRef.current];
+        setPendingFiles((draft) => [...pendingFilesForSend, ...draft]);
         setSendError('发送失败，草稿和附件已保留。');
       }
     } finally {
       setSending(false);
     }
-  }, [value, selectedKnowledgeBases, pendingFiles, isStreaming, send, sendTypingStop, replyTo, onCancelReply, isGroup, mentionTargetsLoaded, fetchMentionTargets, members, agentMembers, hasMention, directAgentId, bindDirectAgentChat, conversationId, globalAgents, runtimeConfig]);
+  }, [value, selectedKnowledgeBases, pendingFiles, pendingImageError, sending, isStreaming, send, sendTypingStop, replyTo, onCancelReply, isGroup, mentionTargetsLoaded, fetchMentionTargets, members, agentMembers, hasMention, directAgentId, bindDirectAgentChat, conversationId, globalAgents, runtimeConfig]);
 
   const lastSendAtRef = useRef(0);
 
@@ -658,7 +711,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const canSend = Boolean(
     value.trim() || selectedKnowledgeBases.length > 0 || pendingFiles.some((p) => p.status === 'done'),
-  ) && !isStreaming && !sending;
+  ) && !pendingImageError && !pendingFiles.some((file) => file.status !== 'done' || !file.payload) && !isStreaming && !sending;
 
   // 点击下拉列表外部关闭 mention 和 KB 下拉
   useEffect(() => {
@@ -741,6 +794,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
       <AttachmentPreview items={pendingFiles} onRemove={handleRemoveFile} />
+      {(pendingImageError || attachmentError) && (
+        <div className={styles.sendError} role="alert">
+          <ExclamationCircleOutlined aria-hidden="true" />
+          <span>{pendingImageError || attachmentError}</span>
+          <button type="button" className={styles.sendErrorDismiss} onClick={() => setAttachmentError(null)} aria-label="关闭附件错误提示">
+            <CloseOutlined />
+          </button>
+        </div>
+      )}
       {sendError && (
         <div id="composer-send-error" className={styles.sendError} role="alert">
           <ExclamationCircleOutlined aria-hidden="true" />
@@ -757,6 +819,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           value={value}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder="发送至当前对话"
           autoSize={{ minRows: expanded ? 8 : 1, maxRows: expanded ? 20 : 4 }}
           className={styles.textarea}

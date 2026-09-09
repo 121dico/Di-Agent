@@ -33,17 +33,18 @@ export const AttachmentPreview: React.FC<Props> = ({ items, onRemove }) => {
         <div key={item.uid} className={styles.item}>
           {item.status === 'uploading' && (
             <div className={styles.overlay}>
-              <Spin size="small" />
+              <Spin size="small" aria-label={`正在上传 ${item.file.name}`} />
             </div>
           )}
           {item.status === 'error' && (
             <div className={`${styles.overlay} ${styles.overlayError}`}>
-              <span className={styles.errorText}>失败</span>
+              <span className={styles.errorText} role="alert">{item.error ?? '上传失败'}</span>
             </div>
           )}
           <PreviewContent item={item} />
           <button
             type="button"
+            aria-label={`移除附件 ${item.file.name}`}
             className={styles.removeBtn}
             onClick={() => onRemove(item.uid)}
           >

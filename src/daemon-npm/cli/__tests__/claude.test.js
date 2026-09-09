@@ -551,6 +551,17 @@ test('claude.spawnPersistent.sendPrompt: writes stream-json user frame to stdin'
   assert.strictEqual(frame.message.content[0].text, 'hello world');
 });
 
+test('claude delivers base64 image blocks and does not reuse them on the next turn', async () => {
+ const {ctx}=buildMockCtx(); const frames=[];let output;
+ ctx.spawn=()=>({pid:1,exitCode:null,stdin:{write(line){frames.push(JSON.parse(line));setImmediate(()=>output(JSON.stringify({type:'result',result:'ok'})+'\n'));}},stdout:{setEncoding(){},on(_,fn){output=fn;}},stderr:{setEncoding(){},on(){}},on(){},kill(){}});
+ const slot=createClaudeCliSpec(ctx).spawnPersistent({agentId:'a',conversationId:'c',resume:true,sessionId:'existing'},ctx);
+ const images=[{mime_type:'image/png',data:Buffer.from('fixture').toString('base64')}];
+ await slot.sendPrompt('image',undefined,{images});
+ await slot.sendPrompt('text');
+ assert.deepStrictEqual(frames[0].message.content[1],{type:'image',source:{type:'base64',media_type:'image/png',data:images[0].data}});
+ assert.strictEqual(frames[1].message.content.length,1);
+});
+
 test('claude.spawnPersistent.sendPrompt: clears timeout after a completed turn', async () => {
   const { ctx } = buildMockCtx({ EXEC_TIMEOUT_MS: 60_000 });
   let stdoutListener = null;

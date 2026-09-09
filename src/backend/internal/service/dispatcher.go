@@ -501,6 +501,18 @@ func (d *Dispatcher) dispatchPlanCore(
 ) (*model.DaemonTask, *model.Message, error) {
 	convID, userID := in.ConvID, in.UserID
 	agent, contextMessages, replyTo := in.Agent, in.ContextMessages, in.ReplyTo
+	images, imageErr := sourceImageInputs(ctx, d.deps.MsgRepo, convID, replyTo, d.deps.UploadDir)
+	if imageErr != nil {
+		return nil, nil, imageErr
+	}
+	if len(images) > 0 {
+		if agent.MachineID == nil {
+			return nil, nil, ErrDaemonNotConnected
+		}
+		if err := requireImageCapability(d.deps.DaemonHub, *agent.MachineID, images); err != nil {
+			return nil, nil, err
+		}
+	}
 
 	prompt := in.Prompt
 	if promptBuilder != nil {
@@ -579,6 +591,7 @@ func (d *Dispatcher) dispatchPlanCore(
 		"runtime_variant":  agent.RuntimeVariant,
 		"prompt":           prompt,
 		"context_messages": contextMessages,
+		"images":           images,
 		"agent_id":         agent.ID,
 		"conversation_id":  convID,
 		"user_id":          userID,
@@ -595,12 +608,26 @@ func (d *Dispatcher) dispatchPlanCore(
 	if handle != nil {
 		dispatchData["message_id"] = handle.MessageID
 	}
-	if err := d.deps.DaemonHub.SendToMachine(*agent.MachineID, ws.WSMessage{
+	dispatchMessage := ws.WSMessage{
 		Type: "task.dispatch",
 		Data: dispatchData,
-	}); err != nil {
+	}
+	var sendErr error
+	if len(images) > 0 {
+		sender, ok := d.deps.DaemonHub.(interface {
+			SendToMachineRequiringCapability(string, string, ws.WSMessage) error
+		})
+		if !ok {
+			sendErr = fmt.Errorf("图片输入需要更新 daemon")
+		} else {
+			sendErr = sender.SendToMachineRequiringCapability(*agent.MachineID, "image_inputs_v1", dispatchMessage)
+		}
+	} else {
+		sendErr = d.deps.DaemonHub.SendToMachine(*agent.MachineID, dispatchMessage)
+	}
+	if sendErr != nil {
 		finalizeErr(model.MessageStatusError)
-		return task, nil, fmt.Errorf("dispatch to daemon: %w", err)
+		return task, nil, fmt.Errorf("dispatch to daemon: %w", sendErr)
 	}
 	slog.Info(orchFlowLog, "stage", "agent.dispatch_sent", "conversation_id", convID, "agent_id", agent.ID, "agent_name", agent.Name, "daemon_task_id", task.ID)
 
