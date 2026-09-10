@@ -203,7 +203,7 @@ func analyticsNumber(row map[string]any, key string) float64 {
 
 // QueryAnalytics 对已算出价敏分的用户做固定聚合，避免把用户明细当作趋势数据。
 func (r *ReportRunner) QueryAnalytics(ctx context.Context, reportID, rangeKey, endDate string, options ...ReportAnalyticsOptions) (*model.ReportAnalyticsResult, error) {
-	daysByRange := map[string]int{"1d": 1, "7d": 7, "30d": 30, "31d": 31, "180d": 180, "365d": 365}
+	daysByRange := map[string]int{"dates": 365, "1d": 1, "7d": 7, "30d": 30, "31d": 31, "180d": 180, "365d": 365}
 	days, ok := daysByRange[rangeKey]
 	if !ok {
 		return nil, fmt.Errorf("%w: 不支持的时间范围", ErrReportInvalid)
@@ -221,12 +221,18 @@ func (r *ReportRunner) QueryAnalytics(ctx context.Context, reportID, rangeKey, e
 		return nil, err
 	}
 	base := &model.ReportAnalyticsResult{Range: rangeKey, StartDate: startDate, EndDate: endDate}
+	if rangeKey == "dates" {
+		base.StartDate = "2026-07-28"
+	}
 	var option ReportAnalyticsOptions
 	if len(options) > 0 {
 		option = options[0]
 	}
 	if isV12Report(report) {
 		return r.queryV12Analytics(ctx, report, source, base, option)
+	}
+	if rangeKey == "dates" {
+		return nil, fmt.Errorf("%w: 此报表不支持快照目录", ErrReportInvalid)
 	}
 	cities := normalizeAnalyticsCities(option.Cities)
 	if len(cities) > 50 {

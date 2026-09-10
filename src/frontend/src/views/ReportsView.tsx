@@ -40,6 +40,7 @@ import { filterReportSources } from './reportSourceSearch';
 import { PersonalReportsLibrary } from '@/components/personal-report/PersonalReportsLibrary';
 import { ReportTemplateModal } from '@/components/report/ReportTemplateModal';
 import { ReportCohortSections } from '@/components/report/ReportCohortSections';
+import { loadSnapshotHistory, type SnapshotProgress } from './reportSnapshotHistory';
 import { ChinaRegionPicker, expandChinaRegionSelection, summarizeChinaRegionSelection } from '@/components/report/ChinaRegionPicker';
 import styles from './ReportsView.module.css';
 
@@ -67,6 +68,7 @@ const statusLabel: Record<ReportRun['status'], string> = { pending: '运行中',
 const chartColors = ['#2F6FDB', '#15857A', '#765BC4', '#D18A24', '#D05C50'];
 const sensitivityColors: Record<string, string> = { 极高价敏: '#A63437', 高价敏: '#D75A50', 中高价敏: '#DB843C', 中价敏: '#D79A2B', 中低价敏: '#259F9A', 低价敏: '#4B78D1', 极低价敏: '#7B9ECA', 未知: '#8B8E95' };
 const rangeOptions: Array<{ value: ReportAnalyticsRange; label: string }> = [
+  { value: 'all', label: '全部 dt 历史' },
   { value: '1d', label: '近 1 天' },
   { value: '7d', label: '近 7 天' },
   { value: '31d', label: '近 31 天' },
@@ -408,9 +410,11 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
   const [detailPage, setDetailPage] = useState(1);
   const [detailPageSize, setDetailPageSize] = useState(100);
   const [fieldGroup, setFieldGroup] = useState<ReportFieldGroup>('all');
-  const [draftDashboardRange, setDraftDashboardRange] = useState<ReportAnalyticsRange>('31d');
+  const [draftDashboardRange, setDraftDashboardRange] = useState<ReportAnalyticsRange>('all');
   const [activeSection, setActiveSection] = useState('report-overview');
-  const [appliedDashboardRange, setAppliedDashboardRange] = useState<ReportAnalyticsRange>('31d');
+  const [appliedDashboardRange, setAppliedDashboardRange] = useState<ReportAnalyticsRange>('all');
+  const [snapshotProgress, setSnapshotProgress] = useState<SnapshotProgress | null>(null);
+  const [snapshotReload, setSnapshotReload] = useState(0);
   const [analytics, setAnalytics] = useState<ReportAnalyticsResult | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState('');
@@ -475,8 +479,9 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
     setDetailResult(null);
     setDetailPage(1);
     setDetailPageSize(100);
-    setDraftDashboardRange('31d');
-    setAppliedDashboardRange('31d');
+    const defaultRange = reports.find((item) => item.id === selectedId)?.visualization.template?.profile === 'price_sensitive_v1_2' ? 'all' : '31d';
+    setDraftDashboardRange(defaultRange);
+    setAppliedDashboardRange(defaultRange);
     setDraftCities([]);
     setAppliedCities([]);
     setDraftProvinceCodes([]);
@@ -500,12 +505,21 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
     setAnalyticsLoading(true);
     setAnalytics(null);
     setAnalyticsError('');
-    void queryReportAnalytics(selectedId, appliedDashboardRange, undefined, expandedAppliedCities)
+    setSnapshotProgress(null);
+    if (isV12) {
+      void loadSnapshotHistory(queryReportAnalytics, selectedId, appliedDashboardRange, expandedAppliedCities, (result, progress) => {
+        if (active) { setAnalytics(result); setSnapshotProgress(progress); }
+      }, () => active)
+        .catch((error: unknown) => { if (active) setAnalyticsError(error instanceof Error ? error.message : '读取 dt 历史失败'); })
+        .finally(() => { if (active) setAnalyticsLoading(false); });
+      return () => { active = false; };
+    }
+    void queryReportAnalytics(selectedId, appliedDashboardRange === 'all' ? '31d' : appliedDashboardRange, undefined, expandedAppliedCities)
       .then((result) => { if (active) setAnalytics(result); })
       .catch((error: unknown) => { if (active) { setAnalytics(null); setAnalyticsError(error instanceof Error ? error.message : '读取价敏趋势失败'); } })
       .finally(() => { if (active) setAnalyticsLoading(false); });
     return () => { active = false; };
-  }, [selectedId, analyticsEnabled, appliedDashboardRange, expandedAppliedCities]);
+  }, [selectedId, analyticsEnabled, appliedDashboardRange, expandedAppliedCities, isV12, snapshotReload]);
   const latest = runs.find((run) => run.status === 'succeeded');
   const snapshot = latest?.snapshot ?? [];
   const detailRows = detailResult?.rows ?? snapshot;
@@ -594,8 +608,8 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
     setAppliedCities([]);
     setDraftProvinceCodes([]);
     setAppliedProvinceCodes([]);
-    setDraftDashboardRange('7d');
-    setAppliedDashboardRange('7d');
+    setDraftDashboardRange(isV12 ? 'all' : '7d');
+    setAppliedDashboardRange(isV12 ? 'all' : '7d');
   };
 
   const toggleDistribution = (label: string) => {
@@ -611,14 +625,15 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
     if (!selectedId) return;
     setRunning(true);
     try {
-      const completedRun = await runReport(selectedId, appliedDashboardRange, expandedAppliedCities);
+      const completedRun = await runReport(selectedId, isV12 ? '1d' : appliedDashboardRange === 'all' ? '31d' : appliedDashboardRange, expandedAppliedCities);
       setRuns(await listReportRuns(selectedId));
       await loadDetailPage(selectedId, 1, detailPageSize, false);
-      if (analyticsEnabled) {
-        setAnalytics(await queryReportAnalytics(selectedId, appliedDashboardRange, isV12 ? undefined : completedRun.source_partition, expandedAppliedCities));
+      if (analyticsEnabled && isV12) setSnapshotReload((value) => value + 1);
+      if (analyticsEnabled && !isV12) {
+        setAnalytics(await queryReportAnalytics(selectedId, appliedDashboardRange === 'all' ? '31d' : appliedDashboardRange, completedRun.source_partition, expandedAppliedCities));
         setAnalyticsError('');
       }
-      message.success('报表生成完成');
+      message.success(isV12 ? '最新快照已刷新，所选 dt 历史正在逐日加载' : '报表生成完成');
     } catch (error: unknown) {
       setRuns(await listReportRuns(selectedId).catch(() => []));
       message.error(error instanceof Error ? error.message : '报表生成失败');
@@ -818,7 +833,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
             <nav className={styles.anchorBar} aria-label="报表板块导航">
               <a className={activeSection === 'report-overview' ? styles.anchorActive : ''} href="#report-overview" onClick={() => setActiveSection('report-overview')}>{isV12 ? '全量人群' : '指标概览'}</a>
               {isV12 && <a className={activeSection === 'report-order-cohort' ? styles.anchorActive : ''} href="#report-order-cohort" onClick={() => setActiveSection('report-order-cohort')}>有订单人群</a>}
-              <a className={activeSection === 'report-trend' ? styles.anchorActive : ''} href="#report-trend" onClick={() => setActiveSection('report-trend')}>{isV12 ? '每日新增' : '趋势分析'}</a>
+              <a className={activeSection === 'report-trend' ? styles.anchorActive : ''} href="#report-trend" onClick={() => setActiveSection('report-trend')}>{isV12 ? 'dt 历史趋势' : '趋势分析'}</a>
               <a className={activeSection === 'report-search' ? styles.anchorActive : ''} href="#report-search" onClick={() => setActiveSection('report-search')}>用户查询</a>
               {access.canBrowseFullDetail && <a className={activeSection === 'report-detail' ? styles.anchorActive : ''} href="#report-detail" onClick={() => setActiveSection('report-detail')}>数据明细</a>}
               {access.canViewRunHistory && <a className={activeSection === 'report-history' ? styles.anchorActive : ''} href="#report-history" onClick={() => setActiveSection('report-history')}>运行记录</a>}
@@ -849,7 +864,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
                 <div className={styles.filterField}>
                   <span>时间范围</span>
                   <div className={styles.rangeControl} role="tablist" aria-label="选择时间范围">
-                    {rangeOptions.filter((option) => isV12 || option.value !== '1d').map((option) => <button key={option.value} type="button" role="tab" aria-selected={draftDashboardRange === option.value} className={draftDashboardRange === option.value ? styles.rangeActive : ''} onClick={() => setDraftDashboardRange(option.value)}>{option.label}</button>)}
+                    {rangeOptions.filter((option) => isV12 || (option.value !== '1d' && option.value !== 'all')).map((option) => <button key={option.value} type="button" role="tab" aria-selected={draftDashboardRange === option.value} className={draftDashboardRange === option.value ? styles.rangeActive : ''} onClick={() => setDraftDashboardRange(option.value)}>{option.label}</button>)}
                   </div>
                 </div>
               </div>
@@ -868,7 +883,10 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
               </div>
             </section>
 
-            {isV12 ? <ReportCohortSections key={selectedId} analytics={analytics} loading={analyticsLoading} error={analyticsError} renderDistribution={(items, hidden, onToggle, centerLabel) => <DonutChart distribution={items} hidden={hidden} onToggle={onToggle} centerLabel={centerLabel} />} /> : <>
+            {isV12 ? <ReportCohortSections key={selectedId} analytics={analytics} loading={analyticsLoading} error={analyticsError}
+              progress={snapshotProgress ? `dt 快照：已处理 ${snapshotProgress.completed}/${snapshotProgress.total} 天，成功 ${snapshotProgress.completed - snapshotProgress.failed.length} 天${snapshotProgress.failed.length ? `，失败 ${snapshotProgress.failed.length} 天` : ''}` : undefined}
+              renderChart={(labels, series) => <SmoothChart labels={labels} series={series} height={360} trendRule="raw" pendingText="请开启至少一个图例" />}
+              renderDistribution={(items, hidden, onToggle, centerLabel) => <DonutChart distribution={items} hidden={hidden} onToggle={onToggle} centerLabel={centerLabel} />} /> : <>
             <section className={`${styles.summaryBlock} ${styles.overviewBlock}`} id="report-overview">
               {analyticsError && <Alert type="warning" showIcon message="统计数据暂未生成" description={analyticsError} />}
               <div className={styles.blockHead}><div><span>01</span><strong>指标概览</strong></div><small>全量固定业务口径</small></div>
@@ -912,7 +930,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
 
             </>}
             <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-search">
-              <div className={styles.blockHead}><div><span>{isV12 ? '04' : '03'}</span><strong>用户查询</strong></div><small>输入完整 DUID · 仅返回精确匹配结果</small></div>
+              <div className={styles.blockHead}><div><span>{isV12 ? '05' : '03'}</span><strong>用户查询</strong></div><small>输入完整 DUID · 仅返回精确匹配结果</small></div>
               <div className={`${styles.card} ${styles.searchCard}`}>
                 <div className={styles.userSearchBar}>
                   <Input prefix={<SearchOutlined />} value={searchDUID} onChange={(event) => setSearchDUID(event.target.value.replace(/\D/g, ''))} onPressEnter={() => void handleSearch()} placeholder="请输入完整 DUID，例如 17592356441816" />
@@ -926,7 +944,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
             </section>
 
             {access.canBrowseFullDetail && <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-detail">
-              <div className={styles.blockHead}><div><span>{isV12 ? '05' : '04'}</span><strong>数据明细</strong></div><small>全量数据 · 服务端分页 · 共 {totalRows.toLocaleString('zh-CN')} 行</small></div>
+              <div className={styles.blockHead}><div><span>{isV12 ? '06' : '04'}</span><strong>数据明细</strong></div><small>全量数据 · 服务端分页 · 共 {totalRows.toLocaleString('zh-CN')} 行</small></div>
               <div className={`${styles.card} ${styles.tableCard}`}>
                 {orderedDetailColumns.length > 20 && <div className={styles.fieldGroups}>{fieldGroups.map((group) => <button key={group.value} type="button" className={fieldGroup === group.value ? styles.fieldGroupActive : ''} onClick={() => setFieldGroup(group.value)}>{group.label}<span>{reportColumnsForGroup(orderedDetailColumns, group.value).length}</span></button>)}</div>}
                 <div className={styles.tableToolbar}>
@@ -939,7 +957,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
             </section>}
 
             {access.canViewRunHistory && <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-history">
-              <div className={styles.blockHead}><div><span>{isV12 ? '06' : '05'}</span><strong>运行记录</strong></div><small>手动生成与每日任务共用同一流程</small></div>
+              <div className={styles.blockHead}><div><span>{isV12 ? '07' : '05'}</span><strong>运行记录</strong></div><small>手动生成与每日任务共用同一流程</small></div>
               <div className={styles.card}>
                 <div className={styles.runList}>{runs.map((run) => <div key={run.id} className={styles.runRow}><span className={`${styles.statusDot} ${styles[run.status]}`} /><strong>{statusLabel[run.status]}</strong><span>{run.trigger === 'scheduled' ? '每日 10:00' : '手动生成'}</span><span>{new Date(run.started_at).toLocaleString('zh-CN', { hour12: false })}</span><span>{run.source_partition || run.error_message || '—'}</span></div>)}{runs.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有运行记录" />}</div>
               </div>

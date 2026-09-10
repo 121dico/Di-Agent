@@ -195,18 +195,22 @@ type ReportAnalyticsSummary struct {
 }
 
 type ReportAnalyticsTrendPoint struct {
-	NullableScores               map[string]*float64 `json:"nullable_scores,omitempty"`
-	Date                         string              `json:"dt"`
-	AveragePriceSensitivityScore float64             `json:"average_price_sensitivity_score"`
-	AverageD1PriceScore          float64             `json:"average_d1_price_score"`
-	AverageD2CouponScore         float64             `json:"average_d2_coupon_score"`
-	AverageD3TimeScore           float64             `json:"average_d3_time_score"`
-	TotalOrderCount              int64               `json:"total_order_count"`
-	CalculatedUserCount          int64               `json:"calculated_user_count"`
-	DailyNetUserGrowth           int64               `json:"daily_net_user_growth"`
-	DailyGrowthAvailable         *bool               `json:"daily_growth_available,omitempty"`
-	DailyUserGrowthRate          float64             `json:"daily_user_growth_rate"`
-	CumulativeNetUserGrowth      int64               `json:"cumulative_net_user_growth"`
+	TotalUserCount               int64                         `json:"total_user_count"`
+	OrderUserCount               int64                         `json:"order_user_count"`
+	Distribution                 []ReportAnalyticsDistribution `json:"distribution,omitempty"`
+	OrderDistribution            []ReportAnalyticsDistribution `json:"order_distribution,omitempty"`
+	NullableScores               map[string]*float64           `json:"nullable_scores,omitempty"`
+	Date                         string                        `json:"dt"`
+	AveragePriceSensitivityScore float64                       `json:"average_price_sensitivity_score"`
+	AverageD1PriceScore          float64                       `json:"average_d1_price_score"`
+	AverageD2CouponScore         float64                       `json:"average_d2_coupon_score"`
+	AverageD3TimeScore           float64                       `json:"average_d3_time_score"`
+	TotalOrderCount              int64                         `json:"total_order_count"`
+	CalculatedUserCount          int64                         `json:"calculated_user_count"`
+	DailyNetUserGrowth           int64                         `json:"daily_net_user_growth"`
+	DailyGrowthAvailable         *bool                         `json:"daily_growth_available,omitempty"`
+	DailyUserGrowthRate          float64                       `json:"daily_user_growth_rate"`
+	CumulativeNetUserGrowth      int64                         `json:"cumulative_net_user_growth"`
 }
 
 type ReportAnalyticsDistribution struct {
@@ -222,6 +226,8 @@ type ReportAnalyticsCohort struct {
 
 // ReportAnalyticsResult 是固定价敏报表按时间范围聚合后的指标与图表数据。
 type ReportAnalyticsResult struct {
+	AvailableDates []string                      `json:"available_dates,omitempty"`
+	CountingBasis  string                        `json:"counting_basis,omitempty"`
 	OrderCohort    *ReportAnalyticsCohort        `json:"order_cohort,omitempty"`
 	Profile        string                        `json:"profile,omitempty"`
 	DataDate       string                        `json:"data_date,omitempty"`

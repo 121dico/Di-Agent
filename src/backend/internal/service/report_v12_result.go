@@ -51,6 +51,11 @@ func assembleV12Analytics(base *model.ReportAnalyticsResult, results []model.Rep
 		}
 	}
 	for _, day := range days {
+		day.point.TotalUserCount = day.totalUsers
+		for level, count := range day.levels {
+			day.point.Distribution = append(day.point.Distribution, model.ReportAnalyticsDistribution{Level: level, UserCount: count})
+		}
+		sort.Slice(day.point.Distribution, func(i, j int) bool { return day.point.Distribution[i].Level < day.point.Distribution[j].Level })
 		for _, key := range []string{"price", "d1", "d2", "d3"} {
 			if day.samples[key] > 0 {
 				value := day.weighted[key] / day.samples[key]

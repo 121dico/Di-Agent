@@ -57,9 +57,13 @@ export interface ReportVisualization {
   analytics?: { enabled: boolean };
 }
 
-export type ReportAnalyticsRange = '1d' | '7d' | '30d' | '31d' | '365d';
+export type ReportAnalyticsRange = 'all' | '1d' | '7d' | '30d' | '31d' | '365d';
 
 export interface ReportAnalyticsTrendPoint {
+  total_user_count?: number;
+  order_user_count?: number;
+  distribution?: Array<{ level: string; user_count: number }>;
+  order_distribution?: Array<{ level: string; user_count: number }>;
   nullable_scores?: Record<string, number | null>;
   dt: string;
   average_price_sensitivity_score: number;
@@ -75,6 +79,8 @@ export interface ReportAnalyticsTrendPoint {
 }
 
 export interface ReportAnalyticsResult {
+  available_dates?: string[];
+  counting_basis?: string;
   order_cohort?: { user_count: number; share: number; distribution: Array<{ level: string; user_count: number }> };
   profile?: string;
   data_date?: string;

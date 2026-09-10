@@ -6,3 +6,6 @@
 .pendingGrid h3 { margin: 0 0 16px; font-size: 16px; }
 .pending { display: block; color: var(--wb-text-secondary); font-size: 24px; font-weight: 600; margin-bottom: 12px; }
 @media (max-width: 800px) { .cohortGrid, .pendingGrid { grid-template-columns: minmax(0, 1fr); } }
+.legend { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+.legend button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #e1e5ec; border-radius: 20px; background: transparent; padding: 7px 12px; cursor: pointer; font-size: 14px; }
+.legend button[aria-pressed="false"] { opacity: .45; }
