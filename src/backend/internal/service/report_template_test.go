@@ -25,7 +25,7 @@ func (f *templateStoreFake) CreateReportDefinition(_ context.Context, r *model.R
 }
 func v12Contract() *model.ReportDataSourceContract {
 	contract := &model.ReportDataSourceContract{SourceID: "source-1", APIName: "price_sensitive_v1_2", Enabled: true}
-	for _, name := range []string{"duid", "dt", "ps_score", "ps_level", "ps_type", "price_score", "coupon_score", "time_score", "order_cnt_180d", "city_name"} {
+	for _, name := range []string{"duid", "dt", "ps_conf", "ps_score", "ps_level", "ps_type", "price_score", "coupon_score", "time_score", "order_cnt_180d", "city_name"} {
 		contract.Fields = append(contract.Fields, model.ReportFieldContract{Name: name, DataType: "DOUBLE", Enabled: true, Selectable: true, Filterable: true, Groupable: true, Aggregatable: true, Sortable: true})
 	}
 	return contract
@@ -102,7 +102,7 @@ func TestReportV12AnalyticsUsesActualDatesWeightedScoresAndCache(t *testing.T) {
 		t.Fatalf("lost real categories/provenance: %+v", result)
 	}
 	cached, err := runner.QueryAnalytics(context.Background(), "report-1", "7d", "2026-09-09", ReportAnalyticsOptions{Cities: []string{"北京"}})
-	if err != nil || !cached.Cached || len(connector.queries) != 2 {
+	if err != nil || !cached.Cached || len(connector.queries) != 3 {
 		t.Fatalf("cache not reused: %v", err)
 	}
 }

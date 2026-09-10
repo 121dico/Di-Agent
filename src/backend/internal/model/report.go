@@ -214,8 +214,15 @@ type ReportAnalyticsDistribution struct {
 	UserCount int64  `json:"user_count"`
 }
 
+type ReportAnalyticsCohort struct {
+	UserCount    int64                         `json:"user_count"`
+	Share        float64                       `json:"share"`
+	Distribution []ReportAnalyticsDistribution `json:"distribution"`
+}
+
 // ReportAnalyticsResult 是固定价敏报表按时间范围聚合后的指标与图表数据。
 type ReportAnalyticsResult struct {
+	OrderCohort    *ReportAnalyticsCohort        `json:"order_cohort,omitempty"`
 	Profile        string                        `json:"profile,omitempty"`
 	DataDate       string                        `json:"data_date,omitempty"`
 	FetchedAt      string                        `json:"fetched_at,omitempty"`

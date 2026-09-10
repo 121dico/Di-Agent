@@ -75,6 +75,7 @@ export interface ReportAnalyticsTrendPoint {
 }
 
 export interface ReportAnalyticsResult {
+  order_cohort?: { user_count: number; share: number; distribution: Array<{ level: string; user_count: number }> };
   profile?: string;
   data_date?: string;
   fetched_at?: string;

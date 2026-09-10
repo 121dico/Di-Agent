@@ -39,6 +39,7 @@ import { buildReportAccessPolicy } from './reportAccess';
 import { filterReportSources } from './reportSourceSearch';
 import { PersonalReportsLibrary } from '@/components/personal-report/PersonalReportsLibrary';
 import { ReportTemplateModal } from '@/components/report/ReportTemplateModal';
+import { ReportCohortSections } from '@/components/report/ReportCohortSections';
 import { ChinaRegionPicker, expandChinaRegionSelection, summarizeChinaRegionSelection } from '@/components/report/ChinaRegionPicker';
 import styles from './ReportsView.module.css';
 
@@ -338,7 +339,7 @@ export function IncrementBarChart({ labels, values, height = 330, raw = false }:
   </div>;
 }
 
-export function DonutChart({ distribution, hidden, onToggle }: { distribution: Array<{ label: string; value: number }>; hidden: Set<string>; onToggle: (label: string) => void }) {
+export function DonutChart({ distribution, hidden, onToggle, centerLabel = '已有价敏指标用户' }: { distribution: Array<{ label: string; value: number }>; hidden: Set<string>; onToggle: (label: string) => void; centerLabel?: string }) {
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
   if (distribution.length === 0) return <Empty description="暂无分布数据" />;
   const allTotal = distribution.reduce((sum, item) => sum + item.value, 0);
@@ -362,7 +363,7 @@ export function DonutChart({ distribution, hidden, onToggle }: { distribution: A
         }}><title>{`${item.label}: ${item.value.toLocaleString('zh-CN')} 人 · ${allTotal ? Number((item.value / allTotal * 100).toFixed(1)) : 0}% · ${isHidden ? '已关闭' : '已显示'}`}</title></circle>;
       })}</g>
       <text x="130" y="126" textAnchor="middle" className={styles.donutValue}>{compactCount(activeItem?.value ?? allTotal)}</text>
-      <text x="130" y="149" textAnchor="middle" className={styles.donutLabel}>{activeItem ? `${activeItem.label}${hidden.has(activeItem.label) ? ' · 已关闭' : ''}` : '已有价敏指标用户'}</text>
+      <text x="130" y="149" textAnchor="middle" className={styles.donutLabel}>{activeItem ? `${activeItem.label}${hidden.has(activeItem.label) ? ' · 已关闭' : ''}` : centerLabel}</text>
     </svg>
     <div className={styles.donutLegend}>{distribution.map((item) => {
       const isHidden = hidden.has(item.label);
@@ -541,7 +542,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
   useEffect(() => {
     const root = pageRef.current;
     if (!root || !selected) return;
-    const ids = ['report-overview', 'report-trend', 'report-search'];
+    const ids = ['report-overview', 'report-order-cohort', 'report-trend', 'report-search'];
     if (access.canBrowseFullDetail) ids.push('report-detail');
     if (access.canViewRunHistory) ids.push('report-history');
     let frame = 0;
@@ -815,8 +816,9 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
             </section>
 
             <nav className={styles.anchorBar} aria-label="报表板块导航">
-              <a className={activeSection === 'report-overview' ? styles.anchorActive : ''} href="#report-overview" onClick={() => setActiveSection('report-overview')}>指标概览</a>
-              <a className={activeSection === 'report-trend' ? styles.anchorActive : ''} href="#report-trend" onClick={() => setActiveSection('report-trend')}>趋势分析</a>
+              <a className={activeSection === 'report-overview' ? styles.anchorActive : ''} href="#report-overview" onClick={() => setActiveSection('report-overview')}>{isV12 ? '全量人群' : '指标概览'}</a>
+              {isV12 && <a className={activeSection === 'report-order-cohort' ? styles.anchorActive : ''} href="#report-order-cohort" onClick={() => setActiveSection('report-order-cohort')}>有订单人群</a>}
+              <a className={activeSection === 'report-trend' ? styles.anchorActive : ''} href="#report-trend" onClick={() => setActiveSection('report-trend')}>{isV12 ? '每日新增' : '趋势分析'}</a>
               <a className={activeSection === 'report-search' ? styles.anchorActive : ''} href="#report-search" onClick={() => setActiveSection('report-search')}>用户查询</a>
               {access.canBrowseFullDetail && <a className={activeSection === 'report-detail' ? styles.anchorActive : ''} href="#report-detail" onClick={() => setActiveSection('report-detail')}>数据明细</a>}
               {access.canViewRunHistory && <a className={activeSection === 'report-history' ? styles.anchorActive : ''} href="#report-history" onClick={() => setActiveSection('report-history')}>运行记录</a>}
@@ -866,6 +868,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
               </div>
             </section>
 
+            {isV12 ? <ReportCohortSections key={selectedId} analytics={analytics} loading={analyticsLoading} error={analyticsError} renderDistribution={(items, hidden, onToggle, centerLabel) => <DonutChart distribution={items} hidden={hidden} onToggle={onToggle} centerLabel={centerLabel} />} /> : <>
             <section className={`${styles.summaryBlock} ${styles.overviewBlock}`} id="report-overview">
               {analyticsError && <Alert type="warning" showIcon message="统计数据暂未生成" description={analyticsError} />}
               <div className={styles.blockHead}><div><span>01</span><strong>指标概览</strong></div><small>全量固定业务口径</small></div>
@@ -907,6 +910,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
               </Spin>
             </section>
 
+            </>}
             <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-search">
               <div className={styles.blockHead}><div><span>03</span><strong>用户查询</strong></div><small>输入完整 DUID · 仅返回精确匹配结果</small></div>
               <div className={`${styles.card} ${styles.searchCard}`}>

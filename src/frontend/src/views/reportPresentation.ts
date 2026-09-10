@@ -203,6 +203,12 @@ export function buildRobustTrend(values: number[], options: RobustTrendOptions =
 const sensitivityLevelLabels: Record<string, string> = { VERY_HIGH: '极高价敏', HIGH: '高价敏', MEDIUM_HIGH: '中高价敏', MEDIUM: '中价敏', MEDIUM_LOW: '中低价敏', LOW: '低价敏', VERY_LOW: '极低价敏', UNKNOWN: '未知' };
 const sensitivityLevelOrder: Record<string, number> = { VERY_HIGH: 0, HIGH: 1, MEDIUM_HIGH: 2, MEDIUM: 3, MEDIUM_LOW: 4, LOW: 5, VERY_LOW: 6, UNKNOWN: 7 };
 
+export function presentSensitivityDistribution(distribution: ReportAnalyticsResult['distribution']) {
+  return [...distribution]
+    .sort((left, right) => (sensitivityLevelOrder[left.level] ?? 99) - (sensitivityLevelOrder[right.level] ?? 99))
+    .map((item) => ({ label: sensitivityLevelLabels[item.level] ?? item.level, value: item.user_count }));
+}
+
 export function buildPriceSensitiveAnalyticsPresentation(analytics: ReportAnalyticsResult): PriceSensitiveAnalyticsPresentation {
   const trend = [...analytics.trend].sort((left, right) => left.dt.localeCompare(right.dt));
   const score = (value: number) => String(Number(value.toFixed(2)));
@@ -266,9 +272,7 @@ export function buildPriceSensitiveAnalyticsPresentation(analytics: ReportAnalyt
       { key: 'orders', label: '参与计算订单数', color: '#D18A24', values: trend.map((point) => point.total_order_count) },
     ],
     orderValues: trend.map((point) => point.total_order_count),
-    distribution: [...analytics.distribution]
-      .sort((left, right) => (sensitivityLevelOrder[left.level] ?? 99) - (sensitivityLevelOrder[right.level] ?? 99))
-      .map((item) => ({ label: sensitivityLevelLabels[item.level] ?? item.level, value: item.user_count })),
+    distribution: presentSensitivityDistribution(analytics.distribution),
   };
 }
 

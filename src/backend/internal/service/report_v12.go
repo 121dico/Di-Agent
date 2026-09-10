@@ -47,12 +47,21 @@ func (r *ReportRunner) queryV12Analytics(ctx context.Context, report *model.Repo
 	if err := validateTemplateProfile(contract, p); err != nil {
 		return nil, err
 	}
+	confidenceAllowed := false
+	for _, field := range contract.Fields {
+		if field.Name == "ps_conf" && field.Enabled && field.Filterable {
+			confidenceAllowed = true
+		}
+	}
+	if !confidenceAllowed {
+		return nil, fmt.Errorf("%w: ps_conf 未开放筛选，无法统计有订单人群", ErrReportInvalid)
+	}
 	cities := normalizeAnalyticsCities(option.Cities)
 	if len(cities) > 50 {
 		return nil, fmt.Errorf("%w: 城市筛选最多支持50项", ErrReportInvalid)
 	}
 	sort.Strings(cities)
-	keyRaw, _ := json.Marshal([]any{"v12-analytics-1", report.ID, report.UpdatedAt, source.UpdatedAt, report.QueryJSON, report.VisualizationJSON, base.Range, base.StartDate, base.EndDate, cities})
+	keyRaw, _ := json.Marshal([]any{"v12-analytics-cohorts-2", report.ID, report.UpdatedAt, source.UpdatedAt, report.QueryJSON, report.VisualizationJSON, base.Range, base.StartDate, base.EndDate, cities})
 	digest := sha256.Sum256(keyRaw)
 	key := hex.EncodeToString(digest[:])
 	cache, hasCache := r.catalog.(reportTemplateAnalyticsStore)
@@ -93,6 +102,12 @@ func (r *ReportRunner) queryV12Analytics(ctx context.Context, report *model.Repo
 		}
 		queries = append(queries, map[string]any{"fieldList": fields, "conditionList": append(append([]map[string]any{}, conditions...), map[string]any{"name": p.Score, "operatorEnum": "NOT_NULL"}),
 			"groupList": []string{"dt", p.Level, p.Type}, "orderBy": "dt", "needPagination": false})
+		// 独立按置信度过滤，不能用 ORDER 类型或当前明细页冒充这一人群。
+		queries = append(queries, map[string]any{
+			"fieldList":     []map[string]any{analyticsField("dt", "", ""), analyticsField(p.Level, "level", ""), analyticsField("duid", "user_count", "COUNT_DISTINCT")},
+			"conditionList": append(append([]map[string]any{}, conditions...), map[string]any{"name": "ps_conf", "operatorEnum": "GQ", "value": "0"}),
+			"groupList":     []string{"dt", p.Level}, "orderBy": "dt",
+		})
 		results := make([]model.ReportQueryResult, 0, len(queries))
 		for _, query := range queries {
 			query["needPagination"], query["pageSize"], query["page"] = true, 1000, 1
@@ -124,6 +139,22 @@ func (r *ReportRunner) queryV12Analytics(ctx context.Context, report *model.Repo
 			results = append(results, result)
 		}
 		result := assembleV12Analytics(base, results, r.now())
+		result.OrderCohort = &model.ReportAnalyticsCohort{Distribution: []model.ReportAnalyticsDistribution{}}
+		for _, row := range results[2].Rows {
+			if fmt.Sprint(row["dt"]) != result.DataDate {
+				continue
+			}
+			level, _ := row["level"].(string)
+			if level == "" {
+				level = "UNKNOWN"
+			}
+			count := int64(analyticsNumber(row, "user_count"))
+			result.OrderCohort.UserCount += count
+			result.OrderCohort.Distribution = append(result.OrderCohort.Distribution, model.ReportAnalyticsDistribution{Level: level, UserCount: count})
+		}
+		if result.Summary.TotalUserCount > 0 {
+			result.OrderCohort.Share = float64(result.OrderCohort.UserCount) / float64(result.Summary.TotalUserCount) * 100
+		}
 		if hasCache {
 			if err := cache.SaveTemplateAnalytics(ctx, key, report.ID, result, r.now().Add(10*time.Minute)); err != nil {
 				return nil, err

@@ -27,8 +27,8 @@ func TestReportV12RunRefreshRangeMatchesTrigger(t *testing.T) {
 			if _, err := runner.Run(context.Background(), "report-1", test.trigger, "admin"); err != nil {
 				t.Fatal(err)
 			}
-			if len(connector.queries) != 3 {
-				t.Fatalf("expected snapshot and two aggregate queries, got %d", len(connector.queries))
+			if len(connector.queries) != 4 {
+				t.Fatalf("expected snapshot and three aggregate queries, got %d", len(connector.queries))
 			}
 			for _, raw := range connector.queries[1:] {
 				var query struct {
@@ -114,8 +114,8 @@ func TestReportV12ManualRunKeepsSavedFiltersAndSelectedRangeCities(t *testing.T)
 	if _, err := runner.Run(context.Background(), "report-1", "manual", "admin", ReportRunOptions{Range: "7d", Cities: []string{"北京"}}); err != nil {
 		t.Fatal(err)
 	}
-	if len(connector.queries) != 3 {
-		t.Fatalf("expected snapshot and two aggregate queries, got %d", len(connector.queries))
+	if len(connector.queries) != 4 {
+		t.Fatalf("expected snapshot and three aggregate queries, got %d", len(connector.queries))
 	}
 	for index, raw := range connector.queries[1:] {
 		var query struct {
@@ -132,6 +132,9 @@ func TestReportV12ManualRunKeepsSavedFiltersAndSelectedRangeCities(t *testing.T)
 		}
 		if index == 1 {
 			want = append(want, map[string]any{"name": "ps_score", "operatorEnum": "NOT_NULL"})
+		}
+		if index == 2 {
+			want = append(want, map[string]any{"name": "ps_conf", "operatorEnum": "GQ", "value": "0"})
 		}
 		if !reflect.DeepEqual(query.Conditions, want) {
 			t.Fatalf("saved filters or manual selection lost: got %#v, want %#v", query.Conditions, want)
