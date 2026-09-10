@@ -86,6 +86,25 @@ func TestReportV12CapacityFailureDoesNotRetryOrCache(t *testing.T) {
 	}
 }
 
+func TestReportV12MissingPreviousDateIsNotDailyGrowth(t *testing.T) {
+	catalog := boundaryV12Catalog()
+	connector := &reportConnectorFake{results: []model.ReportQueryResult{
+		{Rows: []map[string]any{{"dt": "2026-09-07", "total_user_count": 100}, {"dt": "2026-09-09", "total_user_count": 130}}},
+		{Rows: []map[string]any{{"dt": "2026-09-07", "level": "LOW", "user_count": 100}, {"dt": "2026-09-09", "level": "LOW", "user_count": 130}}},
+	}}
+	result, err := NewReportRunner(catalog, &reportRunnerStoreFake{}, connector).QueryAnalytics(context.Background(), "report-1", "7d", "2026-09-09")
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest := result.Trend[1]
+	if latest.DailyGrowthAvailable == nil || *latest.DailyGrowthAvailable || latest.DailyNetUserGrowth != 0 || result.Summary.AverageDailyNetUserGrowth != 0 {
+		t.Fatalf("missing date was treated as daily growth: %+v", result)
+	}
+	if latest.CumulativeNetUserGrowth != 30 {
+		t.Fatalf("real cumulative change lost: %+v", latest)
+	}
+}
+
 func TestReportV12ManualRunKeepsSavedFiltersAndSelectedRangeCities(t *testing.T) {
 	catalog := boundaryV12Catalog()
 	catalog.report.QueryJSON = json.RawMessage(`{"fieldList":[{"name":"duid"}],"conditionList":[{"name":"dt","operatorEnum":"EQ","value":"2020-01-01"},{"name":"ps_type","operatorEnum":"EQ","value":"PRIOR"}]}`)
