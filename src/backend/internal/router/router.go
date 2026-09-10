@@ -205,6 +205,8 @@ func Setup(r *gin.Engine, deps Deps) {
 			reportRoutes.Use(middleware.ValidateUUIDParam("id"), middleware.ValidateUUIDParam("runId"))
 			{
 				reportRoutes.GET("/sources", deps.ReportHandler.ListSources)
+				reportRoutes.GET("/templates", deps.ReportHandler.ListTemplates)
+				reportRoutes.POST("/templates/apply", deps.ReportHandler.ApplyTemplate)
 				reportRoutes.POST("/sources", deps.ReportHandler.CreateSource)
 				reportRoutes.GET("/sources/:id/contract", deps.ReportHandler.GetSourceContract)
 				reportRoutes.PUT("/sources/:id/contract", deps.ReportHandler.SaveSourceContract)

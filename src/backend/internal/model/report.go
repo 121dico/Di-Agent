@@ -195,16 +195,17 @@ type ReportAnalyticsSummary struct {
 }
 
 type ReportAnalyticsTrendPoint struct {
-	Date                         string  `json:"dt"`
-	AveragePriceSensitivityScore float64 `json:"average_price_sensitivity_score"`
-	AverageD1PriceScore          float64 `json:"average_d1_price_score"`
-	AverageD2CouponScore         float64 `json:"average_d2_coupon_score"`
-	AverageD3TimeScore           float64 `json:"average_d3_time_score"`
-	TotalOrderCount              int64   `json:"total_order_count"`
-	CalculatedUserCount          int64   `json:"calculated_user_count"`
-	DailyNetUserGrowth           int64   `json:"daily_net_user_growth"`
-	DailyUserGrowthRate          float64 `json:"daily_user_growth_rate"`
-	CumulativeNetUserGrowth      int64   `json:"cumulative_net_user_growth"`
+	NullableScores               map[string]*float64 `json:"nullable_scores,omitempty"`
+	Date                         string              `json:"dt"`
+	AveragePriceSensitivityScore float64             `json:"average_price_sensitivity_score"`
+	AverageD1PriceScore          float64             `json:"average_d1_price_score"`
+	AverageD2CouponScore         float64             `json:"average_d2_coupon_score"`
+	AverageD3TimeScore           float64             `json:"average_d3_time_score"`
+	TotalOrderCount              int64               `json:"total_order_count"`
+	CalculatedUserCount          int64               `json:"calculated_user_count"`
+	DailyNetUserGrowth           int64               `json:"daily_net_user_growth"`
+	DailyUserGrowthRate          float64             `json:"daily_user_growth_rate"`
+	CumulativeNetUserGrowth      int64               `json:"cumulative_net_user_growth"`
 }
 
 type ReportAnalyticsDistribution struct {
@@ -214,14 +215,20 @@ type ReportAnalyticsDistribution struct {
 
 // ReportAnalyticsResult 是固定价敏报表按时间范围聚合后的指标与图表数据。
 type ReportAnalyticsResult struct {
-	Range        string                        `json:"range"`
-	StartDate    string                        `json:"start_date"`
-	EndDate      string                        `json:"end_date"`
-	Cached       bool                          `json:"cached"`
-	Summary      ReportAnalyticsSummary        `json:"summary"`
-	Trend        []ReportAnalyticsTrendPoint   `json:"trend"`
-	Distribution []ReportAnalyticsDistribution `json:"distribution"`
-	DurationMS   int64                         `json:"duration_ms"`
+	Profile        string                        `json:"profile,omitempty"`
+	DataDate       string                        `json:"data_date,omitempty"`
+	FetchedAt      string                        `json:"fetched_at,omitempty"`
+	QueryIDs       []string                      `json:"query_ids,omitempty"`
+	MissingDates   []string                      `json:"missing_dates,omitempty"`
+	AssignedByType map[string]int64              `json:"assigned_by_type,omitempty"`
+	Range          string                        `json:"range"`
+	StartDate      string                        `json:"start_date"`
+	EndDate        string                        `json:"end_date"`
+	Cached         bool                          `json:"cached"`
+	Summary        ReportAnalyticsSummary        `json:"summary"`
+	Trend          []ReportAnalyticsTrendPoint   `json:"trend"`
+	Distribution   []ReportAnalyticsDistribution `json:"distribution"`
+	DurationMS     int64                         `json:"duration_ms"`
 }
 
 // ReportDailyAnalytics 是每日 10 点逐日积累的价敏聚合快照。

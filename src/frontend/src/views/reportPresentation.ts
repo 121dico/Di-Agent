@@ -200,8 +200,8 @@ export function buildRobustTrend(values: number[], options: RobustTrendOptions =
   return { fittedValues, outlierIndexes };
 }
 
-const sensitivityLevelLabels: Record<string, string> = { HIGH: '高价敏', MEDIUM: '中价敏', LOW: '低价敏', UNKNOWN: '未知' };
-const sensitivityLevelOrder: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2, UNKNOWN: 3 };
+const sensitivityLevelLabels: Record<string, string> = { VERY_HIGH: '极高价敏', HIGH: '高价敏', MEDIUM_HIGH: '中高价敏', MEDIUM: '中价敏', MEDIUM_LOW: '中低价敏', LOW: '低价敏', VERY_LOW: '极低价敏', UNKNOWN: '未知' };
+const sensitivityLevelOrder: Record<string, number> = { VERY_HIGH: 0, HIGH: 1, MEDIUM_HIGH: 2, MEDIUM: 3, MEDIUM_LOW: 4, LOW: 5, VERY_LOW: 6, UNKNOWN: 7 };
 
 export function buildPriceSensitiveAnalyticsPresentation(analytics: ReportAnalyticsResult): PriceSensitiveAnalyticsPresentation {
   const trend = [...analytics.trend].sort((left, right) => left.dt.localeCompare(right.dt));
@@ -222,8 +222,18 @@ export function buildPriceSensitiveAnalyticsPresentation(analytics: ReportAnalyt
   const dailyChanges = dailyNetValues.slice(1);
   const averageDailyNet = analytics.summary.average_daily_net_user_growth
     ?? (dailyChanges.length ? dailyChanges.reduce((sum, value) => sum + value, 0) / dailyChanges.length : 0);
+  const scoreValue = (point: ReportAnalyticsResult['trend'][number], key: string, legacy: number) =>
+    point.nullable_scores ? (point.nullable_scores[key] ?? Number.NaN) : legacy;
+  const v12 = analytics.profile === 'price_sensitive_v1_2';
   return {
-    metrics: [
+    metrics: v12 ? [
+      { label: '总用户数', value: count(analytics.summary.total_user_count), suffix: '人' },
+      { label: '已有价敏分用户（含先验）', value: count(analytics.summary.calculated_user_count), suffix: '人' },
+      { label: '价敏赋分覆盖率', value: score(analytics.summary.calculated_user_share), suffix: '%' },
+      { label: '价敏均分', value: analytics.summary.calculated_user_count ? score(analytics.summary.average_price_sensitivity_score) : '—', suffix: '分' },
+      { label: '标签记录的180天订单数', value: count(analytics.summary.total_order_count), suffix: '单' },
+      { label: '先验赋分用户', value: count(analytics.assigned_by_type?.PRIOR ?? 0), suffix: '人' },
+    ] : [
       { label: '当前价敏用户', value: count(analytics.summary.calculated_user_count), suffix: '人' },
       { label: '本期累计净增', value: signedCount(cumulativeNet), suffix: '人' },
       { label: '最近一日净增', value: signedCount(latestDailyNet), suffix: '人' },
@@ -246,10 +256,10 @@ export function buildPriceSensitiveAnalyticsPresentation(analytics: ReportAnalyt
       { key: 'growthRate', label: '每日增长率', color: '#765BC4', values: growthRateValues },
     ],
     scoreSeries: [
-      { key: 'price', label: '价敏均分', color: '#2F6FDB', values: trend.map((point) => point.average_price_sensitivity_score) },
-      { key: 'd1', label: 'D1 价格分', color: '#15857A', values: trend.map((point) => point.average_d1_price_score) },
-      { key: 'd2', label: 'D2 优惠分', color: '#765BC4', values: trend.map((point) => point.average_d2_coupon_score) },
-      { key: 'd3', label: 'D3 时间分', color: '#D05C50', values: trend.map((point) => point.average_d3_time_score) },
+      { key: 'price', label: '价敏均分', color: '#2F6FDB', values: trend.map((point) => scoreValue(point, 'price', point.average_price_sensitivity_score)) },
+      { key: 'd1', label: v12 ? '价格分' : 'D1 价格分', color: '#15857A', values: trend.map((point) => scoreValue(point, 'd1', point.average_d1_price_score)) },
+      { key: 'd2', label: v12 ? '用券分' : 'D2 优惠分', color: '#765BC4', values: trend.map((point) => scoreValue(point, 'd2', point.average_d2_coupon_score)) },
+      { key: 'd3', label: v12 ? '时间换价格分' : 'D3 时间分', color: '#D05C50', values: trend.map((point) => scoreValue(point, 'd3', point.average_d3_time_score)) },
     ],
     volumeSeries: [
       { key: 'users', label: '价敏用户数', color: '#2F6FDB', values: trend.map((point) => point.calculated_user_count) },

@@ -1,5 +1,8 @@
 import { get, post, put, getAuthHeaders } from './client';
-import type { ReportAnalyticsRange, ReportAnalyticsResult, ReportDataSource, ReportDataSourceContract, ReportDefinition, ReportPageResult, ReportRun } from '@/types/report';
+import type { ReportAnalyticsRange, ReportAnalyticsResult, ReportDataSource, ReportDataSourceContract, ReportDefinition, ReportPageResult, ReportRun, ReportTemplate } from '@/types/report';
+
+export const listReportTemplates = () => get<ReportTemplate[]>('/api/reports/templates');
+export const applyReportTemplate = (templateId: string, sourceId: string) => post<ReportDefinition>('/api/reports/templates/apply', { template_id: templateId, source_id: sourceId });
 
 export const listReportSources = () => get<ReportDataSource[] | null>('/api/reports/sources').then((rows) => rows ?? []);
 export const createReportSource = (body: Omit<ReportDataSource, 'id' | 'created_at'>) => post<ReportDataSource>('/api/reports/sources', body);

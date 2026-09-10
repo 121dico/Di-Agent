@@ -177,6 +177,8 @@ func (h *ReportHandler) respond(c *gin.Context, data any, err error) {
 }
 func (h *ReportHandler) writeError(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, service.ErrReportAggregateCapacity):
+		middleware.ErrorResponse(c, http.StatusUnprocessableEntity, 42260, service.ErrReportAggregateCapacity.Error())
 	case errors.Is(err, service.ErrReportForbidden):
 		middleware.ErrorResponse(c, http.StatusForbidden, 40360, service.ErrReportForbidden.Error())
 	case errors.Is(err, service.ErrReportCredentialsMissing):

@@ -12,6 +12,7 @@ import (
 
 	"github.com/121dico/Di-Agent/src/backend/internal/model"
 	"github.com/google/uuid"
+	"golang.org/x/sync/singleflight"
 )
 
 var (
@@ -48,11 +49,12 @@ type ReportAnalyticsOptions struct {
 
 // ReportRunner 将数据查询、快照和运行状态隐藏在一个稳定接口后。
 type ReportRunner struct {
-	catalog   ReportCatalog
-	runs      ReportRunStore
-	connector ReportConnector
-	analytics ReportAnalyticsStore
-	now       func() time.Time
+	templateQueries singleflight.Group
+	catalog         ReportCatalog
+	runs            ReportRunStore
+	connector       ReportConnector
+	analytics       ReportAnalyticsStore
+	now             func() time.Time
 }
 
 func NewReportRunner(catalog ReportCatalog, runs ReportRunStore, connector ReportConnector, analytics ...ReportAnalyticsStore) *ReportRunner {
@@ -94,7 +96,11 @@ func (r *ReportRunner) QueryPage(ctx context.Context, reportID string, page, pag
 		return nil, err
 	}
 	var query map[string]any
-	if err := json.Unmarshal(report.QueryJSON, &query); err != nil {
+	executionQuery, err := reportExecutionQuery(report, r.now())
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(executionQuery, &query); err != nil {
 		return nil, fmt.Errorf("parse report query: %w", err)
 	}
 	query["needPagination"] = true
@@ -133,7 +139,11 @@ func (r *ReportRunner) QuerySearch(ctx context.Context, reportID, rawDUID string
 		return nil, err
 	}
 	var query map[string]any
-	if err := json.Unmarshal(report.QueryJSON, &query); err != nil {
+	executionQuery, err := reportExecutionQuery(report, r.now())
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(executionQuery, &query); err != nil {
 		return nil, fmt.Errorf("parse report query: %w", err)
 	}
 	conditions, _ := query["conditionList"].([]any)
@@ -199,14 +209,14 @@ func (r *ReportRunner) QueryAnalytics(ctx context.Context, reportID, rangeKey, e
 		return nil, fmt.Errorf("%w: 不支持的时间范围", ErrReportInvalid)
 	}
 	if strings.TrimSpace(endDate) == "" {
-		endDate = r.now().AddDate(0, 0, -1).Format("2006-01-02")
+		endDate = reportBusinessYesterday(r.now())
 	}
 	end, err := time.Parse("2006-01-02", endDate)
 	if err != nil {
 		return nil, fmt.Errorf("%w: 数据分区日期无效", ErrReportInvalid)
 	}
 	startDate := end.AddDate(0, 0, -(days - 1)).Format("2006-01-02")
-	_, source, err := r.resolve(ctx, reportID)
+	report, source, err := r.resolve(ctx, reportID)
 	if err != nil {
 		return nil, err
 	}
@@ -214,6 +224,9 @@ func (r *ReportRunner) QueryAnalytics(ctx context.Context, reportID, rangeKey, e
 	var option ReportAnalyticsOptions
 	if len(options) > 0 {
 		option = options[0]
+	}
+	if isV12Report(report) {
+		return r.queryV12Analytics(ctx, report, source, base, option)
 	}
 	cities := normalizeAnalyticsCities(option.Cities)
 	if len(cities) > 50 {
@@ -501,7 +514,19 @@ func (r *ReportRunner) Run(ctx context.Context, reportID, trigger, requestedBy s
 	if err := r.runs.StartReportRun(ctx, run); err != nil {
 		return nil, fmt.Errorf("start report run: %w", err)
 	}
-	result, queryErr := r.connector.Query(ctx, *source, report.QueryJSON)
+	executionQuery, queryErr := reportExecutionQuery(report, r.now())
+	var result model.ReportQueryResult
+	if queryErr == nil {
+		result, queryErr = r.connector.Query(ctx, *source, executionQuery)
+	}
+	if queryErr == nil && isV12Report(report) {
+		if cache, ok := r.catalog.(reportTemplateAnalyticsStore); ok {
+			queryErr = cache.InvalidateTemplateAnalytics(ctx, reportID)
+		}
+		if queryErr == nil {
+			_, queryErr = r.QueryAnalytics(ctx, reportID, "31d", reportBusinessYesterday(r.now()), ReportAnalyticsOptions{ForceRefresh: true})
+		}
+	}
 	finished := r.now()
 	run.FinishedAt = &finished
 	if queryErr != nil {
@@ -530,7 +555,7 @@ func (r *ReportRunner) Run(ctx context.Context, reportID, trigger, requestedBy s
 		} `json:"analytics"`
 	}
 	_ = json.Unmarshal(report.VisualizationJSON, &visualization)
-	if r.analytics != nil && visualization.Analytics.Enabled && result.Partition != "" {
+	if !isV12Report(report) && r.analytics != nil && visualization.Analytics.Enabled && result.Partition != "" {
 		analyticsRange := "1d"
 		if trigger == "manual" {
 			// 手动运行用于接住上游历史回刷；定时任务仍只积累最新日点。

@@ -1,0 +1,132 @@
+package service
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
+)
+
+var ErrReportAggregateCapacity = errors.New("上游全量去重统计超出资源限制，请缩小城市或日期范围；全量报表需要上游预聚合支持")
+
+type reportTemplateAnalyticsStore interface {
+	GetTemplateAnalytics(context.Context, string, time.Time) (*model.ReportAnalyticsResult, error)
+	SaveTemplateAnalytics(context.Context, string, string, *model.ReportAnalyticsResult, time.Time) error
+	InvalidateTemplateAnalytics(context.Context, string) error
+}
+
+type reportContractReader interface {
+	GetReportDataSourceContract(context.Context, string) (*model.ReportDataSourceContract, error)
+}
+
+// queryV12Analytics 从真实标签快照聚合，不下载用户明细，不把 dt 当作订单日期。
+func (r *ReportRunner) queryV12Analytics(ctx context.Context, report *model.ReportDefinition, source *model.ReportDataSource, base *model.ReportAnalyticsResult, option ReportAnalyticsOptions) (*model.ReportAnalyticsResult, error) {
+	reader, ok := r.catalog.(reportContractReader)
+	if !ok {
+		return nil, fmt.Errorf("%w: 缺少数据源字段契约", ErrReportInvalid)
+	}
+	contract, err := reader.GetReportDataSourceContract(ctx, source.ID)
+	if err != nil {
+		return nil, err
+	}
+	if contract == nil || !contract.Enabled || !source.Enabled {
+		return nil, ErrReportSourceMissing
+	}
+	var template ReportTemplate
+	if err := json.Unmarshal(reportTemplateOne, &template); err != nil {
+		return nil, err
+	}
+	p := template.Profiles["price_sensitive_v1_2"]
+	if err := validateTemplateProfile(contract, p); err != nil {
+		return nil, err
+	}
+	cities := normalizeAnalyticsCities(option.Cities)
+	if len(cities) > 50 {
+		return nil, fmt.Errorf("%w: 城市筛选最多支持50项", ErrReportInvalid)
+	}
+	sort.Strings(cities)
+	keyRaw, _ := json.Marshal([]any{"v12-analytics-1", report.ID, report.UpdatedAt, source.UpdatedAt, report.QueryJSON, report.VisualizationJSON, base.Range, base.StartDate, base.EndDate, cities})
+	digest := sha256.Sum256(keyRaw)
+	key := hex.EncodeToString(digest[:])
+	cache, hasCache := r.catalog.(reportTemplateAnalyticsStore)
+	if hasCache && !option.ForceRefresh {
+		cached, err := cache.GetTemplateAnalytics(ctx, key, r.now())
+		if err != nil {
+			return nil, err
+		}
+		if cached != nil {
+			cached.Cached = true
+			return cached, nil
+		}
+	}
+	// 合并同筛选并发读取，避免多个页面同时扫描相同的亿级源表。
+	value, err, _ := r.templateQueries.Do(key, func() (any, error) {
+		conditions := []map[string]any{{"name": "dt", "operatorEnum": "GEQ", "value": base.StartDate}, {"name": "dt", "operatorEnum": "LEQ", "value": base.EndDate}}
+		if len(cities) > 0 {
+			conditions = append(conditions, map[string]any{"name": p.City, "operatorEnum": "IN", "value": cities})
+		}
+		queries := []map[string]any{
+			{"fieldList": []map[string]any{analyticsField("dt", "", ""), analyticsField("duid", "total_user_count", "COUNT_DISTINCT"), analyticsField(p.Orders, "total_order_count", "SUM")},
+				"conditionList": conditions, "groupList": []string{"dt"}, "orderBy": "dt", "needPagination": false},
+		}
+		fields := []map[string]any{analyticsField("dt", "", ""), analyticsField(p.Level, "level", ""), analyticsField(p.Type, "score_type", ""), analyticsField("duid", "user_count", "COUNT_DISTINCT")}
+		for _, metric := range []struct{ field, key string }{{p.Score, "price"}, {p.Price, "d1"}, {p.Coupon, "d2"}, {p.Time, "d3"}} {
+			fields = append(fields, analyticsField(metric.field, metric.key+"_avg", "AVG"), analyticsField(metric.field, metric.key+"_n", "COUNT"))
+		}
+		queries = append(queries, map[string]any{"fieldList": fields, "conditionList": append(append([]map[string]any{}, conditions...), map[string]any{"name": p.Score, "operatorEnum": "NOT_NULL"}),
+			"groupList": []string{"dt", p.Level, p.Type}, "orderBy": "dt", "needPagination": false})
+		results := make([]model.ReportQueryResult, 0, len(queries))
+		for _, query := range queries {
+			raw, err := json.Marshal(query)
+			if err != nil {
+				return nil, err
+			}
+			available := make(map[string]model.ReportFieldContract)
+			for _, field := range contract.Fields {
+				available[field.Name] = field
+			}
+			var decoded map[string]any
+			if err := json.Unmarshal(raw, &decoded); err != nil {
+				return nil, err
+			}
+			if err := validateQueryContractLevel(decoded, available); err != nil {
+				return nil, err
+			}
+			result, err := r.connector.Query(ctx, *source, raw)
+			if err != nil {
+				if strings.Contains(err.Error(), "MEMORY_LIMIT_EXCEEDED") || strings.Contains(err.Error(), "Memory limit") {
+					return nil, ErrReportAggregateCapacity
+				}
+				return nil, err
+			}
+			results = append(results, result)
+		}
+		result := assembleV12Analytics(base, results, r.now())
+		if hasCache {
+			if err := cache.SaveTemplateAnalytics(ctx, key, report.ID, result, r.now().Add(10*time.Minute)); err != nil {
+				return nil, err
+			}
+		}
+		return result, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	// 避免并发调用者共享可变切片/指针。
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var result model.ReportAnalyticsResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}

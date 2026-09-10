@@ -1,0 +1,31 @@
+{
+  "id": "template-1",
+  "name": "模板一",
+  "version": "1.0.0",
+  "renderer": "report-workspace-v1",
+  "description": "浅色业务报表：指标概览、增量柱图、趋势曲线、等级环图、地域筛选和权限化明细。选择已适配数据源即可复现。",
+  "profiles": {
+    "price_sensitive": {
+      "name": "价敏用户报表",
+      "score": "price_sensitivity_score", "level": "price_sensitivity_level",
+      "price": "d1_price_score", "coupon": "d2_coupon_score", "time": "d3_time_score",
+      "orders": "d1_recent_order_count", "city": "user_city_name", "type": "price_sensitivity_type"
+    },
+    "price_sensitive_v1_2": {
+      "name": "价敏用户报表 V1.2",
+      "score": "ps_score", "level": "ps_level",
+      "price": "price_score", "coupon": "coupon_score", "time": "time_score",
+      "orders": "order_cnt_180d", "city": "city_name", "type": "ps_type"
+    }
+  },
+  "presentation": {
+    "theme": "light",
+    "palette": ["#2F6FDB", "#15857A", "#765BC4", "#D18A24", "#D05C50"],
+    "sections": ["overview", "increments", "cumulative", "growth-rate", "scores", "distribution", "search", "detail", "history"],
+    "default_range": "31d",
+    "ranges": ["7d", "31d", "365d"],
+    "hidden_score_series": ["d1", "d2", "d3"],
+    "motion": "inherit-report-workspace-v1",
+    "responsive": "inherit-report-workspace-v1"
+  }
+}

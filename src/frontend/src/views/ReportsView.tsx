@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Button, Empty, Form, Input, Modal, Select, Spin, Switch } from 'antd';
+import { Alert, Button, Empty, Form, Input, Modal, Select, Spin, Switch } from 'antd';
 import {
   ArrowLeftOutlined,
   BarChartOutlined,
@@ -38,6 +38,7 @@ import type { ReportFieldGroup, ReportSort } from './reportPresentation';
 import { buildReportAccessPolicy } from './reportAccess';
 import { filterReportSources } from './reportSourceSearch';
 import { PersonalReportsLibrary } from '@/components/personal-report/PersonalReportsLibrary';
+import { ReportTemplateModal } from '@/components/report/ReportTemplateModal';
 import { ChinaRegionPicker, expandChinaRegionSelection, summarizeChinaRegionSelection } from '@/components/report/ChinaRegionPicker';
 import styles from './ReportsView.module.css';
 
@@ -63,7 +64,7 @@ interface ReportForm { name: string; description?: string; data_source_id: strin
 
 const statusLabel: Record<ReportRun['status'], string> = { pending: '运行中', succeeded: '已完成', failed: '失败' };
 const chartColors = ['#2F6FDB', '#15857A', '#765BC4', '#D18A24', '#D05C50'];
-const sensitivityColors: Record<string, string> = { 高价敏: '#D75A50', 中价敏: '#D79A2B', 低价敏: '#4B78D1', 未知: '#8B8E95' };
+const sensitivityColors: Record<string, string> = { 极高价敏: '#A63437', 高价敏: '#D75A50', 中高价敏: '#DB843C', 中价敏: '#D79A2B', 中低价敏: '#259F9A', 低价敏: '#4B78D1', 极低价敏: '#7B9ECA', 未知: '#8B8E95' };
 const rangeOptions: Array<{ value: ReportAnalyticsRange; label: string }> = [
   { value: '7d', label: '近 7 天' },
   { value: '31d', label: '近 31 天' },
@@ -161,9 +162,14 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
     x: count === 1 ? width / 2 : padding.left + (index * (width - padding.left - padding.right)) / Math.max(1, count - 1),
     y: chartHeight - padding.bottom - ((value - min) / range) * (chartHeight - padding.top - padding.bottom),
   });
-  const pathFor = (line: number[]) => {
-    const points = line.map((value, index) => point(value, index, line.length));
-    return buildSmoothChartPath(points, width, padding.left);
+  const pathFor = (line: number[], raw: number[]) => {
+    const segments: Array<Array<{ x: number; y: number }>> = [[]];
+    line.forEach((value, index) => {
+      const gap = index > 0 && Date.parse(labels[index] ?? '') - Date.parse(labels[index - 1] ?? '') > 86400000;
+      if (gap || !Number.isFinite(raw[index])) segments.push([]);
+      if (Number.isFinite(raw[index]) && Number.isFinite(value)) segments[segments.length - 1]!.push(point(value, index, line.length));
+    });
+    return segments.map((points) => buildSmoothChartPath(points, width, padding.left)).join(' ');
   };
   const hasValues = series.length > 0 && values.length > 0;
   const xFor = (index: number) => labels.length <= 1
@@ -218,12 +224,13 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
         {xTicks.map((index) => <text key={index} x={xFor(index)} y={chartHeight - 13} textAnchor={index === 0 ? 'start' : index === labels.length - 1 ? 'end' : 'middle'} className={styles.axisLabel}><title>{labels[index]}</title>{formatChartDateTick(labels[index] ?? '')}</text>)}
         {hasValues && trendModels.map((item, index) => {
           const color = item.color ?? chartColors[index % chartColors.length];
-          const path = pathFor(item.trend.fittedValues);
+          const path = pathFor(item.trend.fittedValues, item.values);
           const outliers = new Set(item.trend.outlierIndexes);
           return (
             <g key={item.label}>
               {path && <path d={path} fill="none" stroke={color} className={`${styles.curve} ${styles.robustTrendCurve}`} style={{ animationDelay: `${index * 70}ms` }} />}
               {item.values.map((value, pointIndex) => {
+                if (!Number.isFinite(value)) return null;
                 const rawPoint = point(value, pointIndex, item.values.length);
                 const isOutlier = outliers.has(pointIndex);
                 const current = { ...rawPoint, y: isOutlier ? Math.max(padding.top, Math.min(chartHeight - padding.bottom, rawPoint.y)) : rawPoint.y };
@@ -386,6 +393,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
   const [sourceSaving, setSourceSaving] = useState(false);
   const [sourceCatalogQuery, setSourceCatalogQuery] = useState('');
   const [reportOpen, setReportOpen] = useState(false);
+  const [templateOpen, setTemplateOpen] = useState(false);
   const [editingReportId, setEditingReportId] = useState('');
   const [searchDUID, setSearchDUID] = useState('');
   const [searchResult, setSearchResult] = useState<ReportPageResult | null>(null);
@@ -402,6 +410,8 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
   const [appliedDashboardRange, setAppliedDashboardRange] = useState<ReportAnalyticsRange>('31d');
   const [analytics, setAnalytics] = useState<ReportAnalyticsResult | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState('');
+  const detailRequest = useRef(0);
   const [draftCities, setDraftCities] = useState<string[]>([]);
   const [appliedCities, setAppliedCities] = useState<string[]>([]);
   const [draftProvinceCodes, setDraftProvinceCodes] = useState<string[]>([]);
@@ -434,24 +444,30 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
   useEffect(() => { void loadCatalog(); }, [loadCatalog]);
   useEffect(() => {
     if (!selectedId || !access.canViewRunHistory) { setRuns([]); return; }
-    void listReportRuns(selectedId).then(setRuns).catch(() => {
-      if (visibleRef.current) message.error('加载运行历史失败');
+    let active = true;
+    setRuns([]);
+    void listReportRuns(selectedId).then((result) => { if (active) setRuns(result); }).catch(() => {
+      if (active && visibleRef.current) message.error('加载运行历史失败');
     });
+    return () => { active = false; };
   }, [selectedId, access.canViewRunHistory]);
   const loadDetailPage = useCallback(async (reportId: string, page: number, size: number, notifyError = true) => {
+    const request = ++detailRequest.current;
     setDetailLoading(true);
     try {
       const result = await queryReportPage(reportId, page, size);
+      if (request !== detailRequest.current) return;
       setDetailResult(result);
       setDetailPage(result.pagination.page || page);
     } catch {
-      if (notifyError && visibleRef.current) message.error('读取全量明细失败，已保留最近快照');
+      if (request === detailRequest.current && notifyError && visibleRef.current) message.error('读取全量明细失败，已保留最近快照');
     } finally {
-      setDetailLoading(false);
+      if (request === detailRequest.current) setDetailLoading(false);
     }
   }, []);
   useEffect(() => {
     setTableQuery('');
+    detailRequest.current += 1;
     setTableSort(null);
     setDetailResult(null);
     setDetailPage(1);
@@ -473,14 +489,17 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
   }, [selectedId, reports, loadDetailPage, access.canBrowseFullDetail]);
 
   const selected = reports.find((item) => item.id === selectedId);
+  const isV12 = selected?.visualization.template?.profile === 'price_sensitive_v1_2';
   const analyticsEnabled = selected?.visualization.analytics?.enabled === true;
   useEffect(() => {
     if (!selectedId || !analyticsEnabled) return;
     let active = true;
     setAnalyticsLoading(true);
+    setAnalytics(null);
+    setAnalyticsError('');
     void queryReportAnalytics(selectedId, appliedDashboardRange, undefined, expandedAppliedCities)
       .then((result) => { if (active) setAnalytics(result); })
-      .catch(() => { if (active) { setAnalytics(null); if (visibleRef.current) message.error('读取价敏趋势失败'); } })
+      .catch((error: unknown) => { if (active) { setAnalytics(null); setAnalyticsError(error instanceof Error ? error.message : '读取价敏趋势失败'); } })
       .finally(() => { if (active) setAnalyticsLoading(false); });
     return () => { active = false; };
   }, [selectedId, analyticsEnabled, appliedDashboardRange, expandedAppliedCities]);
@@ -496,7 +515,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
   const scoreSeries = analyticsPresentation?.scoreSeries ?? [];
   const visibleScoreSeries = scoreSeries.filter((item) => !hiddenBusinessSeries.has(item.key));
   const businessAxisLabels = analyticsPresentation?.labels ?? [];
-  const chartDistribution = analyticsPresentation?.distribution ?? presentation.distribution;
+  const chartDistribution = analyticsEnabled ? analyticsPresentation?.distribution ?? [] : presentation.distribution;
   const detailPresentation = useMemo(() => buildReportPresentation(detailRows, selected?.visualization ?? {}), [detailRows, selected]);
   const orderedDetailColumns = useMemo(() => {
     const columns = detailPresentation.columns;
@@ -507,8 +526,8 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
   const tablePageCount = detailResult?.pagination.page_count || 1;
   const totalRows = detailResult?.pagination.total || snapshot.length;
   const sharedUserCount = analytics?.summary.calculated_user_count ?? 0;
-  const activePartition = detailResult?.source_partition || latest?.source_partition || analytics?.end_date || '—';
-  const latestTime = latest
+  const activePartition = analytics?.data_date || detailResult?.source_partition || latest?.source_partition || analytics?.end_date || '—';
+  const latestTime = analytics?.fetched_at ? new Date(analytics.fetched_at).toLocaleString('zh-CN', { hour12: false }) : latest
     ? new Date(latest.finished_at ?? latest.started_at).toLocaleString('zh-CN', { hour12: false })
     : analytics?.end_date ? `${analytics.end_date} 10:00` : '等待首次生成';
   const appliedCityLabel = summarizeChinaRegionSelection(appliedCities, appliedProvinceCodes);
@@ -754,6 +773,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
           <div><h1>数据报表</h1><p>固定业务口径 · 每日 10:00 更新 · 可追溯数据快照</p></div>
         </div>
         <div className={styles.actions}>
+          {access.canManageReports && <Button onClick={() => setTemplateOpen(true)}>套用模板</Button>}
           {access.canManageReports && <><Button icon={<CloudServerOutlined />} onClick={openSourceManager}>数据源</Button><Button icon={<PlusOutlined />} onClick={openCreateReport}>新建报表</Button><Button icon={<EditOutlined />} disabled={!selected} onClick={openEditReport}>编辑当前报表</Button><Button type="primary" icon={<PlayCircleOutlined />} loading={running} disabled={!selected} onClick={() => void handleRun()}>立即生成</Button></>}
         </div>
       </header>
@@ -779,10 +799,13 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
                 <h2>{selected.name}</h2>
                 <p>{selected.description || '基于固定数据接口生成的业务报表'}</p>
                 <div className={styles.summaryMeta}>
-                  <span className={latest || detailResult ? styles.metaReady : styles.metaPending}>{latest ? '快照已就绪' : detailResult ? '实时明细已加载' : '等待数据加载'}</span>
+                  <span className={analytics || latest || detailResult ? styles.metaReady : styles.metaPending}>{analytics ? (analytics.cached ? '聚合缓存 · 最多10分钟' : '真实聚合已就绪') : latest ? '快照已就绪' : detailResult ? '明细已加载' : '等待数据加载'}</span>
                   <span>数据分区 {activePartition}</span>
                   <span>{access.canBrowseFullDetail ? `${totalRows.toLocaleString('zh-CN')} 行数据` : `${sharedUserCount.toLocaleString('zh-CN')} 位已计算用户`}</span>
                   <span>更新于 {latestTime}</span>
+                  {selected.visualization.template && <span>{selected.visualization.template.id === 'template-1' ? '模板一' : selected.visualization.template.id} · v{selected.visualization.template.version}</span>}
+                  {isV12 && <span>横坐标：标签快照日（dt），非订单发生日</span>}
+                  {!!analytics?.missing_dates?.length && <span>范围内 {analytics.missing_dates.length} 天无快照；未补零或生成虚假点</span>}
                 </div>
               </div>
               {access.canBrowseFullDetail && latest && <Button icon={<DownloadOutlined />} onClick={() => void downloadReportRun(selected.id, latest.id)}>下载明细</Button>}
@@ -841,6 +864,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
             </section>
 
             <section className={`${styles.summaryBlock} ${styles.overviewBlock}`} id="report-overview">
+              {analyticsError && <Alert type="warning" showIcon message="统计数据暂未生成" description={analyticsError} />}
               <div className={styles.blockHead}><div><span>01</span><strong>指标概览</strong></div><small>全量固定业务口径</small></div>
               {visibleMetrics.length > 0 ? <div className={styles.metrics}>{visibleMetrics.map((metric) => <article key={metric.label} className={styles.metricCard} data-direction={metric.value.startsWith('+') ? 'up' : metric.value.startsWith('-') ? 'down' : 'flat'}><span>{metric.label}</span><strong>{metric.value}<small>{metric.suffix}</small></strong><i /></article>)}</div> : <div className={styles.emptyCard}><Empty description="暂无可用指标数据" /></div>}
             </section>
@@ -858,16 +882,16 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
                   <div className={styles.volumeTrendGrid}>
                     <section className={styles.volumeTrendPanel}>
                       <header><span><i style={{ background: '#15857A' }} />累计净增</span><small>当前价敏用户相对区间首日的净变化</small></header>
-                      <SmoothChart labels={businessAxisLabels} series={cumulativeSeries} trendRule="nondecreasing" height={270} pendingText="暂无连续快照，无法计算累计净增" />
+                      <SmoothChart labels={businessAxisLabels} series={cumulativeSeries} trendRule={isV12 ? 'default' : 'nondecreasing'} height={270} pendingText="暂无连续快照，无法计算累计净增" />
                     </section>
                     <section className={styles.volumeTrendPanel}>
                       <header><span><i style={{ background: '#765BC4' }} />每日增长率</span><small>当日净增 ÷ 前一观察日价敏用户</small></header>
-                      <SmoothChart labels={businessAxisLabels} series={growthRateSeries} trendRule="nonnegative" height={270} pendingText="暂无连续快照，无法计算增长率" />
+                      <SmoothChart labels={businessAxisLabels} series={growthRateSeries} trendRule={isV12 ? 'default' : 'nonnegative'} height={270} pendingText="暂无连续快照，无法计算增长率" />
                     </section>
                   </div>
                 </div>
                 <div className={`${styles.card} ${styles.scoreCard}`}>
-                  <div className={styles.cardTitle}><div><i />180 天窗口得分参考</div><div className={styles.legend}>{scoreSeries.map((item, index) => {
+                  <div className={styles.cardTitle}><div><i />{isV12 ? '价敏标签每日得分' : '180 天窗口得分参考'}</div><div className={styles.legend}>{scoreSeries.map((item, index) => {
                     return <button type="button" key={item.key} aria-pressed={!hiddenBusinessSeries.has(item.key)} className={hiddenBusinessSeries.has(item.key) ? styles.legendMuted : ''} onClick={() => toggleBusinessSeries(item.key, scoreSeries.map((series) => series.key))}><i style={{ background: item.color ?? chartColors[index % chartColors.length] }} />{item.label}</button>;
                   })}</div></div>
                   <SmoothChart labels={businessAxisLabels} series={visibleScoreSeries} bounds={[0, 100]} height={300} pendingText="当前筛选范围暂无可用的价敏得分趋势" />
@@ -996,6 +1020,12 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
       <Modal title={editingReportId ? '编辑固定报表' : '新增固定报表'} width={720} open={reportOpen} onCancel={() => { setReportOpen(false); setEditingReportId(''); }} onOk={() => void saveReport()} okText="保存">
         <Form form={reportForm} layout="vertical" initialValues={{ query: defaultQuery, visualization: defaultVisualization, enabled: true }}><Form.Item name="name" label="报表名称" rules={[{ required: true }]}><Input /></Form.Item><Form.Item name="description" label="说明"><Input /></Form.Item><Form.Item name="data_source_id" label="数据源" rules={[{ required: true }]}><Select options={sources.map((source) => ({ value: source.id, label: `${source.name} · ${source.api_name}` }))} /></Form.Item><Form.Item name="query" label="查询配置 JSON" rules={[{ required: true }]}><Input.TextArea rows={8} /></Form.Item><Form.Item name="visualization" label="图表配置 JSON" rules={[{ required: true }]}><Input.TextArea rows={8} /></Form.Item><Form.Item name="enabled" label="每天 10:00 自动运行" valuePropName="checked"><Switch /></Form.Item></Form>
       </Modal>
+      {access.canManageReports && <ReportTemplateModal open={templateOpen} sources={sources} onClose={() => setTemplateOpen(false)}
+        onApplied={(report) => {
+          setReports((current) => [report, ...current.filter((item) => item.id !== report.id)]);
+          setSelectedId(report.id);
+          message.success('已套用模板，正在读取真实报表数据');
+        }} />}
     </main>
   );
 };

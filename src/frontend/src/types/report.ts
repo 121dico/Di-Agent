@@ -50,6 +50,7 @@ export interface ReportDataSourceContract {
 export interface ReportMetricConfig { field: string; label: string; suffix?: string }
 export interface ReportSeriesConfig { field: string; label: string; color?: string }
 export interface ReportVisualization {
+  template?: { id: string; version: string; renderer: string; profile: string; partition_mode: string };
   metrics?: ReportMetricConfig[];
   chart?: { xField: string; series: ReportSeriesConfig[] };
   detail?: { defaultGroup?: 'all' | 'd1' | 'd2' | 'd3' | 'd4' | 'result' };
@@ -59,6 +60,7 @@ export interface ReportVisualization {
 export type ReportAnalyticsRange = '7d' | '30d' | '31d' | '365d';
 
 export interface ReportAnalyticsTrendPoint {
+  nullable_scores?: Record<string, number | null>;
   dt: string;
   average_price_sensitivity_score: number;
   average_d1_price_score: number;
@@ -72,6 +74,12 @@ export interface ReportAnalyticsTrendPoint {
 }
 
 export interface ReportAnalyticsResult {
+  profile?: string;
+  data_date?: string;
+  fetched_at?: string;
+  query_ids?: string[];
+  missing_dates?: string[];
+  assigned_by_type?: Record<string, number>;
   range: ReportAnalyticsRange;
   start_date: string;
   end_date: string;
@@ -105,6 +113,15 @@ export interface ReportDefinition {
   visualization: ReportVisualization;
   enabled: boolean;
   created_at: string;
+}
+
+export interface ReportTemplate {
+  id: string;
+  name: string;
+  version: string;
+  renderer: string;
+  description: string;
+  profiles: Record<string, { name: string }>;
 }
 
 export interface ReportRun {
