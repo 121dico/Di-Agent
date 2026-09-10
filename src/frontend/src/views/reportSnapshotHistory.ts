@@ -17,7 +17,8 @@ export async function loadSnapshotHistory(
   if (!end) throw new Error('当前筛选下没有可用的 dt 分区');
   const start = range === 'all' ? available[0]! : new Date(Date.parse(`${end}T00:00:00Z`) - (Number.parseInt(range, 10) - 1) * 86400000).toISOString().slice(0, 10);
   const dates = available.filter((date) => date >= start);
-  const retainedPoints = retained?.trend.filter((point) => dates.includes(point.dt)) ?? [];
+  // A withdrawn latest partition invalidates its overview as well as its point.
+  const retainedPoints = retained?.data_date && dates.includes(retained.data_date) ? retained.trend.filter((point) => dates.includes(point.dt)) : [];
   const retainedDates = new Set(retainedPoints.map((point) => point.dt));
   const results: ReportAnalyticsResult[] = retained && retainedPoints.length ? [{...retained, trend: retainedPoints}] : [];
   const failed: string[] = [];
