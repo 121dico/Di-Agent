@@ -7,7 +7,7 @@ import local from './ReportCohortSections.module.css';
 
 export interface SnapshotSeries { key: string; label: string; color: string; values: number[] }
 export type SnapshotChartRenderer = (labels: string[], series: SnapshotSeries[]) => ReactNode;
-const colors = ['#A63437', '#D75A50', '#DB843C', '#D79A2B', '#259F9A', '#4B78D1', '#7B9ECA', '#8B8E95'];
+const colors: Record<string, string> = { 极高价敏: '#A63437', 高价敏: '#D75A50', 中高价敏: '#DB843C', 中价敏: '#D79A2B', 中低价敏: '#259F9A', 低价敏: '#4B78D1', 极低价敏: '#7B9ECA', 未赋分: '#8B8E95' };
 
 export function ReportSnapshotTrends({ analytics, renderChart }: { analytics: ReportAnalyticsResult | null; renderChart: SnapshotChartRenderer }) {
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
@@ -23,7 +23,7 @@ export function ReportSnapshotTrends({ analytics, renderChart }: { analytics: Re
   const distribution = (order: boolean): SnapshotSeries[] => {
     const field = order ? 'order_distribution' : 'distribution';
     const levels = presentSensitivityDistribution([...new Set(analytics?.trend.flatMap((point) => point[field]?.map((item) => item.level) ?? []))].map((level) => ({ level, user_count: 0 })));
-    return levels.map((level, index) => ({ key: `${order ? 'order' : 'all'}-${level.label}`, label: level.label, color: colors[index % colors.length] ?? '#8B8E95', values: labels.map((date) => {
+    return levels.map((level) => ({ key: `${order ? 'order' : 'all'}-${level.label}`, label: level.label, color: colors[level.label] ?? '#8B8E95', values: labels.map((date) => {
       const point = points.get(date);
       if (!point) return NaN;
       return presentSensitivityDistribution(point[field] ?? []).find((item) => item.label === level.label)?.value ?? 0;

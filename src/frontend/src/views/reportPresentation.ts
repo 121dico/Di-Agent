@@ -200,7 +200,7 @@ export function buildRobustTrend(values: number[], options: RobustTrendOptions =
   return { fittedValues, outlierIndexes };
 }
 
-const sensitivityLevelLabels: Record<string, string> = { VERY_HIGH: '极高价敏', HIGH: '高价敏', MEDIUM_HIGH: '中高价敏', MEDIUM: '中价敏', MEDIUM_LOW: '中低价敏', LOW: '低价敏', VERY_LOW: '极低价敏', UNKNOWN: '未知' };
+const sensitivityLevelLabels: Record<string, string> = { VERY_HIGH: '极高价敏', HIGH: '高价敏', MEDIUM_HIGH: '中高价敏', MEDIUM: '中价敏', MEDIUM_LOW: '中低价敏', LOW: '低价敏', VERY_LOW: '极低价敏', UNKNOWN: '未知', UNASSIGNED: '未赋分' };
 const sensitivityLevelOrder: Record<string, number> = { VERY_HIGH: 0, HIGH: 1, MEDIUM_HIGH: 2, MEDIUM: 3, MEDIUM_LOW: 4, LOW: 5, VERY_LOW: 6, UNKNOWN: 7 };
 
 export function presentSensitivityDistribution(distribution: ReportAnalyticsResult['distribution']) {

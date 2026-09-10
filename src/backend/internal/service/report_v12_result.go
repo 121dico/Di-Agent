@@ -52,6 +52,9 @@ func assembleV12Analytics(base *model.ReportAnalyticsResult, results []model.Rep
 	}
 	for _, day := range days {
 		day.point.TotalUserCount = day.totalUsers
+		if unassigned := day.totalUsers - day.point.CalculatedUserCount; unassigned > 0 {
+			day.point.Distribution = append(day.point.Distribution, model.ReportAnalyticsDistribution{Level: "UNASSIGNED", UserCount: unassigned})
+		}
 		for level, count := range day.levels {
 			day.point.Distribution = append(day.point.Distribution, model.ReportAnalyticsDistribution{Level: level, UserCount: count})
 		}
