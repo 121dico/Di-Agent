@@ -71,7 +71,7 @@ export function ReportCohortSections({ analytics, loading, error, renderDistribu
     </section>
 
     <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-trend">
-      <div className={styles.blockHead}><div><span>03</span><strong>每日新增</strong></div><small>待接入日粒度数据 · 非零值</small></div>
+      <div className={styles.blockHead}><div><span>03</span><strong>每日新增</strong></div><small>日粒度数据未接入，不代表 0</small></div>
       <p className={local.note}>首次新增标签用户与当天有订单用户分别统计，两类人群可能重叠，不直接相加。当前 API 尚未提供所需日粒度指标。</p>
       <div className={local.pendingGrid}>{pendingMetrics.map((item) => <article className={styles.card} key={item.title}>
         <h3>{item.title}</h3><span className={local.pending}>待接入</span><p className={local.note}>{item.reason}</p>

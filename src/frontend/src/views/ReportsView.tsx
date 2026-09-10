@@ -912,7 +912,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
 
             </>}
             <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-search">
-              <div className={styles.blockHead}><div><span>03</span><strong>用户查询</strong></div><small>输入完整 DUID · 仅返回精确匹配结果</small></div>
+              <div className={styles.blockHead}><div><span>{isV12 ? '04' : '03'}</span><strong>用户查询</strong></div><small>输入完整 DUID · 仅返回精确匹配结果</small></div>
               <div className={`${styles.card} ${styles.searchCard}`}>
                 <div className={styles.userSearchBar}>
                   <Input prefix={<SearchOutlined />} value={searchDUID} onChange={(event) => setSearchDUID(event.target.value.replace(/\D/g, ''))} onPressEnter={() => void handleSearch()} placeholder="请输入完整 DUID，例如 17592356441816" />
@@ -926,7 +926,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
             </section>
 
             {access.canBrowseFullDetail && <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-detail">
-              <div className={styles.blockHead}><div><span>04</span><strong>数据明细</strong></div><small>全量数据 · 服务端分页 · 共 {totalRows.toLocaleString('zh-CN')} 行</small></div>
+              <div className={styles.blockHead}><div><span>{isV12 ? '05' : '04'}</span><strong>数据明细</strong></div><small>全量数据 · 服务端分页 · 共 {totalRows.toLocaleString('zh-CN')} 行</small></div>
               <div className={`${styles.card} ${styles.tableCard}`}>
                 {orderedDetailColumns.length > 20 && <div className={styles.fieldGroups}>{fieldGroups.map((group) => <button key={group.value} type="button" className={fieldGroup === group.value ? styles.fieldGroupActive : ''} onClick={() => setFieldGroup(group.value)}>{group.label}<span>{reportColumnsForGroup(orderedDetailColumns, group.value).length}</span></button>)}</div>}
                 <div className={styles.tableToolbar}>
@@ -939,7 +939,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
             </section>}
 
             {access.canViewRunHistory && <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-history">
-              <div className={styles.blockHead}><div><span>05</span><strong>运行记录</strong></div><small>手动生成与每日任务共用同一流程</small></div>
+              <div className={styles.blockHead}><div><span>{isV12 ? '06' : '05'}</span><strong>运行记录</strong></div><small>手动生成与每日任务共用同一流程</small></div>
               <div className={styles.card}>
                 <div className={styles.runList}>{runs.map((run) => <div key={run.id} className={styles.runRow}><span className={`${styles.statusDot} ${styles[run.status]}`} /><strong>{statusLabel[run.status]}</strong><span>{run.trigger === 'scheduled' ? '每日 10:00' : '手动生成'}</span><span>{new Date(run.started_at).toLocaleString('zh-CN', { hour12: false })}</span><span>{run.source_partition || run.error_message || '—'}</span></div>)}{runs.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有运行记录" />}</div>
               </div>
