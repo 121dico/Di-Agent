@@ -41,6 +41,7 @@ import { PersonalReportsLibrary } from '@/components/personal-report/PersonalRep
 import { ReportTemplateModal } from '@/components/report/ReportTemplateModal';
 import { ReportCohortSections } from '@/components/report/ReportCohortSections';
 import { loadSnapshotHistory, type SnapshotProgress } from './reportSnapshotHistory';
+import { formatReportAxisTick } from './reportAxisTick';
 import { ChinaRegionPicker, expandChinaRegionSelection, summarizeChinaRegionSelection } from '@/components/report/ChinaRegionPicker';
 import styles from './ReportsView.module.css';
 
@@ -223,7 +224,7 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
       <svg viewBox={`0 0 ${width} ${chartHeight}`} className={styles.chart} role="img" aria-label="报表趋势图">
         {yTicks.map((tick, index) => {
           const y = padding.top + index * ((chartHeight - padding.top - padding.bottom) / 4);
-          return <g key={tick}><line x1={padding.left} x2={width - padding.right} y1={y} y2={y} className={styles.gridLine} /><text x={padding.left - 12} y={y + 4} textAnchor="end" className={styles.axisLabel}>{formatChartValue(tick)}</text></g>;
+          return <g key={tick}><line x1={padding.left} x2={width - padding.right} y1={y} y2={y} className={styles.gridLine} /><text x={padding.left - 12} y={y + 4} textAnchor="end" className={styles.axisLabel}>{formatReportAxisTick(tick, range / 4)}</text></g>;
         })}
         {xTicks.map((index) => <text key={index} x={xFor(index)} y={chartHeight - 13} textAnchor={index === 0 ? 'start' : index === labels.length - 1 ? 'end' : 'middle'} className={styles.axisLabel}><title>{labels[index]}</title>{formatChartDateTick(labels[index] ?? '')}</text>)}
         {hasValues && trendModels.map((item, index) => {
