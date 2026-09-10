@@ -20,7 +20,7 @@ export const runReport = (id: string, range?: ReportAnalyticsRange, cities: stri
 export const listReportRuns = (id: string) => get<ReportRun[] | null>(`/api/reports/${id}/runs`).then((rows) => rows ?? []);
 export const queryReportPage = (id: string, page: number, pageSize: number) => get<ReportPageResult>(`/api/reports/${id}/data?page=${page}&page_size=${pageSize}`);
 export const queryReportSearch = (id: string, duid: string) => get<ReportPageResult>(`/api/reports/${id}/search?duid=${encodeURIComponent(duid)}`);
-export const queryReportAnalytics = (id: string, range: ReportAnalyticsRange | 'dates', endDate?: string, cities: string[] = []) => {
+export const queryReportAnalytics = (id: string, range: ReportAnalyticsRange | 'dates' | 'saved', endDate?: string, cities: string[] = []) => {
   const params = new URLSearchParams({ range });
   if (endDate) params.set('end_date', endDate);
   cities.forEach((city) => params.append('city', city));

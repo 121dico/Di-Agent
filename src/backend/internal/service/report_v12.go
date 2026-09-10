@@ -2,8 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -61,9 +59,10 @@ func (r *ReportRunner) queryV12Analytics(ctx context.Context, report *model.Repo
 		return nil, fmt.Errorf("%w: 城市筛选最多支持50项", ErrReportInvalid)
 	}
 	sort.Strings(cities)
-	keyRaw, _ := json.Marshal([]any{"v12-daily-snapshot-4", report.ID, report.UpdatedAt, source.UpdatedAt, report.VisualizationJSON, report.QueryJSON, base.Range, base.StartDate, base.EndDate, cities})
-	digest := sha256.Sum256(keyRaw)
-	key := hex.EncodeToString(digest[:])
+	if base.Range == "saved" {
+		return r.savedV12History(ctx, report, source, base, cities)
+	}
+	key := v12SnapshotKey(report, source, base, cities)
 	cache, hasCache := r.catalog.(reportTemplateAnalyticsStore)
 	if hasCache && !option.ForceRefresh {
 		cached, err := cache.GetTemplateAnalytics(ctx, key, r.now())

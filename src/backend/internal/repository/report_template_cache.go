@@ -37,6 +37,6 @@ func (r *ReportRepo) SaveTemplateAnalytics(ctx context.Context, key, reportID st
 }
 
 func (r *ReportRepo) InvalidateTemplateAnalytics(ctx context.Context, reportID string) error {
-	_, err := r.db.ExecContext(ctx, `DELETE FROM report_template_analytics_cache WHERE report_id=$1 OR expires_at<NOW()`, reportID)
+	_, err := r.db.ExecContext(ctx, `DELETE FROM report_template_analytics_cache WHERE report_id=$1`, reportID)
 	return wrapReportRepoErr("invalidate template analytics", err)
 }

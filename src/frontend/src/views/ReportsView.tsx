@@ -40,7 +40,7 @@ import { filterReportSources } from './reportSourceSearch';
 import { PersonalReportsLibrary } from '@/components/personal-report/PersonalReportsLibrary';
 import { ReportTemplateModal } from '@/components/report/ReportTemplateModal';
 import { ReportCohortSections } from '@/components/report/ReportCohortSections';
-import { loadSnapshotHistory, type SnapshotProgress } from './reportSnapshotHistory';
+import { loadStoredSnapshotHistory, type SnapshotProgress } from './reportSnapshotHistory';
 import { formatReportAxisTick } from './reportAxisTick';
 import { ChinaRegionPicker, expandChinaRegionSelection, summarizeChinaRegionSelection } from '@/components/report/ChinaRegionPicker';
 import styles from './ReportsView.module.css';
@@ -508,7 +508,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
     setAnalyticsError('');
     setSnapshotProgress(null);
     if (isV12) {
-      void loadSnapshotHistory(queryReportAnalytics, selectedId, appliedDashboardRange, expandedAppliedCities, (result, progress) => {
+      void loadStoredSnapshotHistory(queryReportAnalytics, selectedId, appliedDashboardRange, expandedAppliedCities, (result, progress) => {
         if (active) { setAnalytics(result); setSnapshotProgress(progress); }
       }, () => active)
         .catch((error: unknown) => { if (active) setAnalyticsError(error instanceof Error ? error.message : '读取 dt 历史失败'); })
@@ -885,7 +885,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
             </section>
 
             {isV12 ? <ReportCohortSections key={selectedId} analytics={analytics} loading={analyticsLoading} error={analyticsError}
-              progress={snapshotProgress ? `dt 快照：已处理 ${snapshotProgress.completed}/${snapshotProgress.total} 天，成功 ${snapshotProgress.completed - snapshotProgress.failed.length} 天${snapshotProgress.failed.length ? `，失败 ${snapshotProgress.failed.length} 天` : ''}` : undefined}
+              progress={snapshotProgress ? !analyticsLoading && snapshotProgress.completed === snapshotProgress.total && !snapshotProgress.failed.length ? `已载入保存的 dt 快照，共 ${snapshotProgress.total} 天` : `dt 快照：已处理 ${snapshotProgress.completed}/${snapshotProgress.total} 天，成功 ${snapshotProgress.completed - snapshotProgress.failed.length} 天${snapshotProgress.failed.length ? `，失败 ${snapshotProgress.failed.length} 天` : ''}` : undefined}
               renderChart={(labels, series) => <SmoothChart labels={labels} series={series} height={360} trendRule="raw" pendingText="请开启至少一个图例" />}
               renderDistribution={(items, hidden, onToggle, centerLabel) => <DonutChart distribution={items} hidden={hidden} onToggle={onToggle} centerLabel={centerLabel} />} /> : <>
             <section className={`${styles.summaryBlock} ${styles.overviewBlock}`} id="report-overview">
