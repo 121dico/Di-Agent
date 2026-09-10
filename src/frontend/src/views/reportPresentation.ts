@@ -209,12 +209,12 @@ export function buildPriceSensitiveAnalyticsPresentation(analytics: ReportAnalyt
   const count = (value: number) => Math.round(value).toLocaleString('zh-CN');
   const signedCount = (value: number) => `${value > 0 ? '+' : ''}${count(value)}`;
   const calculatedUsers = trend.map((point) => point.calculated_user_count);
-  const dailyNetValues = trend.map((point, index) => point.daily_net_user_growth
+  const dailyNetValues = trend.map((point, index) => point.daily_growth_available === false ? Number.NaN : point.daily_net_user_growth
     ?? (index === 0 ? 0 : point.calculated_user_count - (trend[index - 1]?.calculated_user_count ?? point.calculated_user_count)));
   const baselineUsers = analytics.summary.baseline_calculated_user_count ?? calculatedUsers[0] ?? analytics.summary.calculated_user_count;
   const cumulativeNetValues = trend.map((point) => point.cumulative_net_user_growth
     ?? point.calculated_user_count - baselineUsers);
-  const growthRateValues = trend.map((point, index) => point.daily_user_growth_rate
+  const growthRateValues = trend.map((point, index) => point.daily_growth_available === false ? Number.NaN : point.daily_user_growth_rate
     ?? (index === 0 || !calculatedUsers[index - 1] ? 0 : dailyNetValues[index]! / calculatedUsers[index - 1]! * 100));
   const latestDailyNet = analytics.summary.latest_daily_net_user_growth ?? dailyNetValues[dailyNetValues.length - 1] ?? 0;
   const cumulativeNet = analytics.summary.cumulative_net_user_growth ?? cumulativeNetValues[cumulativeNetValues.length - 1] ?? 0;

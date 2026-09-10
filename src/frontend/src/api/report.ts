@@ -11,7 +11,12 @@ export const saveReportSourceContract = (id: string, body: ReportDataSourceContr
 export const listReports = () => get<ReportDefinition[] | null>('/api/reports').then((rows) => rows ?? []);
 export const createReport = (body: Omit<ReportDefinition, 'id' | 'created_at'>) => post<ReportDefinition>('/api/reports', body);
 export const updateReport = (id: string, body: Omit<ReportDefinition, 'id' | 'created_at'>) => put<ReportDefinition>(`/api/reports/${id}`, body);
-export const runReport = (id: string) => post<ReportRun>(`/api/reports/${id}/run`);
+export const runReport = (id: string, range?: ReportAnalyticsRange, cities: string[] = []) => {
+  const params = new URLSearchParams();
+  if (range) params.set('range', range);
+  cities.forEach((city) => params.append('city', city));
+  return post<ReportRun>(`/api/reports/${id}/run?${params.toString()}`);
+};
 export const listReportRuns = (id: string) => get<ReportRun[] | null>(`/api/reports/${id}/runs`).then((rows) => rows ?? []);
 export const queryReportPage = (id: string, page: number, pageSize: number) => get<ReportPageResult>(`/api/reports/${id}/data?page=${page}&page_size=${pageSize}`);
 export const queryReportSearch = (id: string, duid: string) => get<ReportPageResult>(`/api/reports/${id}/search?duid=${encodeURIComponent(duid)}`);

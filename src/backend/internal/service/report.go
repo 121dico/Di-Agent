@@ -487,11 +487,11 @@ func (s *ReportService) UpdateDefinition(ctx context.Context, userID, reportID s
 	return &report, nil
 }
 
-func (s *ReportService) Run(ctx context.Context, reportID, userID string) (*model.ReportRun, error) {
+func (s *ReportService) Run(ctx context.Context, reportID, userID string, options ...ReportRunOptions) (*model.ReportRun, error) {
 	if err := s.requireAdmin(ctx, userID); err != nil {
 		return nil, err
 	}
-	return s.runner.Run(ctx, reportID, "manual", userID)
+	return s.runner.Run(ctx, reportID, "manual", userID, options...)
 }
 
 func (s *ReportService) ListRuns(ctx context.Context, reportID, userID string) ([]model.ReportRun, error) {

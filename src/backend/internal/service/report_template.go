@@ -24,6 +24,11 @@ type ReportTemplate struct {
 	Presentation json.RawMessage                  `json:"presentation"`
 }
 
+type ReportRunOptions struct {
+	Range  string
+	Cities []string
+}
+
 type ReportTemplateProfile struct {
 	Name   string `json:"name"`
 	Score  string `json:"score"`

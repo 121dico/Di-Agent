@@ -107,7 +107,7 @@ func (h *ReportHandler) UpdateDefinition(c *gin.Context) {
 }
 
 func (h *ReportHandler) Run(c *gin.Context) {
-	run, err := h.svc.Run(c.Request.Context(), c.Param("id"), middleware.GetUserID(c))
+	run, err := h.svc.Run(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), service.ReportRunOptions{Range: c.Query("range"), Cities: c.QueryArray("city")})
 	if err != nil {
 		h.writeError(c, err)
 		return

@@ -204,6 +204,7 @@ type ReportAnalyticsTrendPoint struct {
 	TotalOrderCount              int64               `json:"total_order_count"`
 	CalculatedUserCount          int64               `json:"calculated_user_count"`
 	DailyNetUserGrowth           int64               `json:"daily_net_user_growth"`
+	DailyGrowthAvailable         *bool               `json:"daily_growth_available,omitempty"`
 	DailyUserGrowthRate          float64             `json:"daily_user_growth_rate"`
 	CumulativeNetUserGrowth      int64               `json:"cumulative_net_user_growth"`
 }

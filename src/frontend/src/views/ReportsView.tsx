@@ -66,6 +66,7 @@ const statusLabel: Record<ReportRun['status'], string> = { pending: '运行中',
 const chartColors = ['#2F6FDB', '#15857A', '#765BC4', '#D18A24', '#D05C50'];
 const sensitivityColors: Record<string, string> = { 极高价敏: '#A63437', 高价敏: '#D75A50', 中高价敏: '#DB843C', 中价敏: '#D79A2B', 中低价敏: '#259F9A', 低价敏: '#4B78D1', 极低价敏: '#7B9ECA', 未知: '#8B8E95' };
 const rangeOptions: Array<{ value: ReportAnalyticsRange; label: string }> = [
+  { value: '1d', label: '近 1 天' },
   { value: '7d', label: '近 7 天' },
   { value: '31d', label: '近 31 天' },
   { value: '365d', label: '近 1 年' },
@@ -121,7 +122,7 @@ interface SmoothChartProps {
   pendingText?: string;
   bounds?: [number, number];
   height?: number;
-  trendRule?: 'default' | 'nonnegative' | 'nondecreasing';
+  trendRule?: 'default' | 'nonnegative' | 'nondecreasing' | 'raw';
 }
 
 function trendRuleOutliers(values: number[], rule: SmoothChartProps['trendRule']): number[] {
@@ -144,13 +145,13 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
   const padding = { top: 26, right: 24, bottom: 44, left: 62 };
   const trendModels = useMemo(() => series.map((item) => ({
     ...item,
-    trend: buildRobustTrend(item.values, { forcedOutlierIndexes: trendRuleOutliers(item.values, trendRule) }),
+    trend: trendRule === 'raw' ? { fittedValues: item.values, outlierIndexes: [] as number[] } : buildRobustTrend(item.values, { forcedOutlierIndexes: trendRuleOutliers(item.values, trendRule) }),
   })), [series, trendRule]);
   const values = series.flatMap((item) => item.values).filter(Number.isFinite);
   const domainValues = trendModels.flatMap((item) => {
     const outliers = new Set(item.trend.outlierIndexes);
     return [
-      ...item.trend.fittedValues,
+      ...item.trend.fittedValues.filter(Number.isFinite),
       ...item.values.filter((value, index) => Number.isFinite(value) && !outliers.has(index)),
     ];
   });
@@ -207,7 +208,7 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
   return (
     <div ref={chartRef} className={styles.chartWrap} onMouseLeave={() => setActiveIndex(null)}>
       {hasValues && <div className={styles.chartReadout}>
-        <div className={styles.chartScaleMeta}><span>真实值动态刻度 · 多数点稳健拟合</span><b>{formatChartValue(min)}–{formatChartValue(max)}</b></div>
+        <div className={styles.chartScaleMeta}><span>{trendRule === 'raw' ? '真实日值 · 缺失日断开，不补零' : '真实值动态刻度 · 多数点稳健拟合'}</span><b>{formatChartValue(min)}–{formatChartValue(max)}</b></div>
         <div className={styles.chartSignals}>{seriesInsights.map((item) => <div key={item.key}>
           <i style={{ background: item.color }} />
           <span>{item.label}</span>
@@ -257,19 +258,19 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
   );
 }
 
-export function IncrementBarChart({ labels, values, height = 330 }: { labels: string[]; values: number[]; height?: number }) {
+export function IncrementBarChart({ labels, values, height = 330, raw = false }: { labels: string[]; values: number[]; height?: number; raw?: boolean }) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [chartRef, width] = useResponsiveChartWidth();
   const padding = { top: 34, right: 24, bottom: 44, left: 62 };
-  const trend = useMemo(() => buildRobustTrend(values, {
+  const trend = useMemo(() => raw ? { fittedValues: values, outlierIndexes: [] as number[] } : buildRobustTrend(values, {
     forcedOutlierIndexes: values.flatMap((value, index) => value < 0 ? [index] : []),
-  }), [values]);
+  }), [values, raw]);
   const outliers = new Set(trend.outlierIndexes);
   const compress = (value: number) => Math.sign(value) * Math.sqrt(Math.abs(value));
   const expand = (value: number) => Math.sign(value) * value * value;
   const domain = buildChartDomain([
-    ...trend.fittedValues.map(compress),
-    ...values.filter((_, index) => !outliers.has(index)).map(compress),
+    ...trend.fittedValues.filter(Number.isFinite).map(compress),
+    ...values.filter((value, index) => Number.isFinite(value) && !outliers.has(index)).map(compress),
     0,
   ]);
   const min = Math.min(0, domain.min);
@@ -288,13 +289,13 @@ export function IncrementBarChart({ labels, values, height = 330 }: { labels: st
   const activeX = activeIndex == null ? null : xFor(activeIndex);
   const tooltipAlign = activeIndex === 0 ? 'start' : activeIndex === labels.length - 1 ? 'end' : 'center';
   const hasValues = labels.length > 0 && values.some(Number.isFinite);
-  const trendPath = buildSmoothChartPath(trend.fittedValues.map((value, index) => ({ x: xFor(index), y: yFor(value) })), width, padding.left);
+  const trendPath = raw ? '' : buildSmoothChartPath(trend.fittedValues.map((value, index) => ({ x: xFor(index), y: yFor(value) })), width, padding.left);
   return <div ref={chartRef} className={styles.chartWrap} onMouseLeave={() => setActiveIndex(null)}>
     <div className={styles.incrementMeta}>
       <span><i data-tone="positive" />正增长</span>
       <span><i data-tone="negative" />负增长</span>
-      <span><i data-tone="trend" />稳健趋势</span>
-      <small>符号压缩刻度 · 柱为真实值 · 趋势按多数点拟合 · 明显偏移不牵引曲线</small>
+      {!raw && <span><i data-tone="trend" />稳健趋势</span>}
+      <small>{raw ? '符号压缩刻度 · 首日基准为0 · 缺失前一日时不计算日增量' : '符号压缩刻度 · 柱为真实值 · 趋势按多数点拟合 · 明显偏移不牵引曲线'}</small>
     </div>
     <svg viewBox={`0 0 ${width} ${height}`} className={styles.chart} role="img" aria-label="每日价敏用户净增柱状图">
       {yTicks.map((tick, index) => {
@@ -304,6 +305,7 @@ export function IncrementBarChart({ labels, values, height = 330 }: { labels: st
       <line x1={padding.left} x2={width - padding.right} y1={zeroY} y2={zeroY} className={styles.zeroLine} />
       {xTicks.map((index) => <text key={index} x={xFor(index)} y={height - 13} textAnchor={index === 0 ? 'start' : index === labels.length - 1 ? 'end' : 'middle'} className={styles.axisLabel}><title>{labels[index]}</title>{formatChartDateTick(labels[index] ?? '')}</text>)}
       {hasValues && values.map((value, index) => {
+        if (!Number.isFinite(value)) return null;
         const rawValueY = yFor(value);
         const isOutlier = outliers.has(index);
         const valueY = isOutlier ? Math.max(padding.top, Math.min(height - padding.bottom, rawValueY)) : rawValueY;
@@ -608,16 +610,17 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
     if (!selectedId) return;
     setRunning(true);
     try {
-      const completedRun = await runReport(selectedId);
+      const completedRun = await runReport(selectedId, appliedDashboardRange, expandedAppliedCities);
       setRuns(await listReportRuns(selectedId));
       await loadDetailPage(selectedId, 1, detailPageSize, false);
       if (analyticsEnabled) {
-        setAnalytics(await queryReportAnalytics(selectedId, appliedDashboardRange, completedRun.source_partition, expandedAppliedCities));
+        setAnalytics(await queryReportAnalytics(selectedId, appliedDashboardRange, isV12 ? undefined : completedRun.source_partition, expandedAppliedCities));
+        setAnalyticsError('');
       }
       message.success('报表生成完成');
-    } catch {
+    } catch (error: unknown) {
       setRuns(await listReportRuns(selectedId).catch(() => []));
-      message.error('报表生成失败，请检查认证配置');
+      message.error(error instanceof Error ? error.message : '报表生成失败');
     } finally {
       setRunning(false);
     }
@@ -799,7 +802,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
                 <h2>{selected.name}</h2>
                 <p>{selected.description || '基于固定数据接口生成的业务报表'}</p>
                 <div className={styles.summaryMeta}>
-                  <span className={analytics || latest || detailResult ? styles.metaReady : styles.metaPending}>{analytics ? (analytics.cached ? '聚合缓存 · 最多10分钟' : '真实聚合已就绪') : latest ? '快照已就绪' : detailResult ? '明细已加载' : '等待数据加载'}</span>
+                  <span className={analytics || latest || detailResult ? styles.metaReady : styles.metaPending}>{analytics ? (analytics.cached ? (isV12 ? '聚合缓存 · 最多10分钟' : '聚合快照') : '真实聚合已就绪') : latest ? '快照已就绪' : detailResult ? '明细已加载' : '等待数据加载'}</span>
                   <span>数据分区 {activePartition}</span>
                   <span>{access.canBrowseFullDetail ? `${totalRows.toLocaleString('zh-CN')} 行数据` : `${sharedUserCount.toLocaleString('zh-CN')} 位已计算用户`}</span>
                   <span>更新于 {latestTime}</span>
@@ -844,7 +847,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
                 <div className={styles.filterField}>
                   <span>时间范围</span>
                   <div className={styles.rangeControl} role="tablist" aria-label="选择时间范围">
-                    {rangeOptions.map((option) => <button key={option.value} type="button" role="tab" aria-selected={draftDashboardRange === option.value} className={draftDashboardRange === option.value ? styles.rangeActive : ''} onClick={() => setDraftDashboardRange(option.value)}>{option.label}</button>)}
+                    {rangeOptions.filter((option) => isV12 || option.value !== '1d').map((option) => <button key={option.value} type="button" role="tab" aria-selected={draftDashboardRange === option.value} className={draftDashboardRange === option.value ? styles.rangeActive : ''} onClick={() => setDraftDashboardRange(option.value)}>{option.label}</button>)}
                   </div>
                 </div>
               </div>
@@ -875,18 +878,18 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
               <div className={styles.chartGrid}>
                 <div className={`${styles.card} ${styles.trendCard}`}>
                   <div className={styles.cardTitle}><div><i />每日价敏用户净增</div><small>当天价敏用户数 − 前一观察日价敏用户数</small></div>
-                  <IncrementBarChart labels={businessAxisLabels} values={incrementSeries[0]?.values ?? []} />
+                  <IncrementBarChart labels={businessAxisLabels} values={incrementSeries[0]?.values ?? []} raw={isV12} />
                 </div>
                 <div className={`${styles.card} ${styles.incrementAnalysisCard}`}>
                   <div className={styles.cardTitle}><div><i />累计与增长效率</div><small>以区间首日为基线，不重复累计存量用户</small></div>
                   <div className={styles.volumeTrendGrid}>
                     <section className={styles.volumeTrendPanel}>
                       <header><span><i style={{ background: '#15857A' }} />累计净增</span><small>当前价敏用户相对区间首日的净变化</small></header>
-                      <SmoothChart labels={businessAxisLabels} series={cumulativeSeries} trendRule={isV12 ? 'default' : 'nondecreasing'} height={270} pendingText="暂无连续快照，无法计算累计净增" />
+                      <SmoothChart labels={businessAxisLabels} series={cumulativeSeries} trendRule={isV12 ? 'raw' : 'nondecreasing'} height={270} pendingText="暂无连续快照，无法计算累计净增" />
                     </section>
                     <section className={styles.volumeTrendPanel}>
                       <header><span><i style={{ background: '#765BC4' }} />每日增长率</span><small>当日净增 ÷ 前一观察日价敏用户</small></header>
-                      <SmoothChart labels={businessAxisLabels} series={growthRateSeries} trendRule={isV12 ? 'default' : 'nonnegative'} height={270} pendingText="暂无连续快照，无法计算增长率" />
+                      <SmoothChart labels={businessAxisLabels} series={growthRateSeries} trendRule={isV12 ? 'raw' : 'nonnegative'} height={270} pendingText="暂无连续快照，无法计算增长率" />
                     </section>
                   </div>
                 </div>
@@ -894,7 +897,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
                   <div className={styles.cardTitle}><div><i />{isV12 ? '价敏标签每日得分' : '180 天窗口得分参考'}</div><div className={styles.legend}>{scoreSeries.map((item, index) => {
                     return <button type="button" key={item.key} aria-pressed={!hiddenBusinessSeries.has(item.key)} className={hiddenBusinessSeries.has(item.key) ? styles.legendMuted : ''} onClick={() => toggleBusinessSeries(item.key, scoreSeries.map((series) => series.key))}><i style={{ background: item.color ?? chartColors[index % chartColors.length] }} />{item.label}</button>;
                   })}</div></div>
-                  <SmoothChart labels={businessAxisLabels} series={visibleScoreSeries} bounds={[0, 100]} height={300} pendingText="当前筛选范围暂无可用的价敏得分趋势" />
+                  <SmoothChart labels={businessAxisLabels} series={visibleScoreSeries} trendRule={isV12 ? 'raw' : 'default'} bounds={[0, 100]} height={300} pendingText="当前筛选范围暂无可用的价敏得分趋势" />
                 </div>
                 <div className={`${styles.card} ${styles.distributionCard}`}>
                   <div className={styles.cardTitle}><div><i />价敏等级分布</div><small>点击图例或扇区可显隐</small></div>

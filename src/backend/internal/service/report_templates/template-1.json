@@ -23,7 +23,7 @@
     "palette": ["#2F6FDB", "#15857A", "#765BC4", "#D18A24", "#D05C50"],
     "sections": ["overview", "increments", "cumulative", "growth-rate", "scores", "distribution", "search", "detail", "history"],
     "default_range": "31d",
-    "ranges": ["7d", "31d", "365d"],
+    "ranges": ["1d", "7d", "31d", "365d"],
     "hidden_score_series": ["d1", "d2", "d3"],
     "motion": "inherit-report-workspace-v1",
     "responsive": "inherit-report-workspace-v1"

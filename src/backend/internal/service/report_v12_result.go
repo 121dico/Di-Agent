@@ -116,5 +116,33 @@ func assembleV12Analytics(base *model.ReportAnalyticsResult, results []model.Rep
 			result.QueryIDs = append(result.QueryIDs, response.QueryID)
 		}
 	}
-	return deriveIncrementAnalytics(result)
+	deriveIncrementAnalytics(result)
+	var sum int64
+	var consecutive int
+	for index := range result.Trend {
+		point := &result.Trend[index]
+		available := true
+		if index > 0 {
+			previous, _ := time.Parse("2006-01-02", result.Trend[index-1].Date)
+			available = previous.AddDate(0, 0, 1).Format("2006-01-02") == point.Date
+			if available {
+				sum += point.DailyNetUserGrowth
+				consecutive++
+			} else {
+				point.DailyNetUserGrowth = 0
+				point.DailyUserGrowthRate = 0
+			}
+		}
+		point.DailyGrowthAvailable = &available
+	}
+	result.Summary.AverageDailyNetUserGrowth = 0
+	if consecutive > 0 {
+		result.Summary.AverageDailyNetUserGrowth = float64(sum) / float64(consecutive)
+	}
+	if len(result.Trend) > 0 {
+		last := result.Trend[len(result.Trend)-1]
+		result.Summary.LatestDailyNetUserGrowth = last.DailyNetUserGrowth
+		result.Summary.LatestUserGrowthRate = last.DailyUserGrowthRate
+	}
+	return result
 }

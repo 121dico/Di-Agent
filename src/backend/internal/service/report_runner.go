@@ -505,7 +505,7 @@ func mergeDailyAnalytics(base *model.ReportAnalyticsResult, rows []model.ReportD
 	return merged
 }
 
-func (r *ReportRunner) Run(ctx context.Context, reportID, trigger, requestedBy string) (*model.ReportRun, error) {
+func (r *ReportRunner) Run(ctx context.Context, reportID, trigger, requestedBy string, options ...ReportRunOptions) (*model.ReportRun, error) {
 	report, source, err := r.resolve(ctx, reportID)
 	if err != nil {
 		return nil, err
@@ -520,12 +520,17 @@ func (r *ReportRunner) Run(ctx context.Context, reportID, trigger, requestedBy s
 		result, queryErr = r.connector.Query(ctx, *source, executionQuery)
 	}
 	if queryErr == nil && isV12Report(report) {
-		if cache, ok := r.catalog.(reportTemplateAnalyticsStore); ok {
-			queryErr = cache.InvalidateTemplateAnalytics(ctx, reportID)
+		selection := ReportRunOptions{Range: "1d"}
+		if trigger == "manual" {
+			selection.Range = "31d"
 		}
-		if queryErr == nil {
-			_, queryErr = r.QueryAnalytics(ctx, reportID, "31d", reportBusinessYesterday(r.now()), ReportAnalyticsOptions{ForceRefresh: true})
+		if len(options) > 0 {
+			selection.Cities = options[0].Cities
+			if options[0].Range != "" {
+				selection.Range = options[0].Range
+			}
 		}
+		_, queryErr = r.QueryAnalytics(ctx, reportID, selection.Range, reportBusinessYesterday(r.now()), ReportAnalyticsOptions{ForceRefresh: true, Cities: selection.Cities})
 	}
 	finished := r.now()
 	run.FinishedAt = &finished

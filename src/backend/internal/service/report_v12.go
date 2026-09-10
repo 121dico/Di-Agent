@@ -69,6 +69,17 @@ func (r *ReportRunner) queryV12Analytics(ctx context.Context, report *model.Repo
 	// 合并同筛选并发读取，避免多个页面同时扫描相同的亿级源表。
 	value, err, _ := r.templateQueries.Do(key, func() (any, error) {
 		conditions := []map[string]any{{"name": "dt", "operatorEnum": "GEQ", "value": base.StartDate}, {"name": "dt", "operatorEnum": "LEQ", "value": base.EndDate}}
+		var saved struct {
+			Conditions []map[string]any `json:"conditionList"`
+		}
+		if err := json.Unmarshal(report.QueryJSON, &saved); err != nil {
+			return nil, err
+		}
+		for _, condition := range saved.Conditions {
+			if condition["name"] != "dt" {
+				conditions = append(conditions, condition)
+			}
+		}
 		if len(cities) > 0 {
 			conditions = append(conditions, map[string]any{"name": p.City, "operatorEnum": "IN", "value": cities})
 		}
@@ -84,6 +95,7 @@ func (r *ReportRunner) queryV12Analytics(ctx context.Context, report *model.Repo
 			"groupList": []string{"dt", p.Level, p.Type}, "orderBy": "dt", "needPagination": false})
 		results := make([]model.ReportQueryResult, 0, len(queries))
 		for _, query := range queries {
+			query["needPagination"], query["pageSize"], query["page"] = true, 1000, 1
 			raw, err := json.Marshal(query)
 			if err != nil {
 				return nil, err
@@ -101,10 +113,13 @@ func (r *ReportRunner) queryV12Analytics(ctx context.Context, report *model.Repo
 			}
 			result, err := r.connector.Query(ctx, *source, raw)
 			if err != nil {
-				if strings.Contains(err.Error(), "MEMORY_LIMIT_EXCEEDED") || strings.Contains(err.Error(), "Memory limit") {
+				if strings.Contains(err.Error(), "MEMORY_LIMIT_EXCEEDED") || strings.Contains(err.Error(), "Memory limit") || strings.Contains(err.Error(), "TOO_SLOW") {
 					return nil, ErrReportAggregateCapacity
 				}
 				return nil, err
+			}
+			if result.Pagination.Total > int64(len(result.Rows)) || result.Pagination.PageCount > 1 || len(result.Rows) >= 1000 {
+				return nil, fmt.Errorf("%w: 聚合结果超过单次返回上限，请缩短日期范围，当前未展示不完整统计", ErrReportInvalid)
 			}
 			results = append(results, result)
 		}

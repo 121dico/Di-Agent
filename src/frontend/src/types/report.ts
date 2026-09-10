@@ -57,7 +57,7 @@ export interface ReportVisualization {
   analytics?: { enabled: boolean };
 }
 
-export type ReportAnalyticsRange = '7d' | '30d' | '31d' | '365d';
+export type ReportAnalyticsRange = '1d' | '7d' | '30d' | '31d' | '365d';
 
 export interface ReportAnalyticsTrendPoint {
   nullable_scores?: Record<string, number | null>;
@@ -69,6 +69,7 @@ export interface ReportAnalyticsTrendPoint {
   total_order_count: number;
   calculated_user_count: number;
   daily_net_user_growth?: number;
+  daily_growth_available?: boolean;
   daily_user_growth_rate?: number;
   cumulative_net_user_growth?: number;
 }
