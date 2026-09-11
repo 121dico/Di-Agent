@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { SmoothChart } from './ReportsView';
+import { IncrementBarChart, SmoothChart } from './ReportsView';
 
 describe('report chart mode boundaries', () => {
   let container: HTMLDivElement;
@@ -105,5 +105,52 @@ describe('report chart mode boundaries', () => {
     render([100, 101, NaN, 102, 103]);
     expect(normalCoordinates()).toEqual(withSpike);
     expect(withSpike).toHaveLength(4);
+  });
+
+  it('does not draw estimated bridges across missing samples or calendar gaps in curves or bars', () => {
+    const cases = [
+      { dates: labels, values: [100, NaN, 100] },
+      { dates: ['2026-09-06', '2026-09-07', '2026-09-09'], values: [100, 900, 100] },
+    ];
+    cases.forEach(({ dates, values }) => {
+      act(() => root.render(<SmoothChart labels={dates} series={[{ label: '缺口', values }]} scaleMode="trend" />));
+      expect(container.querySelector('path[data-estimated]')).toBeNull();
+      act(() => root.render(<IncrementBarChart labels={dates} values={values} raw />));
+      expect(container.querySelector('path[data-estimated]')).toBeNull();
+    });
+  });
+
+  it('keeps empty bars empty and a single negative observation signed without inventing a trend', () => {
+    act(() => root.render(<IncrementBarChart labels={[]} values={[]} raw />));
+    expect(container.textContent).toContain('暂无增量数据');
+    expect(container.querySelector('svg rect')).toBeNull();
+    expect(container.querySelector('svg path')).toBeNull();
+    act(() => root.render(<IncrementBarChart labels={[labels[0]!]} values={[-42]} raw />));
+    expect(container.querySelector('svg path')).toBeNull();
+    expect(container.querySelector('[data-direction="negative"]')).not.toBeNull();
+    act(() => container.querySelector('[aria-label="2026-09-07，价敏用户净增 -42"]')?.dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('-42');
+    expect(container.querySelector('[role="status"]')?.textContent).not.toContain('疑似离群');
+  });
+
+  it('keeps actual-mode empty and all-missing chart axes finite', () => {
+    [[], [{ label: '缺失', values: [NaN, NaN, NaN] }]].forEach(series => {
+      act(() => root.render(<SmoothChart labels={labels} series={series} scaleMode="actual" />));
+      expect(container.textContent).toContain('暂无趋势数据');
+      expect(container.querySelector('svg')?.outerHTML).not.toMatch(/NaN|Infinity/);
+    });
+  });
+
+  it('keeps ordinary bar heights linear while an exceptional negative bar retains its raw signed tooltip', () => {
+    const dates = ['2026-09-05', '2026-09-06', '2026-09-07', '2026-09-08', '2026-09-09'];
+    act(() => root.render(<IncrementBarChart labels={dates} values={[100, 100, -10000, 100, 200]} raw />));
+    const normal = container.querySelector('[aria-label="2026-09-05，价敏用户净增 100"]');
+    const double = container.querySelector('[aria-label="2026-09-09，价敏用户净增 200"]');
+    expect(Number(double?.getAttribute('height')) / Number(normal?.getAttribute('height'))).toBeCloseTo(2, 8);
+    expect(container.querySelector('[data-break="true"]')).not.toBeNull();
+    expect(container.querySelector('path[data-estimated="true"]')).not.toBeNull();
+    act(() => container.querySelector('[aria-label="2026-09-07，价敏用户净增 -10000"]')?.dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('-10,000');
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('柱已截断');
   });
 });

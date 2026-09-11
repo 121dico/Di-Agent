@@ -149,7 +149,7 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
     const outliers = new Set(item.trend.outlierIndexes);
     return item.plotValues.filter((value, index) => Number.isFinite(value) && !outliers.has(index));
   });
-  const domain = buildChartDomain(domainValues, scaleMode === 'trend' ? undefined : [Math.max(0, bounds?.[0] ?? 0), bounds?.[1] ?? Infinity]);
+  const domain = domainValues.length === 0 ? { min: 0, max: 1 } : buildChartDomain(domainValues, scaleMode === 'trend' ? undefined : [Math.max(0, bounds?.[0] ?? 0), bounds?.[1] ?? Infinity]);
   const hasNegative = values.some((value) => value < 0);
   const min = domain.min;
   const max = domain.max;
