@@ -34,7 +34,7 @@ it('leaves missing calendar days and their daily comparisons unavailable, but ke
   expect(bars[0]).toEqual([NaN, NaN, NaN]);
   expect(charts[0]).toEqual([0, NaN, 5]);
   expect(charts[1]).toEqual([NaN, NaN, NaN]);
-  expect(html).toContain('0 个连续日对');
+  expect(html).not.toContain('个连续日对');
   const metrics = renderToStaticMarkup(<SnapshotGrowthMetrics analytics={partial} />);
   expect(metrics.match(/—/g)).toHaveLength(3);
 });

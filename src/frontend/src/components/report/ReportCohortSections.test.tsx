@@ -46,16 +46,26 @@ it('wires filtered snapshot increments into the overview and keeps report sectio
     renderDistribution={() => null} renderChart={() => <div>snapshot trends</div>}
     renderGrowthChart={(_labels, series) => { growthCharts.push(series[0]!.values); return null; }}
     renderBar={(labels, values) => { bars.push({ labels, values }); return null; }} />);
-  expect(bars).toEqual([{ labels: ['2026-09-09', '2026-09-10'], values: [0, -5] }]);
+  expect(bars).toEqual([{ labels: ['2026-09-09', '2026-09-10'], values: [NaN, -5] }]);
   expect(growthCharts[0]).toEqual([0, -5]);
   expect(growthCharts[1]?.[1]).toBeCloseTo(-4.54545);
   expect(html).toContain('本期累计净增');
-  expect(html).toContain('1 个连续日对');
+  expect(html).not.toContain('个连续日对');
   expect(html).not.toContain('+5');
   const sections = ['report-overview', 'report-increments', 'report-order-cohort', 'report-trend'];
   const positions = sections.map((id) => html.indexOf(`id="${id}"`));
   expect(positions.every((position) => position >= 0)).toBe(true);
   expect(positions).toEqual([...positions].sort((a, b) => a - b));
+});
+
+it('hides explanatory banners while retaining actionable errors and empty states', () => {
+  const html = renderToStaticMarkup(<ReportCohortSections analytics={null} loading={false} error="连接失败"
+    progress="已载入保存的 dt 快照，共 45 天" renderDistribution={() => null} renderChart={() => null} />);
+  expect(html).not.toContain('已载入保存');
+  expect(html).not.toContain('按每天 dt 的完整快照统计');
+  expect(html).not.toContain('包含先验赋分与历史继承用户');
+  expect(html).toContain('连接失败');
+  expect(html).toContain('尚无可用统计');
 });
 
 it('shows an empty increments section without rendering fabricated chart values', () => {

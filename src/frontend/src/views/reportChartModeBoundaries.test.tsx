@@ -37,7 +37,7 @@ describe('report chart mode boundaries', () => {
     y[0]?.forEach((value, index) => expect(value).toBeCloseTo(y[1]![index]!, 6));
     render('actual');
     expect(geometry()).toEqual(original);
-    expect(container.textContent).toContain('真实日值');
+    expect(container.textContent).toContain('真实数值');
     expect(focusDate(labels[1]!)).not.toContain('日变化率');
   });
 

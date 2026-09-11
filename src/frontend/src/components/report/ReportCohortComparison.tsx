@@ -38,7 +38,7 @@ export function ReportCohortComparison({ all, orders }: { all: Item[]; orders: I
           <text x="130" y="128" textAnchor="middle" className={styles.value}>{compactCount(activeItem?.value ?? total)}</text>
           <text x="130" y="151" textAnchor="middle" className={styles.caption}>{activeItem?.label ?? group.title}</text>
         </svg> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={group.items ? '暂无分布数据' : '订单人群统计未加载'} />}
-        {group.items && total > 0 && <p className={styles.readout} role="status">{activeItem ? `${activeItem.label}：${count(activeItem.value)} 人 · ${(activeItem.value / total * 100).toFixed(1)}%` : '悬停扇区查看准确人数与占比'}</p>}
+        {group.items && total > 0 && <p className={styles.readout} role="status">{activeItem ? `${activeItem.label}：${count(activeItem.value)} 人 · ${(activeItem.value / total * 100).toFixed(1)}%` : ''}</p>}
       </section>;
     })}</div>
     <div className={styles.legend}>
@@ -55,7 +55,6 @@ export function ReportCohortComparison({ all, orders }: { all: Item[]; orders: I
           </button> : '—'}</td>;
         })}
       </tr>)}</tbody></table>
-      <p>占比分别以各组总人数为分母，显隐不改变统计口径。</p>
     </div>
   </div>;
 }

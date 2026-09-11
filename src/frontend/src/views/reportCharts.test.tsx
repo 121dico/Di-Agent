@@ -41,7 +41,7 @@ describe('report chart interactions', () => {
     expect(paths).toHaveLength(2);
     const plotted = paths.map((path) => [...path.parentElement!.querySelectorAll('circle')].map((circle) => Number(circle.getAttribute('cy'))));
     plotted[0]?.forEach((y, index) => expect(y).toBeCloseTo(plotted[1]![index]!, 6));
-    expect(container.textContent).toContain('各曲线独立缩放');
+    expect(container.textContent).toContain('独立刻度');
     act(() => container.querySelector('[aria-label="2026-09-08，查看该日所有指标"]')?.dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
     expect(container.querySelector('[role="status"]')?.textContent).toContain('110,000,000');
     expect(container.querySelector('[role="status"]')?.textContent).toContain('+10.00%');
@@ -136,9 +136,9 @@ describe('report chart interactions', () => {
       );
     });
 
-    expect(container.textContent).toContain('真实值动态刻度');
+    expect(container.textContent).toContain('真实数值');
     expect(container.textContent).toContain('50–60');
-    expect(container.textContent).toContain('仅标记基准点，不生成虚假曲线');
+    expect(container.textContent).not.toContain('仅标记基准点，不生成虚假曲线');
     expect(container.querySelector('path')).toBeNull();
     expect(container.querySelector('svg circle')).not.toBeNull();
   });
@@ -226,7 +226,7 @@ describe('report chart interactions', () => {
   it('uses only a nonnegative magnitude region for signed curves without losing the raw sign', () => {
     const labels = ['2026-08-25', '2026-08-26', '2026-08-27'];
     act(() => root.render(<SmoothChart labels={labels} series={[{ label: '累计净增', values: [0, -120, -80] }]} />));
-    expect(container.textContent).toContain('负值以 ↓ 标记');
+    expect(container.textContent).toContain('幅度（绝对值）');
     expect([...container.querySelectorAll('svg text')].filter((node) => !node.querySelector('title')).every((node) => !node.textContent?.startsWith('-'))).toBe(true);
     act(() => container.querySelector('[aria-label="2026-08-26，查看该日所有指标"]')?.dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
     expect(container.querySelector('[role="status"]')?.textContent).toContain('-120');
@@ -243,7 +243,7 @@ describe('report chart interactions', () => {
       );
     });
 
-    expect(container.textContent).toContain('线性幅度');
+    expect(container.textContent).toContain('幅度（绝对值）');
     expect(container.querySelector('circle[data-outlier="true"]')).not.toBeNull();
     expect(container.querySelector('svg path[data-estimated="true"]')).not.toBeNull();
     expect([...container.querySelectorAll('svg text')].filter((node) => !node.querySelector('title')).every((node) => !node.textContent?.startsWith('-'))).toBe(true);

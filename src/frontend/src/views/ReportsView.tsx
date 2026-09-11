@@ -40,7 +40,7 @@ import { filterReportSources } from './reportSourceSearch';
 import { PersonalReportsLibrary } from '@/components/personal-report/PersonalReportsLibrary';
 import { ReportTemplateModal } from '@/components/report/ReportTemplateModal';
 import { ReportCohortSections } from '@/components/report/ReportCohortSections';
-import { loadStoredSnapshotHistory, type SnapshotProgress } from './reportSnapshotHistory';
+import { loadStoredSnapshotHistory } from './reportSnapshotHistory';
 import { formatReportAxisTick } from './reportAxisTick';
 import { normalizeReportTrend, reportDailyRate, type ReportScaleMode } from './reportTrendScale';
 import { detectIncrementOutliers, detectReportOutliers } from './reportOutliers';
@@ -133,7 +133,7 @@ interface SmoothChartProps {
   scaleMode?: ReportScaleMode;
 }
 
-export function SmoothChart({ labels, series, pendingText, bounds, height = 360, trendRule = 'default', scaleMode = 'actual' }: SmoothChartProps) {
+export function SmoothChart({ labels, series, pendingText, bounds, height = 360, scaleMode = 'actual' }: SmoothChartProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [chartRef, width] = useResponsiveChartWidth();
   const chartHeight = labels.length <= 1 ? Math.min(height, 240) : height;
@@ -194,7 +194,7 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
   return (
     <div ref={chartRef} className={styles.chartWrap} onMouseLeave={() => setActiveIndex(null)}>
       {hasValues && <div className={styles.chartReadout}>
-        <div className={styles.chartScaleMeta}><span>{scaleMode === 'trend' ? '各曲线独立缩放 · 不固定起终点 · 以下为真实读数' : trendRule === 'raw' ? '真实日值 · 缺失日断开，不补零' : '真实值动态刻度 · 疑似离群点单独标记'}</span>{scaleMode !== 'trend' && <b>{formatChartValue(min)}–{formatChartValue(max)}</b>}</div>
+        <div className={styles.chartScaleMeta}><span>{scaleMode === 'trend' ? '独立刻度' : hasNegative ? '幅度（绝对值）' : '真实数值'}</span>{scaleMode !== 'trend' && <b>{formatChartValue(min)}–{formatChartValue(max)}</b>}</div>
         <div className={styles.chartSignals}>{seriesInsights.map((item) => <div key={item.key}>
           <i style={{ background: item.color }} />
           <span>{item.label}</span>
@@ -202,9 +202,7 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
           <em data-direction={item.delta > 0 ? 'up' : item.delta < 0 ? 'down' : 'flat'}>{item.count < 2 ? '单日基准' : `${item.delta > 0 ? '+' : ''}${formatChartValue(item.delta)} · 波动 ${formatChartValue(item.spread)}${item.outlierCount ? ` · ${item.outlierCount} 个疑似离群点` : ''}`}</em>
         </div>)}</div>
       </div>}
-      {hasNegative && <div className={styles.singleDayHint}>{scaleMode === 'trend' ? '独立走势不表示人数正负；' : '纵轴仅显示变化幅度（绝对值），不表示增加人数；'}负值以 ↓ 标记，悬停显示原始正负号。</div>}
-      {trendModels.some((item) => item.trend.outlierIndexes.length > 0) && <div className={styles.singleDayHint}>空心点为疑似离群，保留真实值但不参与拟合；正常点平滑连接，跨离群日的虚线为估计趋势，不是该日实测值。超界空心点在边缘标记，位置不代表原值。</div>}
-      {hasValues && labels.length === 1 && <div className={styles.singleDayHint}>当前只有 1 个真实日期：仅标记基准点，不生成虚假曲线</div>}
+      {trendModels.some((item) => item.trend.outlierIndexes.length > 0) && <div className={styles.singleDayHint}>○ 疑似离群 · 虚线：估计值</div>}
       <svg viewBox={`0 0 ${width} ${chartHeight}`} className={styles.chart} role="img" aria-label="报表趋势图">
         {yTicks.map((tick, index) => {
           const y = padding.top + index * ((chartHeight - padding.top - padding.bottom) / 4);
@@ -282,8 +280,7 @@ export function IncrementBarChart({ labels, values, height = 330 }: { labels: st
       <span><i data-tone="positive" />↑ 正增长</span>
       <span><i data-tone="negative" />↓ 负增长</span>
       <span><i data-tone="trend" />正常幅度平滑趋势</span>
-      <small>主图只展示正常幅度 · {outliers.size} 个疑似离群 / 区间极端值不参与刻度与拟合，在上方以小圆点标记 · 点击查看原值 · 无前日记录不补零</small>
-      <small>线性幅度 · 柱高为绝对值，红色 ↓ 表示减少 · 虚线为跨离群日估计；末尾异常不外推</small>
+      <small>幅度（绝对值）{outliers.size > 0 && ' · ○ 疑似离群 · 虚线：估计值'}</small>
     </div>
     <svg viewBox={`0 0 ${width} ${height}`} className={styles.chart} role="group" aria-label="每日价敏用户净增柱状图">
       {yTicks.map((tick, index) => {
@@ -399,7 +396,6 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
   const [draftDashboardRange, setDraftDashboardRange] = useState<ReportAnalyticsRange>('all');
   const [activeSection, setActiveSection] = useState('report-overview');
   const [appliedDashboardRange, setAppliedDashboardRange] = useState<ReportAnalyticsRange>('all');
-  const [snapshotProgress, setSnapshotProgress] = useState<SnapshotProgress | null>(null);
   const [snapshotReload, setSnapshotReload] = useState(0);
   const [analytics, setAnalytics] = useState<ReportAnalyticsResult | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
@@ -491,10 +487,9 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
     setAnalyticsLoading(true);
     setAnalytics(null);
     setAnalyticsError('');
-    setSnapshotProgress(null);
     if (isV12) {
-      void loadStoredSnapshotHistory(queryReportAnalytics, selectedId, appliedDashboardRange, expandedAppliedCities, (result, progress) => {
-        if (active) { setAnalytics(result); setSnapshotProgress(progress); }
+      void loadStoredSnapshotHistory(queryReportAnalytics, selectedId, appliedDashboardRange, expandedAppliedCities, (result) => {
+        if (active) setAnalytics(result);
       }, () => active)
         .catch((error: unknown) => { if (active) setAnalyticsError(error instanceof Error ? error.message : '读取 dt 历史失败'); })
         .finally(() => { if (active) setAnalyticsLoading(false); });
@@ -871,7 +866,6 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
             </section>
 
             {isV12 ? <ReportCohortSections key={selectedId} analytics={analytics} loading={analyticsLoading} error={analyticsError}
-              progress={snapshotProgress ? !analyticsLoading && snapshotProgress.completed === snapshotProgress.total && !snapshotProgress.failed.length ? `已载入保存的 dt 快照，共 ${snapshotProgress.total} 天` : `dt 快照：已处理 ${snapshotProgress.completed}/${snapshotProgress.total} 天，成功 ${snapshotProgress.completed - snapshotProgress.failed.length} 天${snapshotProgress.failed.length ? `，失败 ${snapshotProgress.failed.length} 天` : ''}` : undefined}
               renderChart={(labels, series, mode) => <SmoothChart labels={labels} series={series} scaleMode={mode} height={360} trendRule="raw" pendingText="请开启至少一个图例" />}
               renderGrowthChart={(labels, series) => <SmoothChart labels={labels} series={series} height={270} trendRule="raw" pendingText="暂无连续快照可计算增长" />}
               renderBar={(labels, values) => <IncrementBarChart labels={labels} values={values} raw />}
@@ -887,18 +881,18 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
               <Spin spinning={analyticsLoading}>
               <div className={styles.chartGrid}>
                 <div className={`${styles.card} ${styles.trendCard}`}>
-                  <div className={styles.cardTitle}><div><i />每日价敏用户净增</div><small>当天价敏用户数 − 前一观察日价敏用户数</small></div>
+                  <div className={styles.cardTitle}><div><i />每日价敏用户净增</div><small>单位：人</small></div>
                   <IncrementBarChart labels={businessAxisLabels} values={incrementSeries[0]?.values ?? []} raw={isV12} />
                 </div>
                 <div className={`${styles.card} ${styles.incrementAnalysisCard}`}>
-                  <div className={styles.cardTitle}><div><i />累计与增长效率</div><small>以区间首日为基线，不重复累计存量用户</small></div>
+                  <div className={styles.cardTitle}><div><i />累计与增长效率</div></div>
                   <div className={styles.volumeTrendGrid}>
                     <section className={styles.volumeTrendPanel}>
-                      <header><span><i style={{ background: '#15857A' }} />累计净增</span><small>当前价敏用户相对区间首日的净变化</small></header>
+                      <header><span><i style={{ background: '#15857A' }} />累计净增</span><small>较期初 · 人</small></header>
                       <SmoothChart labels={businessAxisLabels} series={cumulativeSeries} trendRule={isV12 ? 'raw' : 'nondecreasing'} height={270} pendingText="暂无连续快照，无法计算累计净增" />
                     </section>
                     <section className={styles.volumeTrendPanel}>
-                      <header><span><i style={{ background: '#765BC4' }} />每日增长率</span><small>当日净增 ÷ 前一观察日价敏用户</small></header>
+                      <header><span><i style={{ background: '#765BC4' }} />每日增长率</span><small>单位：%</small></header>
                       <SmoothChart labels={businessAxisLabels} series={growthRateSeries} trendRule={isV12 ? 'raw' : 'nonnegative'} height={270} pendingText="暂无连续快照，无法计算增长率" />
                     </section>
                   </div>
@@ -910,7 +904,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
                   <SmoothChart labels={businessAxisLabels} series={visibleScoreSeries} trendRule={isV12 ? 'raw' : 'default'} bounds={[0, 100]} height={300} pendingText="当前筛选范围暂无可用的价敏得分趋势" />
                 </div>
                 <div className={`${styles.card} ${styles.distributionCard}`}>
-                  <div className={styles.cardTitle}><div><i />价敏等级分布</div><small>点击图例或扇区可显隐</small></div>
+                  <div className={styles.cardTitle}><div><i />价敏等级分布</div></div>
                   <DonutChart distribution={chartDistribution} hidden={hiddenDistribution} onToggle={toggleDistribution} />
                 </div>
               </div>
@@ -946,7 +940,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
             </section>}
 
             {access.canViewRunHistory && <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-history">
-              <div className={styles.blockHead}><div><span>{isV12 ? '07' : '05'}</span><strong>运行记录</strong></div><small>手动生成与每日任务共用同一流程</small></div>
+              <div className={styles.blockHead}><div><span>{isV12 ? '07' : '05'}</span><strong>运行记录</strong></div></div>
               <div className={styles.card}>
                 <div className={styles.runList}>{runs.map((run) => <div key={run.id} className={styles.runRow}><span className={`${styles.statusDot} ${styles[run.status]}`} /><strong>{statusLabel[run.status]}</strong><span>{run.trigger === 'scheduled' ? '每日 10:00' : '手动生成'}</span><span>{new Date(run.started_at).toLocaleString('zh-CN', { hour12: false })}</span><span>{run.source_partition || run.error_message || '—'}</span></div>)}{runs.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有运行记录" />}</div>
               </div>

@@ -41,7 +41,6 @@ export function ReportSnapshotTrends({ analytics, renderChart }: { analytics: Re
         <button type="button" aria-pressed={mode === 'actual'} onClick={() => setModes((current) => ({ ...current, [title]: 'actual' }))}>真实数值</button>
       </div>
     </div>
-    <p className={local.note}>{mode === 'trend' ? '本图各曲线独立缩放，仅比较走势，不表示人数或增长率；悬停查看真实人数。' : '本图曲线共用人数坐标轴，保留真实量级差异。'} 横轴：dt（标签快照日期）。</p>
     <div className={local.legend}>{series.map((item) => <button key={item.key} type="button" aria-pressed={!hidden.has(item.key)} onClick={() => setHidden((current) => {
       const next = new Set(current); if (next.has(item.key)) next.delete(item.key); else next.add(item.key); return next;
     })}><svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="5" fill={hidden.has(item.key) ? '#bbb' : item.color} /></svg>{item.label}</button>)}</div>
@@ -50,8 +49,6 @@ export function ReportSnapshotTrends({ analytics, renderChart }: { analytics: Re
   };
   return <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-trend">
     <div className={styles.blockHead}><div><span>04</span><strong>每日标签快照趋势</strong></div><small>{analytics?.start_date} → {analytics?.end_date}</small></div>
-    <p className={local.note}>按每天 dt 的完整快照统计，不是订单发生日期。点击图例可显隐；缺失日保留断点，不补 0。先筛出疑似孤立离群点，再平滑连接正常点；跨离群日以虚线表示估计趋势，空心点保留原始值。概览和环图展示最新成功日期。</p>
-    <p className={local.note}>{analytics?.counting_basis}</p>
     {chart('每日人群规模', people)}
     {chart('全量人群 · 每日价敏分布', distribution(false))}
     {chart('有订单人群 · 每日价敏分布', distribution(true))}
