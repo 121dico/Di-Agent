@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Empty } from 'antd';
 import { buildObservedCurvePath } from '@/views/reportCurvePath';
 import { buildDateTickIndexes, formatChartDateTick } from '@/views/reportPresentation';
@@ -9,18 +9,31 @@ const compact = (value: number) => value >= 1e8 ? `${Number((value / 1e8).toFixe
 
 export function ReportLaneTrends({ labels, series }: { labels: string[]; series: SnapshotSeries[] }) {
   const [active, setActive] = useState<number | null>(null);
+  const container = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(640);
   // 排序只依据最近有效人数；各自缩放后映射进同一个绘图区的等高区间。
   const lanes = series.map(item => {
     const values = labels.map((_, index) => item.values[index] ?? NaN);
     const finite = values.filter(Number.isFinite);
     return { ...item, values, latest: finite[finite.length - 1], min: finite.length ? Math.min(...finite) : NaN, max: finite.length ? Math.max(...finite) : NaN };
   }).sort((a, b) => (b.latest ?? -Infinity) - (a.latest ?? -Infinity));
-  if (!lanes.length || !lanes.some(lane => lane.latest !== undefined)) return <Empty description="暂无可见趋势数据" />;
-  const width = 640, height = 480, left = 100, right = 622, top = 14, bottom = 448;
+  const hasValues = lanes.some(lane => lane.latest !== undefined);
+  useEffect(() => {
+    const element = container.current;
+    if (!element) return;
+    const measure = () => { if (element.clientWidth > 0) setWidth(element.clientWidth); };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [hasValues]);
+  if (!hasValues) return <Empty description="暂无可见趋势数据" />;
+  const height = 480, left = 100, right = Math.max(left + 1, width - 18), top = 14, bottom = 448;
   const band = (bottom - top) / lanes.length;
   const x = (index: number) => labels.length === 1 ? (left + right) / 2 : left + index * (right - left) / Math.max(1, labels.length - 1);
   const ticks = buildDateTickIndexes(labels.length, right - left);
-  return <div className={styles.lanes} onMouseLeave={() => setActive(null)}>
+  return <div ref={container} className={styles.lanes} onMouseLeave={() => setActive(null)}>
     <svg viewBox={`0 0 ${width} ${height}`} className={styles.chart} role="group" aria-label="价敏人群整合趋势图">
       {ticks.map(index => <g key={index}>
         <line x1={x(index)} x2={x(index)} y1={top} y2={bottom} className={styles.grid} />

@@ -1,5 +1,5 @@
 .lanes { position: relative; min-width: 0; }
-.chart { width: 100%; display: block; overflow: visible; }
+.chart { width: 100%; height: 480px; display: block; overflow: visible; }
 .name { font-size: 12px; font-weight: 600; }
 .axis { fill: var(--wb-text-secondary); font-size: 10px; font-variant-numeric: tabular-nums; }
 .grid { stroke: var(--wb-border-subtle); stroke-dasharray: 3 5; vector-effect: non-scaling-stroke; }
