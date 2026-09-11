@@ -790,7 +790,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
         </div>
       </header>
 
-      {access.canManageReports && isV12 && selected && <ReportProvenance reportId={selected.id} open={provenanceOpen} onClose={() => setProvenanceOpen(false)} executionIds={analytics?.execution_ids} startDate={analytics?.start_date} endDate={analytics?.end_date} />}
+      {access.canManageReports && isV12 && selected && <ReportProvenance reportId={selected.id} open={provenanceOpen} onClose={() => setProvenanceOpen(false)} executionIds={analytics?.execution_ids} startDate={analytics?.start_date} endDate={analytics?.end_date} dataDate={analytics?.data_date} />}
 
       <section className={styles.workspace}>
         <aside className={styles.reportRail}>

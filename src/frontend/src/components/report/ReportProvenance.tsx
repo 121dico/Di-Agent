@@ -33,7 +33,7 @@ export function ExecutionDetails({ binding, execution }: { binding: ChartBinding
   </>;
 }
 
-function ProvenanceBody({ reportId, executionIds, startDate, endDate }: { reportId: string; executionIds: string[]; startDate?: string; endDate?: string }) {
+function ProvenanceBody({ reportId, executionIds, startDate, endDate, dataDate }: { reportId: string; executionIds: string[]; startDate?: string; endDate?: string; dataDate?: string }) {
   const [data, setData] = useState<ChartProvenance | null>(null);
   const [chartKey, setChartKey] = useState('');
   const [executionId, setExecutionId] = useState('');
@@ -62,8 +62,11 @@ function ProvenanceBody({ reportId, executionIds, startDate, endDate }: { report
   }, [reportId, reload, idsKey]);
   const binding = data?.bindings?.find((item) => item.chart_key === chartKey);
   const linkedExecutions = executionsForChart(data?.executions ?? [], chartKey);
+  const snapshotOnly = chartKey === 'all_distribution' || chartKey === 'order_distribution';
+  const from = snapshotOnly ? dataDate : startDate;
+  const to = snapshotOnly ? dataDate : endDate;
   const executions = scope === 'history' ? linkedExecutions : linkedExecutions.filter((item) => executionIds.includes(item.id)
-    && (!startDate || item.end_date >= startDate) && (!endDate || item.start_date <= endDate));
+    && (!snapshotOnly || Boolean(dataDate)) && (!from || item.end_date >= from) && (!to || item.start_date <= to));
   const execution = executions.find((item) => item.id === executionId) ?? executions[0];
   const replay = async () => {
     if (!execution || running) return;
@@ -92,8 +95,8 @@ function ProvenanceBody({ reportId, executionIds, startDate, endDate }: { report
 }
 
 const NO_EXECUTIONS: string[] = [];
-export function ReportProvenance({ reportId, open, onClose, executionIds = NO_EXECUTIONS, startDate, endDate }: { reportId: string; open: boolean; onClose: () => void; executionIds?: string[]; startDate?: string; endDate?: string }) {
+export function ReportProvenance({ reportId, open, onClose, executionIds = NO_EXECUTIONS, startDate, endDate, dataDate }: { reportId: string; open: boolean; onClose: () => void; executionIds?: string[]; startDate?: string; endDate?: string; dataDate?: string }) {
   return <Drawer title="图表数据逻辑" open={open} onClose={onClose} width="min(880px, 100vw)">
-    {open && <ProvenanceBody key={reportId} reportId={reportId} executionIds={executionIds} startDate={startDate} endDate={endDate} />}
+    {open && <ProvenanceBody key={reportId} reportId={reportId} executionIds={executionIds} startDate={startDate} endDate={endDate} dataDate={dataDate} />}
   </Drawer>;
 }
