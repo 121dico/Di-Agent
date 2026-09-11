@@ -52,7 +52,7 @@ export function ReportCohortSections({ analytics, loading, error, progress, rend
     </section>
 
     {renderGrowthChart && renderBar && <ReportSnapshotGrowth analytics={analytics} renderChart={renderGrowthChart} renderBar={renderBar} />}
-    <section className={`${styles.summaryBlock} ${styles.trendBlock}`} id="report-order-cohort">
+    <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-order-cohort">
       <div className={styles.blockHead}><div><span>03</span><strong>价敏人群分布对比</strong></div><small>全量人群 / 有订单人群（ps_conf &gt; 0）</small></div>
       <p className={local.note}>以标签最近刷新时保留的置信度为准，不等同于今日重新计算的180天活跃人群。分布分母仅为本组用户。</p>
       <Spin spinning={loading && !available}>

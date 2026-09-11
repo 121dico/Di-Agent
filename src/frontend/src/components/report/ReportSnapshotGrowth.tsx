@@ -62,7 +62,7 @@ export function ReportSnapshotGrowth({ analytics, renderChart, renderBar }: {
   renderBar: (labels: string[], values: number[]) => ReactNode;
 }) {
   const growth = analytics ? snapshotGrowth(analytics) : null;
-  return <section className={`${styles.summaryBlock} ${styles.trendBlock}`} id="report-increments">
+  return <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-increments">
     <div className={styles.blockHead}><div><span>02</span><strong>增量分析</strong></div><small>{growth?.first} → {growth?.last} · 当前城市筛选</small></div>
     <p className={local.note}>按 dt 快照中 ps_score 非空的人数计算（含先验赋分），不是首次新增用户，也不是当天订单用户。首个可用快照为基线；日均净增按 {growth?.pairCount ?? 0} 个连续日对计算。缺失日期不补零，真实负值不隐藏。</p>
     {!growth?.first ? <Empty description="尚无可用快照" /> : <div className={styles.chartGrid}>
