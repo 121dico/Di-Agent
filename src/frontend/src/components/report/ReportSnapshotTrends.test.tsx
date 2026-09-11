@@ -78,5 +78,5 @@ it('lets each chart legend hide and restore its own series without hiding the ot
   expect(container.querySelectorAll('output')[1]?.textContent).not.toBe('');
   act(() => button.dispatchEvent(new MouseEvent('click', { bubbles: true })));
   expect(button.getAttribute('aria-pressed')).toBe('true');
-  expect(container.querySelectorAll('output')[1]?.textContent).not.toBe('');
+  expect(container.querySelectorAll('output')[0]?.textContent).not.toBe('');
 });
