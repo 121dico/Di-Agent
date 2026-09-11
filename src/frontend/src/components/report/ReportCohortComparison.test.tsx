@@ -5,6 +5,26 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it, vi } from 'vitest';
 import { ReportCohortComparison } from './ReportCohortComparison';
 
+it('formats hundreds of millions as 亿 and shows exact sector counts on hover without changing the other ring', () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    act(() => root.render(<ReportCohortComparison all={[{ label: '低价敏', value: 315888579 }, { label: '高价敏', value: 54980428 }]} orders={[{ label: '低价敏', value: 20044355 }]} />));
+    const all = container.querySelector('section[aria-label="全量人群价敏分布"]')!;
+    const orders = container.querySelector('section[aria-label="有订单人群价敏分布"]')!;
+    expect(all.querySelector('text')?.textContent).toBe('3.71亿');
+    const sector = all.querySelector('circle[role="button"]')!;
+    act(() => sector.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })));
+    expect(all.querySelector('[role="status"]')?.textContent).toContain('315,888,579 人');
+    expect(all.querySelector('[role="status"]')?.textContent).toContain('85.2%');
+    expect(all.querySelector('text')?.textContent).toBe('3.16亿');
+    expect(orders.querySelector('text')?.textContent).toBe('2004.4万');
+    act(() => sector.dispatchEvent(new MouseEvent('mouseout', { bubbles: true })));
+    expect(all.querySelector('text')?.textContent).toBe('3.71亿');
+  } finally { act(() => root.unmount()); vi.unstubAllGlobals(); }
+});
+
 it('shares one level legend with independent cohort denominators and toggles', () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   const container = document.createElement('div');

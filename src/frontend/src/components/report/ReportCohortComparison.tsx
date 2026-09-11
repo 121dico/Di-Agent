@@ -5,6 +5,7 @@ import styles from './ReportCohortComparison.module.css';
 type Item = { label: string; value: number };
 const colors: Record<string, string> = { 极高价敏: '#A63437', 高价敏: '#D75A50', 中高价敏: '#DB843C', 中价敏: '#D79A2B', 中低价敏: '#259F9A', 低价敏: '#4B78D1', 极低价敏: '#7B9ECA' };
 const count = (value: number) => value.toLocaleString('zh-CN');
+const compactCount = (value: number) => value >= 100000000 ? `${Number((value / 100000000).toFixed(2))}亿` : value >= 10000 ? `${Number((value / 10000).toFixed(1))}万` : count(value);
 
 export function ReportCohortComparison({ all, orders }: { all: Item[]; orders: Item[] | null }) {
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
@@ -16,6 +17,7 @@ export function ReportCohortComparison({ all, orders }: { all: Item[]; orders: I
   return <div className={styles.layout}>
     <div className={styles.charts}>{groups.map((group, index) => {
       const total = totals[index] ?? 0;
+      const activeItem = group.items?.find((item) => `${group.key}:${item.label}` === active);
       let consumed = 0;
       return <section className={styles.chart} key={group.key} aria-label={`${group.title}价敏分布`}>
         <h3>{group.title}</h3><p>{group.items ? `${count(total)} 人` : '尚无可用统计'}</p>
@@ -33,9 +35,10 @@ export function ReportCohortComparison({ all, orders }: { all: Item[]; orders: I
               <title>{`${item.label}：${count(item.value)} 人 · ${(item.value / total * 100).toFixed(1)}%`}</title>
             </circle>;
           })}</g>
-          <text x="130" y="128" textAnchor="middle" className={styles.value}>{total >= 10000 ? `${(total / 10000).toFixed(1)}万` : count(total)}</text>
-          <text x="130" y="151" textAnchor="middle" className={styles.caption}>{group.title}</text>
+          <text x="130" y="128" textAnchor="middle" className={styles.value}>{compactCount(activeItem?.value ?? total)}</text>
+          <text x="130" y="151" textAnchor="middle" className={styles.caption}>{activeItem?.label ?? group.title}</text>
         </svg> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={group.items ? '暂无分布数据' : '订单人群统计未加载'} />}
+        {group.items && total > 0 && <p className={styles.readout} role="status">{activeItem ? `${activeItem.label}：${count(activeItem.value)} 人 · ${(activeItem.value / total * 100).toFixed(1)}%` : '悬停扇区查看准确人数与占比'}</p>}
       </section>;
     })}</div>
     <div className={styles.legend}>
