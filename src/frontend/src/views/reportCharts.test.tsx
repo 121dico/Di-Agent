@@ -20,6 +20,18 @@ describe('report chart interactions', () => {
     container.remove();
   });
 
+  it('starts at the first available real point without drawing an invented zero before it', () => {
+    const labels = ['2026-09-07', '2026-09-08', '2026-09-09'];
+    act(() => root.render(<SmoothChart labels={labels} series={[{ label: '人数', values: [NaN, 100, 110] }]} />));
+    expect([...container.querySelectorAll('circle title')].map(node => node.textContent)).toEqual([
+      '2026-09-08 · 人数 100', '2026-09-09 · 人数 110',
+    ]);
+    expect(container.querySelector('svg path')?.getAttribute('d')?.match(/C /g)).toHaveLength(1);
+    act(() => root.render(<IncrementBarChart labels={labels} values={[NaN, 10, 0]} raw />));
+    expect(container.querySelector('[aria-label="2026-09-07，价敏用户净增 0"]')).toBeNull();
+    expect(container.querySelector('[aria-label="2026-09-09，价敏用户净增 0"]')).not.toBeNull();
+  });
+
   it('expands each trend independently but keeps real counts and daily rates in the tooltip', () => {
     act(() => root.render(<SmoothChart labels={['2026-09-07', '2026-09-08', '2026-09-09']} trendRule="raw" scaleMode="trend" series={[
       { label: '全量', values: [100000000, 110000000, 120000000] },

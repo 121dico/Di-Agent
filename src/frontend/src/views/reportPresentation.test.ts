@@ -121,12 +121,12 @@ it('makes day-over-day user increments the primary report story', () => {
     { label: '日均净增', value: '+10,862', suffix: '人' },
   ]);
   expect(result.incrementSeries).toEqual([
-    { key: 'dailyNet', label: '每日价敏净增', color: '#2F6FDB', values: [0, 20_504, 31_034] },
+    { key: 'dailyNet', label: '每日价敏净增', color: '#2F6FDB', values: [NaN, 20_504, 31_034] },
   ]);
   expect(result.cumulativeSeries).toEqual([
     { key: 'cumulativeNet', label: '累计净增', color: '#15857A', values: [0, 20_504, 325_849] },
   ]);
-  expect(result.growthRateSeries[0]?.values).toEqual([0, 0.27, 0.39]);
+  expect(result.growthRateSeries[0]?.values).toEqual([NaN, 0.27, 0.39]);
 });
 
 it('does not invent a line when only one real daily sample exists', () => {

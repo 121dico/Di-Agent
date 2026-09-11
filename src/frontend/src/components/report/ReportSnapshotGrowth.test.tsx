@@ -20,9 +20,10 @@ it('derives the overview and chart from retained daily snapshots instead of sing
   const charts: number[][] = [];
   const bars: number[][] = [];
   renderToStaticMarkup(<ReportSnapshotGrowth analytics={analytics} renderBar={(_labels, values) => { bars.push(values); return null; }} renderChart={(_labels, series) => { charts.push(series[0]!.values); return null; }} />);
-  expect(bars[0]).toEqual([0, 10, -5]);
+  expect(bars[0]).toEqual([NaN, 10, -5]);
   expect(charts[0]).toEqual([0, 10, 5]);
   expect(charts[1]?.[2]).toBeCloseTo(-4.54545);
+  expect(charts[1]?.[0]).toBeNaN();
 });
 
 it('leaves missing calendar days and their daily comparisons unavailable, but keeps cumulative change', () => {
@@ -30,9 +31,9 @@ it('leaves missing calendar days and their daily comparisons unavailable, but ke
   const bars: number[][] = [];
   const charts: number[][] = [];
   const html = renderToStaticMarkup(<ReportSnapshotGrowth analytics={partial} renderBar={(_labels, values) => { bars.push(values); return null; }} renderChart={(_labels, series) => { charts.push(series[0]!.values); return null; }} />);
-  expect(bars[0]).toEqual([0, NaN, NaN]);
+  expect(bars[0]).toEqual([NaN, NaN, NaN]);
   expect(charts[0]).toEqual([0, NaN, 5]);
-  expect(charts[1]).toEqual([0, NaN, NaN]);
+  expect(charts[1]).toEqual([NaN, NaN, NaN]);
   expect(html).toContain('0 个连续日对');
   const metrics = renderToStaticMarkup(<SnapshotGrowthMetrics analytics={partial} />);
   expect(metrics.match(/—/g)).toHaveLength(3);
@@ -45,4 +46,13 @@ it('does not invent day growth from a single snapshot or a zero denominator and 
   expect(html).not.toContain('+5');
   const zero = { ...analytics, trend: analytics.trend.map((point) => ({ ...point, calculated_user_count: 0, total_user_count: 0 })) };
   expect(renderToStaticMarkup(<SnapshotGrowthMetrics analytics={zero} />).match(/—/g)).toHaveLength(2);
+});
+
+it('keeps a genuine zero change after the first observation, without filling earlier dates', () => {
+  const data = { ...analytics, start_date: '2026-09-07', trend: analytics.trend.map(point => ({ ...point, calculated_user_count: 100 })) };
+  const charts: number[][] = [];
+  let daily: number[] = [];
+  renderToStaticMarkup(<ReportSnapshotGrowth analytics={data} renderBar={(_labels, values) => { daily = values; return null; }} renderChart={(_labels, series) => { charts.push(series[0]!.values); return null; }} />);
+  expect(daily).toEqual([NaN, NaN, 0, 0]);
+  expect(charts[1]).toEqual([NaN, NaN, 0, 0]);
 });

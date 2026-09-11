@@ -282,7 +282,7 @@ export function IncrementBarChart({ labels, values, height = 330, raw = false }:
       <span><i data-tone="positive" />↑ 正增长</span>
       <span><i data-tone="negative" />↓ 负增长</span>
       <span><i data-tone="trend" />正常幅度平滑趋势</span>
-      <small>主图只展示正常幅度 · {outliers.size} 个疑似离群 / 区间极端值不参与刻度与拟合，在上方以小圆点标记 · 点击查看原值{raw && ' · 首日基准为0'}</small>
+      <small>主图只展示正常幅度 · {outliers.size} 个疑似离群 / 区间极端值不参与刻度与拟合，在上方以小圆点标记 · 点击查看原值 · 无前日记录不补零</small>
       <small>线性幅度 · 柱高为绝对值，红色 ↓ 表示减少 · 虚线为跨离群日估计；末尾异常不外推</small>
     </div>
     <svg viewBox={`0 0 ${width} ${height}`} className={styles.chart} role="group" aria-label="每日价敏用户净增柱状图">

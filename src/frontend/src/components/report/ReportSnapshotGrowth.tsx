@@ -18,13 +18,14 @@ function snapshotGrowth(analytics: ReportAnalyticsResult) {
   const daily = labels.map((date) => {
     const current = points.get(date);
     if (!current) return NaN;
-    if (date === first) return 0;
+    // 首次记录之前的人数未知，不能把不可计算的日增量画成零。
+    if (date === first) return NaN;
     const previous = points.get(new Date(Date.parse(date) - day).toISOString().slice(0, 10));
     return previous ? current.calculated_user_count - previous.calculated_user_count : NaN;
   });
   const cumulative = labels.map((date) => points.has(date) && baseline !== undefined ? points.get(date)!.calculated_user_count - baseline : NaN);
   const rates = labels.map((date, i) => {
-    if (date === first) return 0;
+    if (date === first) return NaN;
     const previous = points.get(new Date(Date.parse(date) - day).toISOString().slice(0, 10));
     return previous && previous.calculated_user_count > 0 ? daily[i]! / previous.calculated_user_count * 100 : NaN;
   });
@@ -64,7 +65,7 @@ export function ReportSnapshotGrowth({ analytics, renderChart, renderBar }: {
   const growth = analytics ? snapshotGrowth(analytics) : null;
   return <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-increments">
     <div className={styles.blockHead}><div><span>02</span><strong>增量分析</strong></div><small>{growth?.first} → {growth?.last} · 当前城市筛选</small></div>
-    <p className={local.note}>按 dt 快照中 ps_score 非空的人数计算（含先验赋分），不是首次新增用户，也不是当天订单用户。首个可用快照为基线；日均净增按 {growth?.pairCount ?? 0} 个连续日对计算。缺失日期不补零，真实负值不隐藏。</p>
+    <p className={local.note}>按 dt 快照中 ps_score 非空的人数计算（含先验赋分），不是首次新增用户，也不是当天订单用户。首日无前日记录，净增与增长率不绘制，从首个可计算值起画；日均净增按 {growth?.pairCount ?? 0} 个连续日对计算。缺失日期不补零，真实负值不隐藏。</p>
     {!growth?.first ? <Empty description="尚无可用快照" /> : <div className={styles.chartGrid}>
       <div className={`${styles.card} ${styles.trendCard}`}>
         <div className={styles.cardTitle}><div><i />每日价敏用户净增</div><small>当天已赋分人数 − 前一日已赋分人数 · 单位：人</small></div>
@@ -73,7 +74,7 @@ export function ReportSnapshotGrowth({ analytics, renderChart, renderBar }: {
       <div className={`${styles.card} ${styles.incrementAnalysisCard}`}>
         <div className={styles.cardTitle}><div><i />累计与增长效率</div><small>不重复累计存量用户 · 横轴：dt</small></div>
         <div className={styles.volumeTrendGrid}>
-          <section className={styles.volumeTrendPanel}><header><span>累计净增</span><small>相对首个可用快照 · 单位：人</small></header>
+          <section className={styles.volumeTrendPanel}><header><span>累计净增</span><small>相对首个快照的变化量，基线 0 不代表人数为 0 · 单位：人</small></header>
             {renderChart(growth.labels, [{ key: 'cumulativeNet', label: '累计净增（人）', color: '#15857A', values: growth.cumulative }])}
           </section>
           <section className={styles.volumeTrendPanel}><header><span>每日增长率</span><small>当日净增 ÷ 前一日已赋分人数 · 单位：%</small></header>
