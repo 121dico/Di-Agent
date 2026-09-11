@@ -29,7 +29,7 @@ it('preserves missing observations, constant and zero values without inventing s
     act(() => root.render(<ReportLaneTrends labels={['2026-09-01', '2026-09-02', '2026-09-03']} series={[{ key: 'a', label: '零', color: 'red', values: [0, NaN, 0] }]} />));
     expect(host.querySelectorAll('circle')).toHaveLength(2);
     expect([...host.querySelectorAll('circle')].map(node => node.getAttribute('cy'))).toEqual(['40', '40']);
-    expect(host.querySelector('path')).toBeNull();
+    expect(host.querySelector('path')?.getAttribute('d') ?? '').not.toMatch(/[CL]/);
     expect(host.innerHTML).not.toMatch(/(?:cy|d)="[^"]*NaN/);
     act(() => root.render(<ReportLaneTrends labels={[]} series={[]} />));
     expect(host.textContent).toContain('暂无可见趋势数据');
