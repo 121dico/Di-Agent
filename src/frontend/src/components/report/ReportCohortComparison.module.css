@@ -1,0 +1,24 @@
+.layout { container-type: inline-size; display: grid; grid-template-columns: minmax(0, 1fr) minmax(350px, .85fr); align-items: center; gap: 28px; }
+.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; min-width: 0; }
+.chart { min-width: 0; text-align: center; }
+.chart h3 { margin: 0 0 8px; font-size: 17px; color: var(--wb-text-primary); }
+.chart p, .legend p { color: var(--wb-text-secondary); font-size: 13px; line-height: 1.6; }
+.chart > svg { display: block; width: 100%; max-width: 300px; margin: auto; }
+.value { font-size: 27px; font-weight: 700; fill: var(--wb-text-primary); }
+.caption { font-size: 13px; fill: var(--wb-text-secondary); }
+.sector { cursor: pointer; transition: stroke-width 160ms ease, stroke 160ms ease; }
+.sector:focus-visible { outline: none; stroke-width: 37px; }
+.legend { min-width: 0; }
+.legend table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.legend th { text-align: left; font-weight: 600; white-space: nowrap; }
+.legend th svg { margin-right: 7px; }
+.legend th, .legend td { padding: 8px 5px; border-bottom: 1px solid var(--wb-border-subtle); }
+.legend thead th { color: var(--wb-text-secondary); font-size: 12px; }
+.legend button { display: grid; gap: 4px; width: 100%; padding: 4px; border: 0; background: transparent; color: var(--wb-text-primary); text-align: left; cursor: pointer; font: inherit; }
+.legend button span { color: var(--wb-text-secondary); font-size: 12px; }
+.legend button[aria-pressed="false"] { opacity: .4; }
+.legend button:disabled { cursor: default; }
+.legend button:focus-visible { outline: 2px solid #2F6FDB; outline-offset: 2px; border-radius: 4px; }
+@media (max-width: 1200px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 520px) { .charts { grid-template-columns: minmax(0, 1fr); } .legend th, .legend td { padding: 7px 2px; } .legend table { font-size: 11px; } }
+@media (prefers-reduced-motion: reduce) { .sector { transition: none; } }

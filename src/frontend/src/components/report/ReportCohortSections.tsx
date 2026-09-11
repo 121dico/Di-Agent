@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Alert, Empty, Spin } from 'antd';
 import type { ReportAnalyticsResult } from '@/types/report';
 import { presentSensitivityDistribution } from '@/views/reportPresentation';
@@ -6,6 +6,7 @@ import styles from '@/views/ReportsView.module.css';
 import local from './ReportCohortSections.module.css';
 import { ReportSnapshotTrends, type SnapshotChartRenderer } from './ReportSnapshotTrends';
 import { ReportSnapshotGrowth, SnapshotGrowthMetrics } from './ReportSnapshotGrowth';
+import { ReportCohortComparison } from './ReportCohortComparison';
 
 interface Props {
   analytics: ReportAnalyticsResult | null;
@@ -25,14 +26,7 @@ const pendingMetrics = [
   { title: '新增人群价敏分布', reason: '需将上述两类人群分别匹配当日标签后统计；不会用全量分布代替。' },
 ];
 
-export function ReportCohortSections({ analytics, loading, error, progress, renderChart, renderGrowthChart, renderBar, renderDistribution }: Props) {
-  const [hiddenAll, setHiddenAll] = useState<Set<string>>(() => new Set());
-  const [hiddenOrders, setHiddenOrders] = useState<Set<string>>(() => new Set());
-  const toggle = (current: Set<string>, label: string) => {
-    const next = new Set(current);
-    if (next.has(label)) next.delete(label); else next.add(label);
-    return next;
-  };
+export function ReportCohortSections({ analytics, loading, error, progress, renderChart, renderGrowthChart, renderBar }: Props) {
   const available = analytics && analytics.data_date;
   const allDistribution = presentSensitivityDistribution(analytics?.distribution ?? []);
   const unassigned = analytics ? analytics.summary.total_user_count - analytics.summary.calculated_user_count : 0;
@@ -53,29 +47,24 @@ export function ReportCohortSections({ analytics, loading, error, progress, rend
             {metric('已赋价敏分用户', analytics.summary.calculated_user_count.toLocaleString('zh-CN'), '人')}
             <SnapshotGrowthMetrics analytics={analytics} />
           </div>
-          <div className={`${styles.card} ${local.distribution}`}>
-            <div className={styles.cardTitle}><div><i />全量价敏分布</div></div>
-            {renderDistribution(allDistribution, hiddenAll, (label) => setHiddenAll((current) => toggle(current, label)), '全量用户')}
-          </div>
         </> : <Empty description="尚无可用统计" />}
       </Spin>
     </section>
 
     {renderGrowthChart && renderBar && <ReportSnapshotGrowth analytics={analytics} renderChart={renderGrowthChart} renderBar={renderBar} />}
     <section className={`${styles.summaryBlock} ${styles.trendBlock}`} id="report-order-cohort">
-      <div className={styles.blockHead}><div><span>03</span><strong>有订单人群</strong></div><small>订单置信度 ps_conf &gt; 0</small></div>
+      <div className={styles.blockHead}><div><span>03</span><strong>价敏人群分布对比</strong></div><small>全量人群 / 有订单人群（ps_conf &gt; 0）</small></div>
       <p className={local.note}>以标签最近刷新时保留的置信度为准，不等同于今日重新计算的180天活跃人群。分布分母仅为本组用户。</p>
       <Spin spinning={loading && !available}>
-        {available && cohort ? <div className={local.cohortGrid}>
-          <div className={local.cohortMetrics}>
+        {available ? <>
+          {cohort && <div className={styles.metrics}>
             {metric('有订单用户数', cohort.user_count.toLocaleString('zh-CN'), '人')}
             {metric('占全量人群', `${Number(cohort.share.toFixed(2))}%`, '')}
+          </div>}
+          <div className={`${styles.card} ${local.distribution}`}>
+            <ReportCohortComparison all={allDistribution} orders={cohort ? presentSensitivityDistribution(cohort.distribution) : null} />
           </div>
-          <div className={styles.card}>
-            <div className={styles.cardTitle}><div><i />有订单人群价敏分布</div><small>点击图例或扇区可显隐</small></div>
-            {renderDistribution(presentSensitivityDistribution(cohort.distribution), hiddenOrders, (label) => setHiddenOrders((current) => toggle(current, label)), '有订单用户')}
-          </div>
-        </div> : <Empty description="尚无可用统计" />}
+        </> : <Empty description="尚无可用统计" />}
       </Spin>
     </section>
 
