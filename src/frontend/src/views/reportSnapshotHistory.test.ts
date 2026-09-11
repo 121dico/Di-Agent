@@ -12,9 +12,10 @@ it('loads actual dates individually, retains failures as gaps and uses latest su
     return { data_date: end, summary: { total_user_count: 10 }, trend: [{ dt: end }], query_ids: [] } as unknown as ReportAnalyticsResult;
   };
   await expect(loadSnapshotHistory(query, 'r', 'all', [], (result) => { final = result; })).rejects.toThrow('1 个 dt');
-  expect(calls).toEqual(['2026-07-30', '2026-07-29', '2026-07-28']);
+  expect(calls).toEqual(['2026-07-30', '2026-07-29']);
   expect(final!.summary.total_user_count).toBe(10);
-  expect(final!.trend.map((point) => point.dt)).toEqual(['2026-07-28', '2026-07-30']);
+  expect(final!.trend.map((point) => point.dt)).toEqual(['2026-07-30']);
+  expect(final!.start_date).toBe('2026-07-29');
   expect(final!.missing_dates).toEqual(['2026-07-29']);
 });
 

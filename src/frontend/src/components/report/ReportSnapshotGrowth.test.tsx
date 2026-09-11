@@ -9,6 +9,13 @@ const analytics = {
   trend: [100, 110, 105].map((count, i) => ({ dt: `2026-09-${String(8 + i).padStart(2, '0')}`, calculated_user_count: count, total_user_count: 200, daily_net_user_growth: 0, cumulative_net_user_growth: 0 })),
 } as ReportAnalyticsResult;
 
+it('does not use the excluded July 28 snapshot as a growth baseline', () => {
+  const data = { ...analytics, start_date: '2026-07-29', end_date: '2026-07-30', data_date: '2026-07-30', trend: [999999, 100, 120].map((count, i) => ({ ...analytics.trend[0]!, dt: `2026-07-${28+i}`, calculated_user_count: count })) };
+  let daily: number[] = [];
+  renderToStaticMarkup(<ReportSnapshotGrowth analytics={data} renderBar={(_labels, values) => { daily = values; return null; }} renderChart={() => null} />);
+  expect(daily).toEqual([NaN, 20]);
+});
+
 it('does not carry a one-day level jump into later daily increases', () => {
   const data = { ...analytics, trend: [100, 1000100, 1000220].map((count, i) => ({ ...analytics.trend[i]!, calculated_user_count: count })) };
   const curves: number[][] = [];
