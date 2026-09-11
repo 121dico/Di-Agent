@@ -19,13 +19,6 @@ interface Props {
   renderDistribution: (items: Array<{ label: string; value: number }>, hidden: Set<string>, onToggle: (label: string) => void, label: string) => ReactNode;
 }
 
-const pendingMetrics = [
-  { title: '首次新增标签用户', reason: '需首次入库日期，或完整相邻快照的 DUID 集合比较；标签更新日期不是首次日期。' },
-  { title: '当天有订单用户', reason: '需按真实订单发生日期去重 DUID，包含新老用户；账单入库日不能替代。' },
-  { title: '当天新增订单', reason: '需按真实订单发生日期去重订单 ID；180天滚动订单数的差值不是每日订单量。' },
-  { title: '新增人群价敏分布', reason: '需将上述两类人群分别匹配当日标签后统计；不会用全量分布代替。' },
-];
-
 export function ReportCohortSections({ analytics, loading, error, progress, renderChart, renderGrowthChart, renderBar }: Props) {
   const available = analytics && analytics.data_date;
   const allDistribution = presentSensitivityDistribution(analytics?.distribution ?? []);
@@ -69,12 +62,5 @@ export function ReportCohortSections({ analytics, loading, error, progress, rend
     </section>
 
     {renderChart && <ReportSnapshotTrends analytics={analytics} renderChart={renderChart} />}
-    <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`}>
-      <div className={styles.blockHead}><div><span>05</span><strong>订单发生日新增（独立口径）</strong></div><small>不影响上方 dt 历史趋势</small></div>
-      <p className={local.note}>首次新增标签用户与当天有订单用户分别统计，两类人群可能重叠，不直接相加。当前 API 尚未提供所需日粒度指标。</p>
-      <div className={local.pendingGrid}>{pendingMetrics.map((item) => <article className={styles.card} key={item.title}>
-        <h3>{item.title}</h3><span className={local.pending}>待接入</span><p className={local.note}>{item.reason}</p>
-      </article>)}</div>
-    </section>
   </>;
 }

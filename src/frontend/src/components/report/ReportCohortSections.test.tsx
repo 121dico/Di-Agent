@@ -15,8 +15,9 @@ it('separates all users and positive-confidence users without inventing daily ad
   expect(html).toContain('有订单人群');
   expect(html).toContain('20%');
   expect(html).toContain('未赋分');
-  expect(html).toContain('首次新增标签用户');
-  expect(html).toContain('待接入');
+  expect(html).not.toContain('首次新增标签用户');
+  expect(html).not.toContain('订单发生日新增');
+  expect(html).not.toContain('待接入');
   expect(html).not.toContain('每日价敏用户净增');
 });
 
