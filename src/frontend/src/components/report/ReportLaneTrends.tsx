@@ -12,7 +12,7 @@ export function ReportLaneTrends({ labels, series }: { labels: string[]; series:
   const lanes = series.map(item => {
     const values = labels.map((_, index) => item.values[index] ?? NaN);
     const finite = values.filter(Number.isFinite);
-    return { ...item, values, latest: finite.at(-1), min: finite.length ? Math.min(...finite) : NaN, max: finite.length ? Math.max(...finite) : NaN };
+    return { ...item, values, latest: finite[finite.length - 1], min: finite.length ? Math.min(...finite) : NaN, max: finite.length ? Math.max(...finite) : NaN };
   }).sort((a, b) => (b.latest ?? -Infinity) - (a.latest ?? -Infinity));
   if (!lanes.length || !lanes.some(lane => lane.latest !== undefined)) return <Empty description="暂无可见趋势数据" />;
   const x = (index: number) => labels.length === 1 ? 300 : 8 + index * 584 / Math.max(1, labels.length - 1);
@@ -22,7 +22,7 @@ export function ReportLaneTrends({ labels, series }: { labels: string[]; series:
       const path = buildObservedCurvePath(labels, lane.values, (value, index) => ({ x: x(index), y: y(value) }));
       const value = active === null ? lane.latest : lane.values[active];
       return <section className={styles.lane} key={lane.key} aria-label={`${lane.label}独立趋势`}>
-        <header><span><i style={{ background: lane.color }} />{lane.label}</span><strong>{value !== undefined && Number.isFinite(value) ? `${compact(value)} 人` : '—'}</strong></header>
+        <header><span><svg width="8" height="8" aria-hidden="true"><circle cx="4" cy="4" r="4" fill={lane.color} /></svg>{lane.label}</span><strong>{value !== undefined && Number.isFinite(value) ? `${compact(value)} 人` : '—'}</strong></header>
         <div className={styles.plot}>
           <div className={styles.bounds}><span>{Number.isFinite(lane.max) ? compact(lane.max) : '—'}</span><span>{Number.isFinite(lane.min) ? compact(lane.min) : '—'}</span></div>
           <svg viewBox="0 0 600 80" preserveAspectRatio="none" role="group" aria-label={`${lane.label}人数趋势`}>
@@ -39,7 +39,7 @@ export function ReportLaneTrends({ labels, series }: { labels: string[]; series:
         </div>
       </section>;
     })}
-    <div className={styles.dates}><span>{labels[0]}</span><span>{labels.at(-1)}</span></div>
+    <div className={styles.dates}><span>{labels[0]}</span><span>{labels[labels.length - 1]}</span></div>
     {active !== null && active < labels.length && <div className={styles.readout} role="status"><strong>{labels[active]}</strong>{lanes.map(lane => <span key={lane.key}>{lane.label}：{Number.isFinite(lane.values[active]) ? `${lane.values[active]!.toLocaleString('zh-CN')} 人` : '无数据'}</span>)}</div>}
   </div>;
 }

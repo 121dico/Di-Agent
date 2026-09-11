@@ -2,7 +2,6 @@
 .lane { min-width: 0; padding: 10px 0 4px; border-top: 1px solid var(--wb-border-subtle); }
 .lane header { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; margin-bottom: 6px; }
 .lane header span { display: flex; align-items: center; gap: 7px; }
-.lane i { width: 8px; height: 8px; border-radius: 50%; }
 .lane strong { font-variant-numeric: tabular-nums; }
 .plot { display: flex; gap: 8px; height: 80px; min-width: 0; }
 .bounds { flex: 0 0 62px; display: flex; flex-direction: column; justify-content: space-between; padding: 4px 0; color: var(--wb-text-secondary); font-size: 11px; text-align: right; }
