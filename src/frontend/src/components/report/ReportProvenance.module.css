@@ -1,5 +1,6 @@
-.body { display: grid; gap: 20px; }
-.field { display: grid; gap: 8px; }
+.body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; min-width: 0; }
+.body > * { min-width: 0; }
+.field { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .field > span { font-weight: 600; }
 .meta { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 10px 16px; margin: 0; }
 .meta dt { color: var(--text-secondary, #626871); }
