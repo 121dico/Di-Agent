@@ -41,9 +41,8 @@ export function ReportCohortSections({ analytics, loading, error, renderChart, r
       </Spin>
     </section>
 
-    {renderGrowthChart && renderBar && <ReportSnapshotGrowth analytics={analytics} renderChart={renderGrowthChart} renderBar={renderBar} />}
     <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-order-cohort">
-      <div className={styles.blockHead}><div><span>03</span><strong>价敏人群分布对比</strong></div><small>全量人群 / 有订单人群（ps_conf &gt; 0）</small></div>
+      <div className={styles.blockHead}><div><span>02</span><strong>价敏人群分布对比</strong></div><small>全量人群 / 有订单人群（ps_conf &gt; 0）</small></div>
       <Spin spinning={loading && !available}>
         {available ? <>
           {cohort && <div className={styles.metrics}>
@@ -57,6 +56,7 @@ export function ReportCohortSections({ analytics, loading, error, renderChart, r
       </Spin>
     </section>
 
+    {renderGrowthChart && renderBar && <ReportSnapshotGrowth analytics={analytics} renderChart={renderGrowthChart} renderBar={renderBar} />}
     {renderChart && <ReportSnapshotTrends analytics={analytics} renderChart={renderChart} />}
   </>;
 }

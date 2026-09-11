@@ -33,7 +33,7 @@ export function ReportSnapshotTrends({ analytics, renderChart }: { analytics: Re
   };
   const chart = (title: string, series: SnapshotSeries[]) => {
     const mode = modes[title] ?? 'trend';
-    return <div className={styles.card}>
+    return <div className={`${styles.card} ${local.compactTrendCard}`}>
     <div className={local.chartHeader}>
       <div className={styles.cardTitle}><div><i />{title}</div></div>
       <div className={local.chartModeSwitch} role="group" aria-label={`${title}展示模式`}>
@@ -49,8 +49,10 @@ export function ReportSnapshotTrends({ analytics, renderChart }: { analytics: Re
   };
   return <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-trend">
     <div className={styles.blockHead}><div><span>04</span><strong>每日标签快照趋势</strong></div><small>{analytics?.start_date} → {analytics?.end_date}</small></div>
-    {chart('每日人群规模', people)}
-    {chart('全量人群 · 每日价敏分布', distribution(false))}
-    {chart('有订单人群 · 每日价敏分布', distribution(true))}
+    <div className={local.snapshotGrid}>
+      {chart('每日人群规模', people)}
+      {chart('全量人群 · 每日价敏分布', distribution(false))}
+      {chart('有订单人群 · 每日价敏分布', distribution(true))}
+    </div>
   </section>;
 }

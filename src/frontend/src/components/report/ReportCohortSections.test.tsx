@@ -52,7 +52,7 @@ it('wires filtered snapshot increments into the overview and keeps report sectio
   expect(html).toContain('本期累计净增');
   expect(html).not.toContain('个连续日对');
   expect(html).not.toContain('+5');
-  const sections = ['report-overview', 'report-increments', 'report-order-cohort', 'report-trend'];
+  const sections = ['report-overview', 'report-order-cohort', 'report-increments', 'report-trend'];
   const positions = sections.map((id) => html.indexOf(`id="${id}"`));
   expect(positions.every((position) => position >= 0)).toBe(true);
   expect(positions).toEqual([...positions].sort((a, b) => a - b));

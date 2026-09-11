@@ -63,7 +63,7 @@ export function ReportSnapshotGrowth({ analytics, renderChart, renderBar }: {
 }) {
   const growth = analytics ? snapshotGrowth(analytics) : null;
   return <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-increments">
-    <div className={styles.blockHead}><div><span>02</span><strong>增量分析</strong></div><small>{growth?.first} → {growth?.last} · 当前城市筛选</small></div>
+    <div className={styles.blockHead}><div><span>03</span><strong>增量分析</strong></div><small>{growth?.first} → {growth?.last} · 当前城市筛选</small></div>
     {!growth?.first ? <Empty description="尚无可用快照" /> : <div className={styles.chartGrid}>
       <div className={`${styles.card} ${styles.trendCard}`}>
         <div className={styles.cardTitle}><div><i />每日价敏用户净增</div><small>单位：人</small></div>
