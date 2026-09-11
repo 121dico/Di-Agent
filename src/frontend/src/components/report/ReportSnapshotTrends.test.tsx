@@ -33,6 +33,27 @@ it('switches only the chosen chart without losing hidden legends', () => {
   expect(container.querySelector('output')?.textContent).toBe('orders');
 });
 
+it('keeps the second chart mode through empty-to-loaded data and preserves its hidden legend', () => {
+  const renderChart = (_labels: string[], series: SnapshotSeries[], mode?: string) => <output data-mode={mode}>{series.map((item) => item.key).join(',')}</output>;
+  act(() => root.render(<ReportSnapshotTrends analytics={null} renderChart={renderChart} />));
+  expect(container.querySelectorAll('output')).toHaveLength(0);
+  expect(container.textContent?.match(/正在读取每日 dt 快照统计/g)).toHaveLength(3);
+  const group = container.querySelector('[role="group"][aria-label="全量人群 · 每日价敏分布展示模式"]')!;
+  const actual = group.querySelectorAll('button')[1]!;
+  act(() => actual.click());
+  expect(actual.getAttribute('aria-pressed')).toBe('true');
+  expect(container.querySelectorAll('output')).toHaveLength(0);
+  act(() => root.render(<ReportSnapshotTrends analytics={analytics} renderChart={renderChart} />));
+  expect([...container.querySelectorAll('output')].map((item) => item.dataset.mode)).toEqual(['trend', 'actual', 'trend']);
+  const legend = [...container.querySelectorAll('button')].filter((button) => button.textContent === '高价敏')[0]!;
+  act(() => legend.click());
+  act(() => group.querySelectorAll('button')[0]!.click());
+  expect([...container.querySelectorAll('output')].map((item) => item.dataset.mode)).toEqual(['trend', 'trend', 'trend']);
+  expect(container.querySelectorAll('output')[1]?.textContent).toBe('');
+  expect(container.querySelectorAll('output')[2]?.textContent).not.toBe('');
+  expect(legend.getAttribute('aria-pressed')).toBe('false');
+});
+
 it('renders three charts with calendar dt axes and preserves missing-day gaps apart from genuine zero', () => {
   const charts: { labels: string[]; series: SnapshotSeries[] }[] = [];
   act(() => root.render(<ReportSnapshotTrends analytics={analytics} renderChart={(labels, series) => { charts.push({ labels, series }); return <div data-chart />; }} />));
