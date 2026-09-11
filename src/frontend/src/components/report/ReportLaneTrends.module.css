@@ -1,0 +1,15 @@
+.lanes { position: relative; display: grid; gap: 10px; min-width: 0; }
+.lane { min-width: 0; padding: 10px 0 4px; border-top: 1px solid var(--wb-border-subtle); }
+.lane header { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; margin-bottom: 6px; }
+.lane header span { display: flex; align-items: center; gap: 7px; }
+.lane i { width: 8px; height: 8px; border-radius: 50%; }
+.lane strong { font-variant-numeric: tabular-nums; }
+.plot { display: flex; gap: 8px; height: 80px; min-width: 0; }
+.bounds { flex: 0 0 62px; display: flex; flex-direction: column; justify-content: space-between; padding: 4px 0; color: var(--wb-text-secondary); font-size: 11px; text-align: right; }
+.plot svg { flex: 1; width: 0; height: 80px; overflow: visible; }
+.grid { stroke: var(--wb-border-subtle); stroke-dasharray: 3 5; vector-effect: non-scaling-stroke; }
+.guide { stroke: var(--wb-text-secondary); stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.hit { fill: transparent; cursor: crosshair; }
+.hit:focus { outline: none; fill: rgba(47, 111, 219, .08); }
+.dates { display: flex; justify-content: space-between; padding-left: 70px; font-size: 11px; color: var(--wb-text-secondary); }
+.readout { position: absolute; top: 0; right: 0; z-index: 5; display: grid; gap: 5px; pointer-events: none; background: var(--wb-surface); border: 1px solid var(--wb-border-subtle); border-radius: 8px; padding: 12px; font-size: 12px; box-shadow: 0 4px 18px #0001; }
