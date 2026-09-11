@@ -46,10 +46,10 @@ export function ReportCohortSections({ analytics, loading, error, progress, rend
       {progress && <Alert type="info" message={progress} />}
       <div className={styles.blockHead}><div><span>01</span><strong>指标概览 · 全量人群</strong></div><small>标签快照 {analytics?.data_date || '—'}</small></div>
       <p className={local.note}>当前城市筛选内的完整标签人群，包含先验赋分与历史继承用户；不跨快照累加人数。</p>
+      {available && <p className={local.note}>全量用户数：{analytics.summary.total_user_count.toLocaleString('zh-CN')} 人 · 以下增量统计仅针对已赋价敏分用户（含先验）。</p>}
       <Spin spinning={loading && !available}>
         {available ? <>
           <div className={styles.metrics}>
-            {metric('全量用户数', analytics.summary.total_user_count.toLocaleString('zh-CN'), '人')}
             {metric('已赋价敏分用户', analytics.summary.calculated_user_count.toLocaleString('zh-CN'), '人')}
             <SnapshotGrowthMetrics analytics={analytics} />
           </div>
