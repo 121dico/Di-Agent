@@ -2,8 +2,10 @@ package report
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +13,21 @@ import (
 )
 
 type signerFake struct{}
+
+func TestHTTPConnectorRetainsActualSQLPrivately(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"resultCode":"0","data":{"sql":"SELECT count(duid) FROM labels","queryId":"q-sql","data":[]}}`))
+	}))
+	defer server.Close()
+	result, err := NewHTTPConnector(server.Client(), signerFake{}).Query(context.Background(), model.ReportDataSource{Endpoint: server.URL, APIName: "labels"}, []byte(`{}`))
+	if err != nil || result.SQL != "SELECT count(duid) FROM labels" {
+		t.Fatalf("SQL not retained: %+v %v", result, err)
+	}
+	public, _ := json.Marshal(result)
+	if strings.Contains(string(public), "SELECT") {
+		t.Fatal("SQL leaked through public serialization")
+	}
+}
 
 func (signerFake) Headers(context.Context, model.ReportDataSource, time.Time, []byte) (map[string]string, error) {
 	return map[string]string{"x-app-key": "test-app", "sign": "test-sign", "x-date": "2026-08-25T00:00:00Z"}, nil

@@ -76,44 +76,13 @@ func (r *ReportRunner) queryV12Analytics(ctx context.Context, report *model.Repo
 	}
 	// 合并同筛选并发读取，避免多个页面同时扫描相同的亿级源表。
 	value, err, _ := r.templateQueries.Do(key, func() (any, error) {
-		conditions := []map[string]any{{"name": "dt", "operatorEnum": "GEQ", "value": base.StartDate}, {"name": "dt", "operatorEnum": "LEQ", "value": base.EndDate}}
-		var saved struct {
-			Conditions []map[string]any `json:"conditionList"`
-		}
-		if err := json.Unmarshal(report.QueryJSON, &saved); err != nil {
+		queries, keys, err := buildV12AggregateQueries(report, base, cities)
+		if err != nil {
 			return nil, err
 		}
-		for _, condition := range saved.Conditions {
-			if condition["name"] != "dt" {
-				conditions = append(conditions, condition)
-			}
-		}
-		if len(cities) > 0 {
-			conditions = append(conditions, map[string]any{"name": p.City, "operatorEnum": "IN", "value": cities})
-		}
-		// 此模板绑定的 SQL 契约为每个 dt + duid 一行，COUNT 按日统计该快照粒度。
-		// 不跨分区累加用户，避免 DISTINCT 哈希集合导致上游内存超限。
-		queries := []map[string]any{
-			{"fieldList": []map[string]any{analyticsField("dt", "", ""), analyticsField("duid", "total_user_count", "COUNT"), analyticsField(p.Orders, "total_order_count", "SUM")},
-				"conditionList": conditions, "groupList": []string{"dt"}, "orderBy": "dt", "needPagination": false},
-		}
-		fields := []map[string]any{analyticsField("dt", "", ""), analyticsField(p.Level, "level", ""), analyticsField(p.Type, "score_type", ""), analyticsField("duid", "user_count", "COUNT")}
-		for _, metric := range []struct{ field, key string }{{p.Score, "price"}, {p.Price, "d1"}, {p.Coupon, "d2"}, {p.Time, "d3"}} {
-			fields = append(fields, analyticsField(metric.field, metric.key+"_avg", "AVG"), analyticsField(metric.field, metric.key+"_n", "COUNT"))
-		}
-		queries = append(queries, map[string]any{"fieldList": fields, "conditionList": append(append([]map[string]any{}, conditions...), map[string]any{"name": p.Score, "operatorEnum": "NOT_NULL"}),
-			"groupList": []string{"dt", p.Level, p.Type}, "orderBy": "dt", "needPagination": false})
-		// 独立按置信度过滤，不能用 ORDER 类型或当前明细页冒充这一人群。
-		queries = append(queries, map[string]any{
-			"fieldList":     []map[string]any{analyticsField("dt", "", ""), analyticsField(p.Level, "level", ""), analyticsField("duid", "user_count", "COUNT")},
-			"conditionList": append(append([]map[string]any{}, conditions...), map[string]any{"name": "ps_conf", "operatorEnum": "GQ", "value": "0"}),
-			"groupList":     []string{"dt", p.Level}, "orderBy": "dt",
-		})
-		if base.Range == "dates" {
-			queries = []map[string]any{{"fieldList": []map[string]any{analyticsField("dt", "", "")}, "conditionList": conditions, "groupList": []string{"dt"}, "orderBy": "dt"}}
-		}
 		results := make([]model.ReportQueryResult, 0, len(queries))
-		for _, query := range queries {
+		executionIDs := []string{}
+		for index, query := range queries {
 			query["needPagination"], query["pageSize"], query["page"] = true, 1000, 1
 			raw, err := json.Marshal(query)
 			if err != nil {
@@ -130,7 +99,7 @@ func (r *ReportRunner) queryV12Analytics(ctx context.Context, report *model.Repo
 			if err := validateQueryContractLevel(decoded, available); err != nil {
 				return nil, err
 			}
-			result, err := r.connector.Query(ctx, *source, raw)
+			result, execution, err := r.executeV12Aggregate(ctx, report, source, keys[index], raw, base.StartDate, base.EndDate, cities, "")
 			if err != nil {
 				if strings.Contains(err.Error(), "MEMORY_LIMIT_EXCEEDED") || strings.Contains(err.Error(), "Memory limit") || strings.Contains(err.Error(), "TOO_SLOW") {
 					return nil, ErrReportAggregateCapacity
@@ -141,9 +110,13 @@ func (r *ReportRunner) queryV12Analytics(ctx context.Context, report *model.Repo
 				return nil, fmt.Errorf("%w: 聚合结果超过单次返回上限，请缩短日期范围，当前未展示不完整统计", ErrReportInvalid)
 			}
 			results = append(results, result)
+			if _, persisted := r.catalog.(reportProvenanceStore); persisted && execution != nil {
+				executionIDs = append(executionIDs, execution.ID)
+			}
 		}
 		if base.Range == "dates" {
 			result := *base
+			result.ExecutionIDs = executionIDs
 			result.AvailableDates = []string{}
 			for _, row := range results[0].Rows {
 				date := fmt.Sprint(row["dt"])
@@ -155,6 +128,7 @@ func (r *ReportRunner) queryV12Analytics(ctx context.Context, report *model.Repo
 			return &result, nil
 		}
 		result := assembleV12Analytics(base, results, r.now())
+		result.ExecutionIDs = executionIDs
 		result.CountingBasis = "按源表每个 dt + duid 一行的契约计数；未执行全量去重校验，不跨日期累加用户"
 		result.OrderCohort = &model.ReportAnalyticsCohort{Distribution: []model.ReportAnalyticsDistribution{}}
 		for _, row := range results[2].Rows {

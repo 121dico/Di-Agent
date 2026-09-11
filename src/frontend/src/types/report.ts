@@ -79,6 +79,7 @@ export interface ReportAnalyticsTrendPoint {
 }
 
 export interface ReportAnalyticsResult {
+  execution_ids?: string[];
   available_dates?: string[];
   counting_basis?: string;
   order_cohort?: { user_count: number; share: number; distribution: Array<{ level: string; user_count: number }> };

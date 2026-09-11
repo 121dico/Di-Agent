@@ -39,6 +39,7 @@ import { buildReportAccessPolicy } from './reportAccess';
 import { filterReportSources } from './reportSourceSearch';
 import { PersonalReportsLibrary } from '@/components/personal-report/PersonalReportsLibrary';
 import { ReportTemplateModal } from '@/components/report/ReportTemplateModal';
+import { ReportProvenance } from '@/components/report/ReportProvenance';
 import { ReportCohortSections } from '@/components/report/ReportCohortSections';
 import { ReportLaneTrends } from '@/components/report/ReportLaneTrends';
 import { loadStoredSnapshotHistory } from './reportSnapshotHistory';
@@ -391,6 +392,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
   const [sourceCatalogQuery, setSourceCatalogQuery] = useState('');
   const [reportOpen, setReportOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
+  const [provenanceOpen, setProvenanceOpen] = useState(false);
   const [editingReportId, setEditingReportId] = useState('');
   const [searchDUID, setSearchDUID] = useState('');
   const [searchResult, setSearchResult] = useState<ReportPageResult | null>(null);
@@ -783,9 +785,12 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
         </div>
         <div className={styles.actions}>
           {access.canManageReports && <Button onClick={() => setTemplateOpen(true)}>套用模板</Button>}
+          {access.canManageReports && isV12 && <Button disabled={!selected} onClick={() => setProvenanceOpen(true)}>图表数据逻辑</Button>}
           {access.canManageReports && <><Button icon={<CloudServerOutlined />} onClick={openSourceManager}>数据源</Button><Button icon={<PlusOutlined />} onClick={openCreateReport}>新建报表</Button><Button icon={<EditOutlined />} disabled={!selected} onClick={openEditReport}>编辑当前报表</Button><Button type="primary" icon={<PlayCircleOutlined />} loading={running} disabled={!selected} onClick={() => void handleRun()}>立即生成</Button></>}
         </div>
       </header>
+
+      {access.canManageReports && isV12 && selected && <ReportProvenance reportId={selected.id} open={provenanceOpen} onClose={() => setProvenanceOpen(false)} executionIds={analytics?.execution_ids} startDate={analytics?.start_date} endDate={analytics?.end_date} />}
 
       <section className={styles.workspace}>
         <aside className={styles.reportRail}>

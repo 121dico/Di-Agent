@@ -32,7 +32,8 @@ export async function loadSnapshotHistory(
     const latest = [...results].sort((a,b)=>(b.data_date??'').localeCompare(a.data_date??''))[0];
     const trend = results.flatMap((result) => result.trend).sort((a, b) => a.dt.localeCompare(b.dt));
     publish(latest ? { ...latest, range, start_date: start, end_date: end, available_dates: dates, trend,
-      missing_dates: failed.slice(), query_ids: results.flatMap((result) => result.query_ids ?? []) } : null,
+      missing_dates: failed.slice(), query_ids: results.flatMap((result) => result.query_ids ?? []),
+      execution_ids: [...new Set(results.flatMap((result) => result.execution_ids ?? []))] } : null,
     { completed, total: dates.length, failed: failed.slice() });
   };
   publishCurrent();

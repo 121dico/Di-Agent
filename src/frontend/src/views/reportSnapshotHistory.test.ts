@@ -26,3 +26,13 @@ it('stops scheduling obsolete selections', async () => {
   await loadSnapshotHistory(query, 'r', 'all', [], () => { throw new Error('obsolete publish'); }, () => active);
   expect(calls).toBe(1);
 });
+
+it('keeps exact execution links across dates without inventing links for older caches', async () => {
+  let final: ReportAnalyticsResult | null = null;
+  const query = async (_id: string, range: string, end?: string) => {
+    if (range === 'dates') return { available_dates: ['2026-09-08', '2026-09-09', '2026-09-10'] } as ReportAnalyticsResult;
+    return { data_date: end, trend: [{ dt: end }], execution_ids: end === '2026-09-08' ? undefined : [`${end}-totals`, `${end}-distribution`] } as ReportAnalyticsResult;
+  };
+  await loadSnapshotHistory(query, 'r', 'all', [], (result) => { final = result; });
+  expect(final!.execution_ids).toEqual(['2026-09-10-totals', '2026-09-10-distribution', '2026-09-09-totals', '2026-09-09-distribution']);
+});

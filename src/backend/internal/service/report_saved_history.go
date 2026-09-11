@@ -54,6 +54,7 @@ func (r *ReportRunner) savedV12History(ctx context.Context, report *model.Report
 		result.FetchedAt = saved.FetchedAt
 		result.CountingBasis = saved.CountingBasis
 		result.QueryIDs = append(result.QueryIDs, saved.QueryIDs...)
+		result.ExecutionIDs = append(result.ExecutionIDs, saved.ExecutionIDs...)
 	}
 	if result.DataDate != "" {
 		result.EndDate = result.DataDate

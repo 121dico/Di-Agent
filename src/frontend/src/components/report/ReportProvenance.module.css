@@ -1,0 +1,14 @@
+.body { display: grid; gap: 20px; }
+.field { display: grid; gap: 8px; }
+.field > span { font-weight: 600; }
+.meta { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 10px 16px; margin: 0; }
+.meta dt { color: var(--text-secondary, #626871); }
+.meta dd { margin: 0; overflow-wrap: anywhere; }
+.details { border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px; }
+.details summary { cursor: pointer; font-weight: 600; }
+.code { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 300px; overflow: auto; font-size: 13px; line-height: 1.65; }
+.tableWrap { max-height: 360px; overflow: auto; margin-top: 12px; }
+.table { border-collapse: collapse; min-width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+.table th, .table td { text-align: left; border-bottom: 1px solid var(--border-color, #e5e7eb); padding: 10px; white-space: nowrap; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.hint { color: var(--text-secondary, #626871); margin: 0; }

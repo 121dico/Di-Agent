@@ -154,6 +154,7 @@ type ReportRun struct {
 }
 
 type ReportQueryResult struct {
+	SQL        string `json:"-"`
 	Rows       []map[string]any
 	Pagination ReportPagination
 	Partition  string
@@ -226,6 +227,7 @@ type ReportAnalyticsCohort struct {
 
 // ReportAnalyticsResult 是固定价敏报表按时间范围聚合后的指标与图表数据。
 type ReportAnalyticsResult struct {
+	ExecutionIDs   []string                      `json:"execution_ids,omitempty"`
 	AvailableDates []string                      `json:"available_dates,omitempty"`
 	CountingBasis  string                        `json:"counting_basis,omitempty"`
 	OrderCohort    *ReportAnalyticsCohort        `json:"order_cohort,omitempty"`

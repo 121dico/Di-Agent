@@ -127,6 +127,7 @@ func (c *HTTPConnector) Query(ctx context.Context, source model.ReportDataSource
 		ResultCode string `json:"resultCode"`
 		ReturnMsg  string `json:"returnMsg"`
 		Data       struct {
+			SQL        string           `json:"sql"`
 			Rows       []map[string]any `json:"data"`
 			Pagination struct {
 				Total     int64 `json:"total"`
@@ -144,13 +145,14 @@ func (c *HTTPConnector) Query(ctx context.Context, source model.ReportDataSource
 		return model.ReportQueryResult{}, fmt.Errorf("解析数据服务响应: %w", err)
 	}
 	if envelope.ResultCode != "0" {
-		return model.ReportQueryResult{}, fmt.Errorf("数据服务查询失败: %s", envelope.ReturnMsg)
+		return model.ReportQueryResult{SQL: envelope.Data.SQL, QueryID: envelope.Data.QueryID, Duration: time.Since(started)}, fmt.Errorf("数据服务查询失败: %s", envelope.ReturnMsg)
 	}
 	partition := ""
 	if value, ok := envelope.Data.MaxPartition["dt"]; ok {
 		partition = fmt.Sprint(value)
 	}
 	return model.ReportQueryResult{
+		SQL:  envelope.Data.SQL,
 		Rows: envelope.Data.Rows,
 		Pagination: model.ReportPagination{
 			Total: envelope.Data.Pagination.Total, Page: envelope.Data.Pagination.Page,

@@ -218,6 +218,8 @@ func Setup(r *gin.Engine, deps Deps) {
 				reportRoutes.GET("/:id/data", deps.ReportHandler.QueryPage)
 				reportRoutes.GET("/:id/search", deps.ReportHandler.QuerySearch)
 				reportRoutes.GET("/:id/analytics", deps.ReportHandler.QueryAnalytics)
+				reportRoutes.GET("/:id/provenance", deps.ReportHandler.GetProvenance)
+				reportRoutes.POST("/:id/provenance/replay", deps.ReportHandler.ReplayProvenance)
 				reportRoutes.GET("/:id/runs", deps.ReportHandler.ListRuns)
 				reportRoutes.GET("/:id/runs/:runId/download", deps.ReportHandler.DownloadCSV)
 			}
