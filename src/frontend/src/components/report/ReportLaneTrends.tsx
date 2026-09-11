@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Empty } from 'antd';
 import { buildObservedCurvePath } from '@/views/reportCurvePath';
+import { buildDateTickIndexes, formatChartDateTick } from '@/views/reportPresentation';
 import type { SnapshotSeries } from './ReportSnapshotTrends';
 import styles from './ReportLaneTrends.module.css';
 
@@ -8,38 +9,42 @@ const compact = (value: number) => value >= 1e8 ? `${Number((value / 1e8).toFixe
 
 export function ReportLaneTrends({ labels, series }: { labels: string[]; series: SnapshotSeries[] }) {
   const [active, setActive] = useState<number | null>(null);
-  // 仅排序可见曲线，不修改原始序列；末日缺失时使用最近一次真实观测人数。
+  // 排序只依据最近有效人数；各自缩放后映射进同一个绘图区的等高区间。
   const lanes = series.map(item => {
     const values = labels.map((_, index) => item.values[index] ?? NaN);
     const finite = values.filter(Number.isFinite);
     return { ...item, values, latest: finite[finite.length - 1], min: finite.length ? Math.min(...finite) : NaN, max: finite.length ? Math.max(...finite) : NaN };
   }).sort((a, b) => (b.latest ?? -Infinity) - (a.latest ?? -Infinity));
   if (!lanes.length || !lanes.some(lane => lane.latest !== undefined)) return <Empty description="暂无可见趋势数据" />;
-  const x = (index: number) => labels.length === 1 ? 300 : 8 + index * 584 / Math.max(1, labels.length - 1);
+  const width = 640, height = 480, left = 100, right = 622, top = 14, bottom = 448;
+  const band = (bottom - top) / lanes.length;
+  const x = (index: number) => labels.length === 1 ? (left + right) / 2 : left + index * (right - left) / Math.max(1, labels.length - 1);
+  const ticks = buildDateTickIndexes(labels.length, right - left);
   return <div className={styles.lanes} onMouseLeave={() => setActive(null)}>
-    {lanes.map(lane => {
-      const y = (value: number) => lane.max === lane.min ? 40 : 70 - (value - lane.min) / (lane.max - lane.min) * 60;
-      const path = buildObservedCurvePath(labels, lane.values, (value, index) => ({ x: x(index), y: y(value) }));
-      const value = active === null ? lane.latest : lane.values[active];
-      return <section className={styles.lane} key={lane.key} aria-label={`${lane.label}独立趋势`}>
-        <header><span><svg width="8" height="8" aria-hidden="true"><circle cx="4" cy="4" r="4" fill={lane.color} /></svg>{lane.label}</span><strong>{value !== undefined && Number.isFinite(value) ? `${compact(value)} 人` : '—'}</strong></header>
-        <div className={styles.plot}>
-          <div className={styles.bounds}><span>{Number.isFinite(lane.max) ? compact(lane.max) : '—'}</span><span>{Number.isFinite(lane.min) ? compact(lane.min) : '—'}</span></div>
-          <svg viewBox="0 0 600 80" preserveAspectRatio="none" role="group" aria-label={`${lane.label}人数趋势`}>
-            {[10, 70].map(row => <line key={row} x1="8" x2="592" y1={row} y2={row} className={styles.grid} />)}
-            {path && <path d={path} fill="none" stroke={lane.color} strokeWidth="2" vectorEffect="non-scaling-stroke" />}
-            {lane.values.map((value, index) => Number.isFinite(value) && <circle key={index} cx={x(index)} cy={y(value)} r="2" fill={lane.color}><title>{labels[index]} · {lane.label} {value.toLocaleString('zh-CN')} 人</title></circle>)}
-            {active !== null && active < labels.length && <line x1={x(active)} x2={x(active)} y1="5" y2="75" className={styles.guide} />}
-            {labels.map((date, index) => {
-              const left = index === 0 ? 0 : (x(index - 1) + x(index)) / 2;
-              const right = index === labels.length - 1 ? 600 : (x(index) + x(index + 1)) / 2;
-              return <rect key={date} x={left} y="0" width={right - left} height="80" className={styles.hit} tabIndex={0} aria-label={`${date} ${lane.label} ${Number.isFinite(lane.values[index]) ? lane.values[index]!.toLocaleString('zh-CN') + ' 人' : '无数据'}`} onMouseEnter={() => setActive(index)} onFocus={() => setActive(index)} onBlur={() => setActive(null)} onClick={() => setActive(index)} />;
-            })}
-          </svg>
-        </div>
-      </section>;
-    })}
-    <div className={styles.dates}><span>{labels[0]}</span><span>{labels[labels.length - 1]}</span></div>
+    <svg viewBox={`0 0 ${width} ${height}`} className={styles.chart} role="group" aria-label="价敏人群整合趋势图">
+      {ticks.map(index => <g key={index}>
+        <line x1={x(index)} x2={x(index)} y1={top} y2={bottom} className={styles.grid} />
+        <text x={x(index)} y={height - 8} textAnchor={index === 0 ? 'start' : index === labels.length - 1 ? 'end' : 'middle'} className={styles.axis}>{formatChartDateTick(labels[index] ?? '')}</text>
+      </g>)}
+      {lanes.map((lane, laneIndex) => {
+        const bandTop = top + laneIndex * band;
+        const y = (value: number) => bandTop + band * (lane.max === lane.min ? .5 : .8 - (value - lane.min) / (lane.max - lane.min) * .6);
+        const path = buildObservedCurvePath(labels, lane.values, (value, index) => ({ x: x(index), y: y(value) }));
+        return <g key={lane.key} data-series={lane.key} aria-label={`${lane.label}独立趋势`}>
+          <text x="4" y={bandTop + band * .5} fill={lane.color} className={styles.name}>{lane.label}</text>
+          <text x={left - 10} y={bandTop + band * .2} textAnchor="end" className={styles.axis}>{Number.isFinite(lane.max) ? compact(lane.max) : '—'}</text>
+          <text x={left - 10} y={bandTop + band * .8} textAnchor="end" className={styles.axis}>{Number.isFinite(lane.min) ? compact(lane.min) : '—'}</text>
+          {path && <path d={path} fill="none" stroke={lane.color} strokeWidth="2" vectorEffect="non-scaling-stroke" />}
+          {lane.values.map((value, index) => Number.isFinite(value) && <circle key={index} cx={x(index)} cy={y(value)} r="2" fill={lane.color}><title>{labels[index]} · {lane.label} {value.toLocaleString('zh-CN')} 人</title></circle>)}
+        </g>;
+      })}
+      {active !== null && active < labels.length && <line x1={x(active)} x2={x(active)} y1={top} y2={bottom} className={styles.guide} />}
+      {labels.map((date, index) => {
+        const start = index === 0 ? left : (x(index - 1) + x(index)) / 2;
+        const end = index === labels.length - 1 ? right : (x(index) + x(index + 1)) / 2;
+        return <rect key={date} x={start} y={top} width={end - start} height={bottom - top} className={styles.hit} tabIndex={0} aria-label={`${date} 查看全部价敏人数`} onMouseEnter={() => setActive(index)} onFocus={() => setActive(index)} onBlur={() => setActive(null)} onClick={() => setActive(index)} />;
+      })}
+    </svg>
     {active !== null && active < labels.length && <div className={styles.readout} role="status"><strong>{labels[active]}</strong>{lanes.map(lane => <span key={lane.key}>{lane.label}：{Number.isFinite(lane.values[active]) ? `${lane.values[active]!.toLocaleString('zh-CN')} 人` : '无数据'}</span>)}</div>}
   </div>;
 }

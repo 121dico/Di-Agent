@@ -14,8 +14,13 @@ it('sorts latest counts descending, gives each scale the same height, and reveal
   ];
   try {
     act(() => root.render(<ReportLaneTrends labels={['2026-09-01', '2026-09-02']} series={series} />));
-    expect([...host.querySelectorAll('section')].map(node => node.getAttribute('aria-label'))).toEqual(['大人群独立趋势', '中人群独立趋势', '小人群独立趋势']);
-    for (const svg of host.querySelectorAll('svg[role="group"]')) expect([...svg.querySelectorAll('circle')].map(node => node.getAttribute('cy'))).toEqual(['70', '10']);
+    expect(host.querySelectorAll('svg')).toHaveLength(1);
+    expect(host.querySelectorAll('section')).toHaveLength(0);
+    expect([...host.querySelectorAll('[data-series]')].map(node => node.getAttribute('aria-label'))).toEqual(['大人群独立趋势', '中人群独立趋势', '小人群独立趋势']);
+    for (const group of host.querySelectorAll('[data-series]')) {
+      const points = [...group.querySelectorAll('circle')].map(node => Number(node.getAttribute('cy')));
+      expect(points[0]! - points[1]!).toBeCloseTo(434 / 3 * .6);
+    }
     expect(series[0]?.key).toBe('small');
     act(() => host.querySelector('rect')!.dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
     expect(host.querySelector('[role="status"]')?.textContent).toContain('200,000,000 人');
@@ -28,7 +33,7 @@ it('preserves missing observations, constant and zero values without inventing s
   try {
     act(() => root.render(<ReportLaneTrends labels={['2026-09-01', '2026-09-02', '2026-09-03']} series={[{ key: 'a', label: '零', color: 'red', values: [0, NaN, 0] }]} />));
     expect(host.querySelectorAll('svg[role="group"] circle')).toHaveLength(2);
-    expect([...host.querySelectorAll('svg[role="group"] circle')].map(node => node.getAttribute('cy'))).toEqual(['40', '40']);
+    expect([...host.querySelectorAll('svg[role="group"] circle')].map(node => node.getAttribute('cy'))).toEqual(['231', '231']);
     expect(host.querySelector('path')?.getAttribute('d') ?? '').not.toMatch(/[CL]/);
     expect(host.innerHTML).not.toMatch(/(?:cy|d)="[^"]*NaN/);
     act(() => root.render(<ReportLaneTrends labels={[]} series={[]} />));
