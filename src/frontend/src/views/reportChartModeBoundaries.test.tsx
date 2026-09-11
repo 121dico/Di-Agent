@@ -147,10 +147,10 @@ describe('report chart mode boundaries', () => {
     const normal = container.querySelector('[aria-label="2026-09-05，价敏用户净增 100"]');
     const double = container.querySelector('[aria-label="2026-09-09，价敏用户净增 200"]');
     expect(Number(double?.getAttribute('height')) / Number(normal?.getAttribute('height'))).toBeCloseTo(2, 8);
-    expect(container.querySelector('[data-break="true"]')).not.toBeNull();
+    expect(container.querySelector('circle[data-outlier="true"]')).not.toBeNull();
     expect(container.querySelector('path[data-estimated="true"]')).not.toBeNull();
     act(() => container.querySelector('[aria-label="2026-09-07，价敏用户净增 -10000"]')?.dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
     expect(container.querySelector('[role="status"]')?.textContent).toContain('-10,000');
-    expect(container.querySelector('[role="status"]')?.textContent).toContain('柱已截断');
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('已从主图分离');
   });
 });

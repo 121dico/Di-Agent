@@ -43,7 +43,7 @@ import { ReportCohortSections } from '@/components/report/ReportCohortSections';
 import { loadStoredSnapshotHistory, type SnapshotProgress } from './reportSnapshotHistory';
 import { formatReportAxisTick } from './reportAxisTick';
 import { normalizeReportTrend, reportDailyRate, type ReportScaleMode } from './reportTrendScale';
-import { detectReportOutliers } from './reportOutliers';
+import { detectIncrementOutliers, detectReportOutliers } from './reportOutliers';
 import { buildEstimatedCurvePath, buildObservedCurvePath } from './reportCurvePath';
 import { ChinaRegionPicker, expandChinaRegionSelection, summarizeChinaRegionSelection } from '@/components/report/ChinaRegionPicker';
 import styles from './ReportsView.module.css';
@@ -253,7 +253,7 @@ export function IncrementBarChart({ labels, values, height = 330, raw = false }:
   const [chartRef, width] = useResponsiveChartWidth();
   const padding = { top: 34, right: 24, bottom: 44, left: 62 };
   const trend = useMemo(() => {
-    const outlierIndexes = detectReportOutliers(values, labels);
+    const outlierIndexes = detectIncrementOutliers(values, labels);
     const omitted = new Set(outlierIndexes);
     return { fittedValues: values.map((value, index) => omitted.has(index) ? NaN : value), outlierIndexes };
   }, [values, labels]);
@@ -282,7 +282,8 @@ export function IncrementBarChart({ labels, values, height = 330, raw = false }:
       <span><i data-tone="positive" />↑ 正增长</span>
       <span><i data-tone="negative" />↓ 负增长</span>
       <span><i data-tone="trend" />正常幅度平滑趋势</span>
-      <small>线性幅度 · 柱高为绝对值，红色 ↓ 表示减少 · 离群超界柱用断轴标记 · 虚线为跨离群日估计{raw && ' · 首日基准为0'}</small>
+      <small>主图只展示正常幅度 · {outliers.size} 个疑似离群 / 区间极端值不参与刻度与拟合，在上方以小圆点标记 · 点击查看原值{raw && ' · 首日基准为0'}</small>
+      <small>线性幅度 · 柱高为绝对值，红色 ↓ 表示减少 · 虚线为跨离群日估计；末尾异常不外推</small>
     </div>
     <svg viewBox={`0 0 ${width} ${height}`} className={styles.chart} role="img" aria-label="每日价敏用户净增柱状图">
       {yTicks.map((tick, index) => {
@@ -295,6 +296,7 @@ export function IncrementBarChart({ labels, values, height = 330, raw = false }:
         if (!Number.isFinite(value)) return null;
         const rawValueY = yFor(value);
         const isOutlier = outliers.has(index);
+        if (isOutlier) return <circle key={`${labels[index]}-${index}`} cx={xFor(index)} cy={14} r={5} fill="none" stroke="var(--text-3)" strokeWidth="1.5" data-outlier="true" tabIndex={0} role="button" aria-label={`${labels[index]}，价敏用户净增 ${Math.round(value)}`} onMouseEnter={() => setActiveIndex(index)} onFocus={() => setActiveIndex(index)} onBlur={() => setActiveIndex(null)} onClick={() => setActiveIndex(index)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setActiveIndex(index); } }}><title>{`${labels[index]} · 区间极端值 ${value.toLocaleString('zh-CN')} · 不参与主图刻度与拟合`}</title></circle>;
         const valueY = isOutlier ? Math.max(padding.top, Math.min(height - padding.bottom, rawValueY)) : rawValueY;
         const direction = value > 0 ? 'positive' : value < 0 ? 'negative' : 'flat';
         return <g key={`${labels[index]}-${index}`}><rect
@@ -313,7 +315,7 @@ export function IncrementBarChart({ labels, values, height = 330, raw = false }:
           onMouseEnter={() => setActiveIndex(index)}
           onFocus={() => setActiveIndex(index)}
           onBlur={() => setActiveIndex(null)}
-        />{isOutlier && Math.abs(value) > max && <path data-break="true" d={`M ${xFor(index) - barWidth / 2 - 2} ${padding.top + 8} l ${barWidth / 2} -5 l ${barWidth / 2} 5 l 4 -5`} fill="none" stroke="var(--wb-surface)" strokeWidth="3" pointerEvents="none"><title>疑似离群柱已截断，悬停查看真实值</title></path>}{value < 0 && <text x={xFor(index)} y={Math.max(18, valueY - 6)} textAnchor="middle" fill="#D05C50" pointerEvents="none">↓</text>}</g>;
+        />{value < 0 && <text x={xFor(index)} y={Math.max(18, valueY - 6)} textAnchor="middle" fill="#D05C50" pointerEvents="none">↓</text>}</g>;
       })}
       {hasValues && trendPath && <path d={trendPath} fill="none" className={styles.barTrendCurve} style={{ animationDelay: '260ms' }} />}
       {hasValues && estimatedPath && <path d={estimatedPath} data-estimated="true" fill="none" strokeDasharray="6 5" className={styles.barTrendCurve}><title>跨离群日的幅度估计，非实测值</title></path>}
@@ -321,7 +323,7 @@ export function IncrementBarChart({ labels, values, height = 330, raw = false }:
     {!hasValues && <div className={styles.trendPending}><span>NO DATA</span><strong>暂无增量数据</strong><p>当前筛选范围没有连续的每日快照</p></div>}
     {activeIndex != null && activeX != null && activeValue != null && <div className={styles.chartTooltip} data-align={tooltipAlign} style={{ left: `${activeX / width * 100}%` }} role="status">
       <strong>{labels[activeIndex]}</strong>
-      <span><i style={{ background: activeValue < 0 ? '#D05C50' : '#2F6FDB' }} /><b>价敏用户净增{outliers.has(activeIndex) ? ' · 疑似离群，不参与拟合' : ''}{outliers.has(activeIndex) && Math.abs(activeValue) > max ? ' · 柱已截断' : ''}</b><em>{`${activeValue > 0 ? '+' : ''}${Math.round(activeValue).toLocaleString('zh-CN')}`}</em></span>
+      <span><i style={{ background: activeValue < 0 ? '#D05C50' : '#2F6FDB' }} /><b>价敏用户净增{outliers.has(activeIndex) ? ' · 疑似离群 / 区间极端值，已从主图分离（不代表数据错误）' : ''}</b><em>{`${activeValue > 0 ? '+' : ''}${Math.round(activeValue).toLocaleString('zh-CN')}`}</em></span>
     </div>}
   </div>;
 }

@@ -232,12 +232,11 @@ describe('report chart interactions', () => {
     });
 
     expect(container.textContent).toContain('线性幅度');
-    expect(container.querySelector('[data-break="true"]')).not.toBeNull();
+    expect(container.querySelector('circle[data-outlier="true"]')).not.toBeNull();
     expect(container.querySelector('svg path[data-estimated="true"]')).not.toBeNull();
     expect([...container.querySelectorAll('svg text')].filter((node) => !node.querySelector('title')).every((node) => !node.textContent?.startsWith('-'))).toBe(true);
-    const negativeHeight = Number(container.querySelector('[data-direction="negative"]')?.getAttribute('height'));
     const positiveHeight = Number(container.querySelector('[data-direction="positive"]')?.getAttribute('height'));
-    expect(positiveHeight / negativeHeight).toBeGreaterThanOrEqual(0.5);
+    expect(positiveHeight).toBeGreaterThan(80);
     act(() => container.querySelector('[aria-label="2026-08-03，价敏用户净增 -640000"]')?.dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
     expect(container.querySelector('[role="status"]')?.textContent).toContain('-640,000');
   });
