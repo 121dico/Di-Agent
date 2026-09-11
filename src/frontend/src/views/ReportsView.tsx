@@ -42,6 +42,7 @@ import { ReportTemplateModal } from '@/components/report/ReportTemplateModal';
 import { ReportCohortSections } from '@/components/report/ReportCohortSections';
 import { loadStoredSnapshotHistory, type SnapshotProgress } from './reportSnapshotHistory';
 import { formatReportAxisTick } from './reportAxisTick';
+import { normalizeReportTrend, reportDailyRate, type ReportScaleMode } from './reportTrendScale';
 import { ChinaRegionPicker, expandChinaRegionSelection, summarizeChinaRegionSelection } from '@/components/report/ChinaRegionPicker';
 import styles from './ReportsView.module.css';
 
@@ -127,6 +128,7 @@ interface SmoothChartProps {
   bounds?: [number, number];
   height?: number;
   trendRule?: 'default' | 'nonnegative' | 'nondecreasing' | 'raw';
+  scaleMode?: ReportScaleMode;
 }
 
 function trendRuleOutliers(values: number[], rule: SmoothChartProps['trendRule']): number[] {
@@ -142,15 +144,17 @@ function trendRuleOutliers(values: number[], rule: SmoothChartProps['trendRule']
   });
 }
 
-export function SmoothChart({ labels, series, pendingText, bounds, height = 360, trendRule = 'default' }: SmoothChartProps) {
+export function SmoothChart({ labels, series, pendingText, bounds, height = 360, trendRule = 'default', scaleMode = 'actual' }: SmoothChartProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [chartRef, width] = useResponsiveChartWidth();
   const chartHeight = labels.length <= 1 ? Math.min(height, 240) : height;
   const padding = { top: 26, right: 24, bottom: 44, left: 62 };
-  const trendModels = useMemo(() => series.map((item) => ({
-    ...item,
-    trend: trendRule === 'raw' ? { fittedValues: item.values, outlierIndexes: [] as number[] } : buildRobustTrend(item.values, { forcedOutlierIndexes: trendRuleOutliers(item.values, trendRule) }),
-  })), [series, trendRule]);
+  const trendModels = useMemo(() => series.map((item) => {
+    const plotValues = scaleMode === 'trend' ? normalizeReportTrend(item.values) : item.values;
+    return { ...item, plotValues, trend: scaleMode === 'trend' || trendRule === 'raw'
+      ? { fittedValues: plotValues, outlierIndexes: [] as number[] }
+      : buildRobustTrend(item.values, { forcedOutlierIndexes: trendRuleOutliers(item.values, trendRule) }) };
+  }), [series, trendRule, scaleMode]);
   const values = series.flatMap((item) => item.values).filter(Number.isFinite);
   const domainValues = trendModels.flatMap((item) => {
     const outliers = new Set(item.trend.outlierIndexes);
@@ -159,7 +163,7 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
       ...item.values.filter((value, index) => Number.isFinite(value) && !outliers.has(index)),
     ];
   });
-  const domain = buildChartDomain(domainValues, bounds);
+  const domain = scaleMode === 'trend' ? { min: 0, max: 100 } : buildChartDomain(domainValues, bounds);
   const min = domain.min;
   const max = domain.max;
   const range = max - min || 1;
@@ -212,7 +216,7 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
   return (
     <div ref={chartRef} className={styles.chartWrap} onMouseLeave={() => setActiveIndex(null)}>
       {hasValues && <div className={styles.chartReadout}>
-        <div className={styles.chartScaleMeta}><span>{trendRule === 'raw' ? '真实日值 · 缺失日断开，不补零' : '真实值动态刻度 · 多数点稳健拟合'}</span><b>{formatChartValue(min)}–{formatChartValue(max)}</b></div>
+        <div className={styles.chartScaleMeta}><span>{scaleMode === 'trend' ? '各曲线独立缩放 · 区间位置，非增长率 · 以下为真实读数' : trendRule === 'raw' ? '真实日值 · 缺失日断开，不补零' : '真实值动态刻度 · 多数点稳健拟合'}</span><b>{formatChartValue(min)}–{formatChartValue(max)}</b></div>
         <div className={styles.chartSignals}>{seriesInsights.map((item) => <div key={item.key}>
           <i style={{ background: item.color }} />
           <span>{item.label}</span>
@@ -236,7 +240,7 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
               {path && <path d={path} fill="none" stroke={color} className={`${styles.curve} ${styles.robustTrendCurve}`} style={{ animationDelay: `${index * 70}ms` }} />}
               {item.values.map((value, pointIndex) => {
                 if (!Number.isFinite(value)) return null;
-                const rawPoint = point(value, pointIndex, item.values.length);
+                const rawPoint = point(item.plotValues[pointIndex]!, pointIndex, item.values.length);
                 const isOutlier = outliers.has(pointIndex);
                 const current = { ...rawPoint, y: isOutlier ? Math.max(padding.top, Math.min(chartHeight - padding.bottom, rawPoint.y)) : rawPoint.y };
                 const labelOffset = index % 2 === 0 ? -11 : 21;
@@ -254,9 +258,9 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
         })}
       </svg>
       {!hasValues && <div className={styles.trendPending}><span>NO DATA</span><strong>暂无趋势数据</strong><p>{pendingText ?? '当前筛选范围没有可用数据'}</p></div>}
-      {activeX != null && activeIndex != null && activeSeries.length > 0 && <div className={styles.chartTooltip} data-align={tooltipAlign} style={{ left: `${activeX / width * 100}%` }} role="status">
+      {activeX != null && activeIndex != null && activeSeries.length > 0 && <div className={styles.chartTooltip} data-scale={scaleMode} data-align={tooltipAlign} style={{ left: `${activeX / width * 100}%` }} role="status">
         <strong>{labels[activeIndex]}</strong>
-        {activeSeries.map((item) => <span key={item.key ?? item.label}><i style={{ background: item.color }} /><b>{item.label}{item.isOutlier ? ' · 明显偏移' : ''}</b><em>{formatChartValue(item.value)}</em></span>)}
+        {activeSeries.map((item) => <span key={item.key ?? item.label}><i style={{ background: item.color }} /><b>{item.label}{item.isOutlier ? ' · 明显偏移' : ''}{scaleMode === 'trend' && <small>{reportDailyRate(item.values, labels, activeIndex)}</small>}</b><em>{scaleMode === 'trend' ? item.value.toLocaleString('zh-CN') : formatChartValue(item.value)}</em></span>)}
       </div>}
     </div>
   );
@@ -887,7 +891,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
 
             {isV12 ? <ReportCohortSections key={selectedId} analytics={analytics} loading={analyticsLoading} error={analyticsError}
               progress={snapshotProgress ? !analyticsLoading && snapshotProgress.completed === snapshotProgress.total && !snapshotProgress.failed.length ? `已载入保存的 dt 快照，共 ${snapshotProgress.total} 天` : `dt 快照：已处理 ${snapshotProgress.completed}/${snapshotProgress.total} 天，成功 ${snapshotProgress.completed - snapshotProgress.failed.length} 天${snapshotProgress.failed.length ? `，失败 ${snapshotProgress.failed.length} 天` : ''}` : undefined}
-              renderChart={(labels, series) => <SmoothChart labels={labels} series={series} height={360} trendRule="raw" pendingText="请开启至少一个图例" />}
+              renderChart={(labels, series, mode) => <SmoothChart labels={labels} series={series} scaleMode={mode} height={360} trendRule="raw" pendingText="请开启至少一个图例" />}
               renderGrowthChart={(labels, series) => <SmoothChart labels={labels} series={series} height={270} trendRule="raw" pendingText="暂无连续快照可计算增长" />}
               renderBar={(labels, values) => <IncrementBarChart labels={labels} values={values} raw />}
               renderDistribution={(items, hidden, onToggle, centerLabel) => <DonutChart distribution={items} hidden={hidden} onToggle={onToggle} centerLabel={centerLabel} />} /> : <>

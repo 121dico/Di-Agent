@@ -234,6 +234,9 @@
 .chartTooltip i { width: 7px; height: 7px; border-radius: 50%; }
 .chartTooltip b { overflow: hidden; font-weight: 540; text-overflow: ellipsis; white-space: nowrap; }
 .chartTooltip em { color: var(--text-1); font-family: var(--pr-number-font); font-size: 10px; font-style: normal; font-weight: 680; }
+.chartTooltip[data-scale='trend'] { max-width: min(420px, 90%); }
+.chartTooltip[data-scale='trend'] b { white-space: normal; }
+.chartTooltip[data-scale='trend'] small { display: block; color: var(--wb-text-secondary); font-size: 12px; font-weight: 400; margin-top: 3px; }
 .trendPending { position: absolute; top: 50%; left: 50%; z-index: 2; width: min(330px, 72%); display: grid; justify-items: center; gap: 5px; padding: 18px 20px; transform: translate(-50%, -50%); color: var(--text-2); text-align: center; }
 .trendPending span { color: var(--text-3); font-size: 8px; font-weight: 700; letter-spacing: .16em; }
 .trendPending strong { color: var(--text-1); font-size: 13px; }

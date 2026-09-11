@@ -20,6 +20,50 @@ describe('report chart interactions', () => {
     container.remove();
   });
 
+  it('expands each trend independently but keeps real counts and daily rates in the tooltip', () => {
+    act(() => root.render(<SmoothChart labels={['2026-09-07', '2026-09-08', '2026-09-09']} trendRule="raw" scaleMode="trend" series={[
+      { label: '全量', values: [100000000, 110000000, 120000000] },
+      { label: '小人群', values: [10, 15, 20] },
+    ]} />));
+    const paths = [...container.querySelectorAll('svg path')];
+    expect(paths).toHaveLength(2);
+    expect(paths[0]?.getAttribute('d')).toBe(paths[1]?.getAttribute('d'));
+    expect(container.textContent).toContain('各曲线独立缩放');
+    act(() => container.querySelector('[aria-label="2026-09-08，查看该日所有指标"]')?.dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('110,000,000');
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('+10.00%');
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('+50.00%');
+  });
+
+  it('keeps constant trends flat, missing days disconnected and zero baselines explicit', () => {
+    const labels = ['2026-09-06', '2026-09-07', '2026-09-08', '2026-09-09'];
+    act(() => root.render(<SmoothChart labels={labels} trendRule="raw" scaleMode="trend" series={[
+      { label: '恒定', values: [7, 7, NaN, 7] },
+      { label: '零基数', values: [0, 2, NaN, 3] },
+    ]} />));
+    const firstSeries = container.querySelector('svg path')?.parentElement;
+    const y = [...firstSeries!.querySelectorAll('circle')].map((circle) => circle.getAttribute('cy'));
+    expect(new Set(y).size).toBe(1);
+    expect(y).toHaveLength(3);
+    // 两个连续点只形成一段；缺失日后的孤点不能跨过缺口连线。
+    expect(firstSeries?.querySelector('path')?.getAttribute('d')?.match(/C /g)).toHaveLength(1);
+    act(() => container.querySelector('[aria-label="2026-09-07，查看该日所有指标"]')?.dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('日变化率 0.00%');
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('前日为 0');
+    act(() => container.querySelector('[aria-label="2026-09-09，查看该日所有指标"]')?.dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('前日缺失');
+    expect(container.innerHTML).not.toMatch(/(?:cy|d)="[^"]*(?:NaN|Infinity)/);
+  });
+
+  it('renders a single normalized observation as its real-value point and handles no observations', () => {
+    act(() => root.render(<SmoothChart labels={['2026-09-09']} scaleMode="trend" series={[{ label: '样本', values: [42] }]} />));
+    expect(container.querySelector('svg path')).toBeNull();
+    expect(container.querySelector('circle title')?.textContent).toContain('42');
+    act(() => root.render(<SmoothChart labels={['2026-09-09']} scaleMode="trend" series={[{ label: '样本', values: [NaN] }]} />));
+    expect(container.textContent).toContain('暂无趋势数据');
+    expect(container.querySelector('svg circle')).toBeNull();
+  });
+
   it('reveals every visible value for a focused date', () => {
     act(() => {
       root.render(
