@@ -211,8 +211,8 @@ export function presentSensitivityDistribution(distribution: ReportAnalyticsResu
 
 export function buildPriceSensitiveAnalyticsPresentation(analytics: ReportAnalyticsResult): PriceSensitiveAnalyticsPresentation {
   const trend = [...analytics.trend].sort((left, right) => left.dt.localeCompare(right.dt));
-  const score = (value: number) => String(Number(value.toFixed(2)));
-  const count = (value: number) => Math.round(value).toLocaleString('zh-CN');
+  const score = (value: number) => Number.isFinite(value) ? String(Number(value.toFixed(2))) : '—';
+  const count = (value: number) => Number.isFinite(value) ? Math.round(value).toLocaleString('zh-CN') : '—';
   const signedCount = (value: number) => `${value > 0 ? '+' : ''}${count(value)}`;
   const calculatedUsers = trend.map((point) => point.calculated_user_count);
   // 兼容旧缓存的首日占位零；只有明确标记可用的跨区间比较才保留首日增量。
@@ -223,12 +223,12 @@ export function buildPriceSensitiveAnalyticsPresentation(analytics: ReportAnalyt
     ?? point.calculated_user_count - baselineUsers);
   const growthRateValues = trend.map((point, index) => point.daily_growth_available === false || (index === 0 && point.daily_growth_available !== true) ? Number.NaN : point.daily_user_growth_rate
     ?? (index === 0 || !calculatedUsers[index - 1] ? Number.NaN : dailyNetValues[index]! / calculatedUsers[index - 1]! * 100));
-  const latestDailyNet = analytics.summary.latest_daily_net_user_growth ?? dailyNetValues[dailyNetValues.length - 1] ?? 0;
+  const latestDailyNet = Number.isFinite(dailyNetValues[dailyNetValues.length - 1]) ? analytics.summary.latest_daily_net_user_growth ?? dailyNetValues[dailyNetValues.length - 1]! : NaN;
   const cumulativeNet = analytics.summary.cumulative_net_user_growth ?? cumulativeNetValues[cumulativeNetValues.length - 1] ?? 0;
-  const latestGrowthRate = analytics.summary.latest_user_growth_rate ?? growthRateValues[growthRateValues.length - 1] ?? 0;
-  const dailyChanges = dailyNetValues.slice(1);
-  const averageDailyNet = analytics.summary.average_daily_net_user_growth
-    ?? (dailyChanges.length ? dailyChanges.reduce((sum, value) => sum + value, 0) / dailyChanges.length : 0);
+  const latestGrowthRate = Number.isFinite(growthRateValues[growthRateValues.length - 1]) ? analytics.summary.latest_user_growth_rate ?? growthRateValues[growthRateValues.length - 1]! : NaN;
+  const dailyChanges = dailyNetValues.slice(1).filter(Number.isFinite);
+  const averageDailyNet = dailyChanges.length ? analytics.summary.average_daily_net_user_growth
+    ?? dailyChanges.reduce((sum, value) => sum + value, 0) / dailyChanges.length : NaN;
   const scoreValue = (point: ReportAnalyticsResult['trend'][number], key: string, legacy: number) =>
     point.nullable_scores ? (point.nullable_scores[key] ?? Number.NaN) : legacy;
   const v12 = analytics.profile === 'price_sensitive_v1_2';
@@ -243,9 +243,9 @@ export function buildPriceSensitiveAnalyticsPresentation(analytics: ReportAnalyt
     ] : [
       { label: '当前价敏用户', value: count(analytics.summary.calculated_user_count), suffix: '人' },
       { label: '本期累计净增', value: signedCount(cumulativeNet), suffix: '人' },
-      { label: '最近一日净增', value: signedCount(latestDailyNet), suffix: '人' },
-      { label: '最近一日增长率', value: score(latestGrowthRate), suffix: '%' },
-      { label: '日均净增', value: signedCount(averageDailyNet), suffix: '人' },
+      { label: '最近一日净增', value: signedCount(latestDailyNet), suffix: Number.isFinite(latestDailyNet) ? '人' : '' },
+      { label: '最近一日增长率', value: score(latestGrowthRate), suffix: Number.isFinite(latestGrowthRate) ? '%' : '' },
+      { label: '日均净增', value: signedCount(averageDailyNet), suffix: Number.isFinite(averageDailyNet) ? '人' : '' },
       { label: '当前价敏覆盖率', value: score(analytics.summary.calculated_user_share), suffix: '%' },
     ],
     businessMetrics: [

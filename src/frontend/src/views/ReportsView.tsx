@@ -248,7 +248,7 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
   );
 }
 
-export function IncrementBarChart({ labels, values, height = 330, raw = false }: { labels: string[]; values: number[]; height?: number; raw?: boolean }) {
+export function IncrementBarChart({ labels, values, height = 330 }: { labels: string[]; values: number[]; height?: number; raw?: boolean }) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [chartRef, width] = useResponsiveChartWidth();
   const padding = { top: 34, right: 24, bottom: 44, left: 62 };
