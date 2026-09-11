@@ -44,7 +44,7 @@ import { loadStoredSnapshotHistory, type SnapshotProgress } from './reportSnapsh
 import { formatReportAxisTick } from './reportAxisTick';
 import { normalizeReportTrend, reportDailyRate, type ReportScaleMode } from './reportTrendScale';
 import { detectReportOutliers } from './reportOutliers';
-import { buildObservedCurvePath } from './reportCurvePath';
+import { buildEstimatedCurvePath, buildObservedCurvePath } from './reportCurvePath';
 import { ChinaRegionPicker, expandChinaRegionSelection, summarizeChinaRegionSelection } from '@/components/report/ChinaRegionPicker';
 import styles from './ReportsView.module.css';
 
@@ -140,16 +140,17 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
   const padding = { top: 26, right: 24, bottom: 44, left: 62 };
   const trendModels = useMemo(() => series.map((item) => {
     const outlierIndexes = detectReportOutliers(item.values, labels);
-    const plotValues = scaleMode === 'trend' ? normalizeReportTrend(item.values, outlierIndexes) : item.values;
+    const plotValues = scaleMode === 'trend' ? normalizeReportTrend(item.values, outlierIndexes) : item.values.map(Math.abs);
     const outliers = new Set(outlierIndexes);
     return { ...item, plotValues, trend: { fittedValues: plotValues.map((value, index) => outliers.has(index) ? NaN : value), outlierIndexes } };
   }), [series, labels, scaleMode]);
   const values = series.flatMap((item) => item.values).filter(Number.isFinite);
   const domainValues = trendModels.flatMap((item) => {
     const outliers = new Set(item.trend.outlierIndexes);
-    return scaleMode === 'trend' ? item.plotValues.filter((value, index) => Number.isFinite(value) && !outliers.has(index)) : item.values.filter(Number.isFinite);
+    return item.plotValues.filter((value, index) => Number.isFinite(value) && !outliers.has(index));
   });
-  const domain = buildChartDomain(domainValues, scaleMode === 'trend' ? undefined : bounds);
+  const domain = buildChartDomain(domainValues, scaleMode === 'trend' ? undefined : [Math.max(0, bounds?.[0] ?? 0), bounds?.[1] ?? Infinity]);
+  const hasNegative = values.some((value) => value < 0);
   const min = domain.min;
   const max = domain.max;
   const range = max - min || 1;
@@ -201,7 +202,8 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
           <em data-direction={item.delta > 0 ? 'up' : item.delta < 0 ? 'down' : 'flat'}>{item.count < 2 ? '单日基准' : `${item.delta > 0 ? '+' : ''}${formatChartValue(item.delta)} · 波动 ${formatChartValue(item.spread)}${item.outlierCount ? ` · ${item.outlierCount} 个疑似离群点` : ''}`}</em>
         </div>)}</div>
       </div>}
-      {trendModels.some((item) => item.trend.outlierIndexes.length > 0) && <div className={styles.singleDayHint}>空心点为疑似离群：前后相邻日回归，偏离同时超过局部波动阈值与 3%。主线在该日断开，不插值；真实值保留。{scaleMode === 'trend' && '超出趋势范围的空心点仅在边缘定位，不代表纵向数值。'}</div>}
+      {hasNegative && <div className={styles.singleDayHint}>{scaleMode === 'trend' ? '独立走势不表示人数正负；' : '纵轴仅显示变化幅度（绝对值），不表示增加人数；'}负值以 ↓ 标记，悬停显示原始正负号。</div>}
+      {trendModels.some((item) => item.trend.outlierIndexes.length > 0) && <div className={styles.singleDayHint}>空心点为疑似离群，保留真实值但不参与拟合；正常点平滑连接，跨离群日的虚线为估计趋势，不是该日实测值。超界空心点在边缘标记，位置不代表原值。</div>}
       {hasValues && labels.length === 1 && <div className={styles.singleDayHint}>当前只有 1 个真实日期：仅标记基准点，不生成虚假曲线</div>}
       <svg viewBox={`0 0 ${width} ${chartHeight}`} className={styles.chart} role="img" aria-label="报表趋势图">
         {yTicks.map((tick, index) => {
@@ -212,17 +214,19 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
         {hasValues && trendModels.map((item, index) => {
           const color = item.color ?? chartColors[index % chartColors.length];
           const path = buildObservedCurvePath(labels, item.trend.fittedValues, (value, index) => point(value, index, labels.length));
+          const estimatedPath = buildEstimatedCurvePath(labels, item.plotValues, item.trend.outlierIndexes, (value, index) => point(value, index, labels.length));
           const outliers = new Set(item.trend.outlierIndexes);
           return (
             <g key={item.label}>
               {path && <path d={path} fill="none" stroke={color} className={`${styles.curve} ${styles.robustTrendCurve}`} style={{ animationDelay: `${index * 70}ms` }} />}
+              {estimatedPath && <path d={estimatedPath} data-estimated="true" fill="none" stroke={color} strokeDasharray="6 5" className={styles.robustTrendCurve}><title>跨离群日的平滑估计，非实测值</title></path>}
               {item.values.map((value, pointIndex) => {
                 if (!Number.isFinite(value)) return null;
                 const rawPoint = point(item.plotValues[pointIndex]!, pointIndex, item.values.length);
                 const isOutlier = outliers.has(pointIndex);
                 const current = { ...rawPoint, y: isOutlier ? Math.max(padding.top, Math.min(chartHeight - padding.bottom, rawPoint.y)) : rawPoint.y };
                 const labelOffset = index % 2 === 0 ? -11 : 21;
-                return <g key={`${item.label}-${pointIndex}`} data-outlier={isOutlier || undefined} className={styles.chartPointGroup} style={{ animationDelay: `${Math.min(pointIndex * 16 + index * 45, 420)}ms` }}>{isOutlier && <circle cx={current.x} cy={current.y} r={activeIndex === pointIndex ? 9 : 7} fill="none" stroke={color} className={styles.chartPointOutlierHalo} />}<circle cx={current.x} cy={current.y} r={activeIndex === pointIndex ? 4.5 : isOutlier ? 3.4 : 2.6} fill={isOutlier ? '#fff' : color} stroke={isOutlier ? color : '#fff'} className={`${styles.chartPoint} ${isOutlier ? styles.chartPointOutlier : ''} ${activeIndex === pointIndex ? styles.chartPointActive : ''}`}><title>{`${labels[pointIndex] ?? ''} · ${item.label} ${Number(value.toFixed(2))}${isOutlier ? ' · 疑似离群，主线断开，真实值保留' : ''}`}</title></circle>{item.values.length === 1 && <text x={current.x + 17} y={current.y + labelOffset} fill={color} className={styles.singlePointValue}>{Number(value.toFixed(2))}</text>}</g>;
+                return <g key={`${item.label}-${pointIndex}`} data-outlier={isOutlier || undefined} className={styles.chartPointGroup} style={{ animationDelay: `${Math.min(pointIndex * 16 + index * 45, 420)}ms` }}>{isOutlier && <circle cx={current.x} cy={current.y} r={activeIndex === pointIndex ? 9 : 7} fill="none" stroke={color} className={styles.chartPointOutlierHalo} />}<circle cx={current.x} cy={current.y} r={activeIndex === pointIndex ? 4.5 : isOutlier ? 3.4 : 2.6} fill={isOutlier ? '#fff' : color} stroke={isOutlier ? color : '#fff'} className={`${styles.chartPoint} ${isOutlier ? styles.chartPointOutlier : ''} ${activeIndex === pointIndex ? styles.chartPointActive : ''}`}><title>{`${labels[pointIndex] ?? ''} · ${item.label} ${Number(value.toFixed(2))}${isOutlier ? ' · 疑似离群，不参与拟合，真实值保留' : ''}`}</title></circle>{value < 0 && <text x={current.x} y={Math.max(16, current.y - 10)} textAnchor="middle" fill="#D05C50">↓</text>}{item.values.length === 1 && <text x={current.x + 17} y={current.y + labelOffset} fill={color} className={styles.singlePointValue}>{Number(value.toFixed(2))}</text>}</g>;
               })}
             </g>
           );
@@ -249,41 +253,36 @@ export function IncrementBarChart({ labels, values, height = 330, raw = false }:
   const [chartRef, width] = useResponsiveChartWidth();
   const padding = { top: 34, right: 24, bottom: 44, left: 62 };
   const trend = useMemo(() => {
-    const outlierIndexes = raw ? [] : detectReportOutliers(values, labels);
+    const outlierIndexes = detectReportOutliers(values, labels);
     const omitted = new Set(outlierIndexes);
     return { fittedValues: values.map((value, index) => omitted.has(index) ? NaN : value), outlierIndexes };
-  }, [values, labels, raw]);
+  }, [values, labels]);
   const outliers = new Set(trend.outlierIndexes);
-  const compress = (value: number) => Math.sign(value) * Math.sqrt(Math.abs(value));
-  const expand = (value: number) => Math.sign(value) * value * value;
-  const domain = buildChartDomain([
-    ...trend.fittedValues.filter(Number.isFinite).map(compress),
-    ...values.filter(Number.isFinite).map(compress),
-    0,
-  ]);
-  const min = Math.min(0, domain.min);
-  const max = Math.max(0, domain.max);
-  const range = max - min || 1;
+  // 正负由颜色和箭头表达，柱高只画变化幅度；孤立异常不能撑大正常柱的刻度。
+  const domain = buildChartDomain([...trend.fittedValues.filter(Number.isFinite).map(Math.abs), 0], [0, Infinity]);
+  const max = domain.max;
+  const range = max || 1;
   const plotHeight = height - padding.top - padding.bottom;
   const plotWidth = width - padding.left - padding.right;
   const xStep = plotWidth / Math.max(1, labels.length);
   const barWidth = Math.max(6, Math.min(28, xStep * 0.56));
   const xFor = (index: number) => padding.left + xStep * index + xStep / 2;
-  const yFor = (value: number) => padding.top + ((max - compress(value)) / range) * plotHeight;
+  const yFor = (value: number) => padding.top + ((max - Math.abs(value)) / range) * plotHeight;
   const zeroY = yFor(0);
   const xTicks = buildDateTickIndexes(labels.length, plotWidth);
-  const yTicks = Array.from({ length: 5 }, (_, index) => expand(max - index * (range / 4)));
+  const yTicks = Array.from({ length: 5 }, (_, index) => max - index * (range / 4));
   const activeValue = activeIndex == null ? null : values[activeIndex];
   const activeX = activeIndex == null ? null : xFor(activeIndex);
   const tooltipAlign = activeIndex === 0 ? 'start' : activeIndex === labels.length - 1 ? 'end' : 'center';
   const hasValues = labels.length > 0 && values.some(Number.isFinite);
-  const trendPath = raw ? '' : buildObservedCurvePath(labels, trend.fittedValues, (value, index) => ({ x: xFor(index), y: yFor(value) }));
+  const trendPath = buildObservedCurvePath(labels, trend.fittedValues, (value, index) => ({ x: xFor(index), y: yFor(value) }));
+  const estimatedPath = buildEstimatedCurvePath(labels, values, trend.outlierIndexes, (value, index) => ({ x: xFor(index), y: yFor(value) }));
   return <div ref={chartRef} className={styles.chartWrap} onMouseLeave={() => setActiveIndex(null)}>
     <div className={styles.incrementMeta}>
-      <span><i data-tone="positive" />正增长</span>
-      <span><i data-tone="negative" />负增长</span>
-      {!raw && <span><i data-tone="trend" />观测趋势</span>}
-      <small>{raw ? '符号压缩刻度 · 首日基准为0 · 缺失前一日时不计算日增量' : '符号压缩刻度 · 柱为真实值 · 疑似离群处曲线断开，不插值'}</small>
+      <span><i data-tone="positive" />↑ 正增长</span>
+      <span><i data-tone="negative" />↓ 负增长</span>
+      <span><i data-tone="trend" />正常幅度平滑趋势</span>
+      <small>线性幅度 · 柱高为绝对值，红色 ↓ 表示减少 · 离群超界柱用断轴标记 · 虚线为跨离群日估计{raw && ' · 首日基准为0'}</small>
     </div>
     <svg viewBox={`0 0 ${width} ${height}`} className={styles.chart} role="img" aria-label="每日价敏用户净增柱状图">
       {yTicks.map((tick, index) => {
@@ -298,7 +297,7 @@ export function IncrementBarChart({ labels, values, height = 330, raw = false }:
         const isOutlier = outliers.has(index);
         const valueY = isOutlier ? Math.max(padding.top, Math.min(height - padding.bottom, rawValueY)) : rawValueY;
         const direction = value > 0 ? 'positive' : value < 0 ? 'negative' : 'flat';
-        return <rect
+        return <g key={`${labels[index]}-${index}`}><rect
           key={`${labels[index]}-${index}`}
           x={xFor(index) - barWidth / 2}
           y={value === 0 ? zeroY - 1 : Math.min(valueY, zeroY)}
@@ -314,14 +313,15 @@ export function IncrementBarChart({ labels, values, height = 330, raw = false }:
           onMouseEnter={() => setActiveIndex(index)}
           onFocus={() => setActiveIndex(index)}
           onBlur={() => setActiveIndex(null)}
-        />;
+        />{isOutlier && Math.abs(value) > max && <path data-break="true" d={`M ${xFor(index) - barWidth / 2 - 2} ${padding.top + 8} l ${barWidth / 2} -5 l ${barWidth / 2} 5 l 4 -5`} fill="none" stroke="var(--wb-surface)" strokeWidth="3" pointerEvents="none"><title>疑似离群柱已截断，悬停查看真实值</title></path>}{value < 0 && <text x={xFor(index)} y={Math.max(18, valueY - 6)} textAnchor="middle" fill="#D05C50" pointerEvents="none">↓</text>}</g>;
       })}
       {hasValues && trendPath && <path d={trendPath} fill="none" className={styles.barTrendCurve} style={{ animationDelay: '260ms' }} />}
+      {hasValues && estimatedPath && <path d={estimatedPath} data-estimated="true" fill="none" strokeDasharray="6 5" className={styles.barTrendCurve}><title>跨离群日的幅度估计，非实测值</title></path>}
     </svg>
     {!hasValues && <div className={styles.trendPending}><span>NO DATA</span><strong>暂无增量数据</strong><p>当前筛选范围没有连续的每日快照</p></div>}
     {activeIndex != null && activeX != null && activeValue != null && <div className={styles.chartTooltip} data-align={tooltipAlign} style={{ left: `${activeX / width * 100}%` }} role="status">
       <strong>{labels[activeIndex]}</strong>
-      <span><i style={{ background: activeValue < 0 ? '#D05C50' : '#2F6FDB' }} /><b>价敏用户净增{outliers.has(activeIndex) ? ' · 明显偏移' : ''}</b><em>{`${activeValue > 0 ? '+' : ''}${Math.round(activeValue).toLocaleString('zh-CN')}`}</em></span>
+      <span><i style={{ background: activeValue < 0 ? '#D05C50' : '#2F6FDB' }} /><b>价敏用户净增{outliers.has(activeIndex) ? ' · 疑似离群，不参与拟合' : ''}{outliers.has(activeIndex) && Math.abs(activeValue) > max ? ' · 柱已截断' : ''}</b><em>{`${activeValue > 0 ? '+' : ''}${Math.round(activeValue).toLocaleString('zh-CN')}`}</em></span>
     </div>}
   </div>;
 }

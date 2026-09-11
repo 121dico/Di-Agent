@@ -52,7 +52,8 @@ describe('report chart interactions', () => {
     const labels = ['2026-08-09', '2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13'];
     act(() => root.render(<SmoothChart labels={labels} scaleMode={scaleMode} trendRule="raw" series={[{ label: '全量', values: [350000000, 350000000, 370000000, 350000000, 350000000] }]} />));
     expect(container.textContent).toContain('疑似离群');
-    expect(container.querySelector('svg path')?.getAttribute('d')?.match(/M /g)).toHaveLength(2);
+    expect(container.querySelector('svg path[data-estimated="true"]')).not.toBeNull();
+    expect(container.textContent).toContain('虚线');
     expect(container.querySelectorAll('[data-outlier="true"]')).toHaveLength(1);
     expect(container.querySelector('[data-outlier="true"] title')?.textContent).toContain('370000000');
     act(() => container.querySelector('[aria-label="2026-08-11，查看该日所有指标"]')?.dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
@@ -210,19 +211,34 @@ describe('report chart interactions', () => {
     expect(container.querySelector('[role="status"]')?.textContent).toContain('-12,400');
   });
 
-  it('compresses an extreme signed outlier without hiding ordinary daily movement', () => {
+  it('uses only a nonnegative magnitude region for signed curves without losing the raw sign', () => {
+    const labels = ['2026-08-25', '2026-08-26', '2026-08-27'];
+    act(() => root.render(<SmoothChart labels={labels} series={[{ label: '累计净增', values: [0, -120, -80] }]} />));
+    expect(container.textContent).toContain('负值以 ↓ 标记');
+    expect([...container.querySelectorAll('svg text')].filter((node) => !node.querySelector('title')).every((node) => !node.textContent?.startsWith('-'))).toBe(true);
+    act(() => container.querySelector('[aria-label="2026-08-26，查看该日所有指标"]')?.dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('-120');
+  });
+
+  it('clips an isolated outlier so ordinary daily bars retain a linear readable scale', () => {
     act(() => {
       root.render(
         <IncrementBarChart
-          labels={['2026-08-01', '2026-08-02']}
-          values={[-640_000, 40_000]}
+          labels={['2026-08-01', '2026-08-02', '2026-08-03', '2026-08-04', '2026-08-05']}
+          values={[40_000, 42_000, -640_000, 44_000, 60_000]}
+          raw
         />,
       );
     });
 
-    expect(container.textContent).toContain('符号压缩刻度');
+    expect(container.textContent).toContain('线性幅度');
+    expect(container.querySelector('[data-break="true"]')).not.toBeNull();
+    expect(container.querySelector('svg path[data-estimated="true"]')).not.toBeNull();
+    expect([...container.querySelectorAll('svg text')].filter((node) => !node.querySelector('title')).every((node) => !node.textContent?.startsWith('-'))).toBe(true);
     const negativeHeight = Number(container.querySelector('[data-direction="negative"]')?.getAttribute('height'));
     const positiveHeight = Number(container.querySelector('[data-direction="positive"]')?.getAttribute('height'));
-    expect(positiveHeight / negativeHeight).toBeGreaterThan(0.2);
+    expect(positiveHeight / negativeHeight).toBeGreaterThanOrEqual(0.5);
+    act(() => container.querySelector('[aria-label="2026-08-03，价敏用户净增 -640000"]')?.dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('-640,000');
   });
 });

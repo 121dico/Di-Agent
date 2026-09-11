@@ -200,7 +200,8 @@
 .gridLine { stroke: rgba(95, 99, 104, .13); stroke-width: 1; stroke-dasharray: 3 5; vector-effect: non-scaling-stroke; }
 .axisLabel { fill: var(--text-3); font-family: var(--font-family); font-size: 10px; font-weight: 520; }
 .curve { stroke-width: 2.75; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; stroke-dasharray: 1500; filter: drop-shadow(0 2px 2px rgba(29, 29, 31, .06)); animation: drawCurve 680ms var(--ease-out) both; }
-.robustTrendCurve { stroke-width: 2.3; stroke-dasharray: 7 5; filter: drop-shadow(0 2px 2px rgba(29, 29, 31, .05)); animation: robustTrendIn 660ms var(--ease-out) both; }
+.robustTrendCurve { stroke-width: 2.3; stroke-dasharray: none; filter: drop-shadow(0 2px 2px rgba(29, 29, 31, .05)); animation: robustTrendIn 660ms var(--ease-out) both; }
+.robustTrendCurve[data-estimated], .barTrendCurve[data-estimated] { stroke-dasharray: 6 5; }
 .chartPointGroup { transform-box: fill-box; transform-origin: center; animation: chartPointIn 340ms var(--ease-out) both; }
 .chartPoint { stroke-width: 1.6; vector-effect: non-scaling-stroke; filter: drop-shadow(0 1px 1px rgba(29, 29, 31, .08)); transition: r var(--motion-control) var(--ease-out), filter var(--motion-control) var(--ease-standard); }
 .chartPointOutlier { stroke-width: 2; filter: drop-shadow(0 2px 4px rgba(29, 29, 31, .12)); }
@@ -225,7 +226,7 @@
 .incrementBarOutlier { stroke: color-mix(in srgb, var(--text-1) 38%, transparent); stroke-width: 1; opacity: .68; }
 .incrementBar:hover, .incrementBar:focus, .incrementBarActive { opacity: 1; transform: scaleX(1.08); }
 .incrementBar:focus-visible { stroke: var(--wb-focus); stroke-width: 2; }
-.barTrendCurve { stroke: var(--report-teal); stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 7 5; vector-effect: non-scaling-stroke; pointer-events: none; filter: drop-shadow(0 1px 2px rgba(21, 133, 122, .18)); animation: robustTrendIn 720ms var(--ease-out) both; }
+.barTrendCurve { stroke: var(--report-teal); stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: none; vector-effect: non-scaling-stroke; pointer-events: none; filter: drop-shadow(0 1px 2px rgba(21, 133, 122, .18)); animation: robustTrendIn 720ms var(--ease-out) both; }
 .chartTooltip { --tooltip-x: -50%; position: absolute; z-index: var(--z-popover); top: 18px; min-width: 172px; display: grid; gap: 7px; padding: 10px 11px; border: 1px solid var(--wb-border-default); border-radius: var(--radius-4); background: rgba(255, 255, 255, .96); box-shadow: var(--shadow-overlay); pointer-events: none; transform: translate(var(--tooltip-x), 0); animation: tooltipIn var(--motion-fast) var(--ease-out) both; }
 .chartTooltip[data-align='start'] { --tooltip-x: 0%; }
 .chartTooltip[data-align='end'] { --tooltip-x: -100%; }

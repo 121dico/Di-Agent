@@ -45,7 +45,7 @@ export function ReportSnapshotTrends({ analytics, renderChart }: { analytics: Re
       <button type="button" aria-pressed={mode === 'actual'} onClick={() => setMode('actual')}>真实数值</button>
     </div>
     <p className={local.note}>{mode === 'trend' ? '按各曲线自身的平均水平和波动幅度缩放，不固定起点和终点。仅比较走势，高低不代表人数或增长率；悬停或聚焦日期查看真实人数和日变化率。' : '所有曲线使用同一人数坐标轴，保留真实量级差异；可点击图例隐藏大体量曲线。'}</p>
-    <p className={local.note}>按每天 dt 的完整快照统计，不是订单发生日期。点击图例可显隐；缺失日保留断点，不补 0。疑似孤立离群点以空心点单独标记，主线断开、不插值，真实值保留。概览和环图展示最新成功日期。</p>
+    <p className={local.note}>按每天 dt 的完整快照统计，不是订单发生日期。点击图例可显隐；缺失日保留断点，不补 0。先筛出疑似孤立离群点，再平滑连接正常点；跨离群日以虚线表示估计趋势，空心点保留原始值。概览和环图展示最新成功日期。</p>
     <p className={local.note}>{analytics?.counting_basis}</p>
     {chart('每日人群规模', people)}
     {chart('全量人群 · 每日价敏分布', distribution(false))}
