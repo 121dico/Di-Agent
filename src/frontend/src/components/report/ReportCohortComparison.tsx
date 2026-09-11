@@ -42,7 +42,6 @@ export function ReportCohortComparison({ all, orders }: { all: Item[]; orders: I
       </section>;
     })}</div>
     <div className={styles.legend}>
-      <p>价敏等级 · 点击人数可独立显隐对应扇区</p>
       <table><thead><tr><th scope="col">价敏等级</th><th scope="col">全量人群</th><th scope="col">有订单人群</th></tr></thead><tbody>{labels.map((label) => <tr key={label}>
         <th scope="row"><svg width="10" height="10" aria-hidden="true"><circle cx="5" cy="5" r="5" fill={colors[label] ?? '#8B8E95'} /></svg>{label}</th>
         {groups.map((group, index) => {

@@ -799,13 +799,11 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
                 <h2>{selected.name}</h2>
                 <p>{selected.description || '基于固定数据接口生成的业务报表'}</p>
                 <div className={styles.summaryMeta}>
-                  <span className={analytics || latest || detailResult ? styles.metaReady : styles.metaPending}>{analytics ? (analytics.cached ? (isV12 ? '聚合缓存 · 最多10分钟' : '聚合快照') : '真实聚合已就绪') : latest ? '快照已就绪' : detailResult ? '明细已加载' : '等待数据加载'}</span>
                   <span>数据分区 {activePartition}</span>
                   <span>{access.canBrowseFullDetail ? `${totalRows.toLocaleString('zh-CN')} 行数据` : `${sharedUserCount.toLocaleString('zh-CN')} 位已计算用户`}</span>
                   <span>更新于 {latestTime}</span>
                   {selected.visualization.template && <span>{selected.visualization.template.id === 'template-1' ? '模板一' : selected.visualization.template.id} · v{selected.visualization.template.version}</span>}
-                  {isV12 && <span>横坐标：标签快照日（dt），非订单发生日</span>}
-                  {!!analytics?.missing_dates?.length && <span>范围内 {analytics.missing_dates.length} 天无快照；未补零或生成虚假点</span>}
+                  {!!analytics?.missing_dates?.length && <span>缺失 {analytics.missing_dates.length} 天</span>}
                 </div>
               </div>
               {access.canBrowseFullDetail && latest && <Button icon={<DownloadOutlined />} onClick={() => void downloadReportRun(selected.id, latest.id)}>下载明细</Button>}
