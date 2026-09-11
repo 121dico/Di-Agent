@@ -17,13 +17,16 @@ const analytics = {
   ],
 } as ReportAnalyticsResult;
 
-it('switches all three charts from independent trends to actual counts without losing hidden legends', () => {
+it('switches only the chosen chart without losing hidden legends', () => {
   act(() => root.render(<ReportSnapshotTrends analytics={analytics} renderChart={(_labels, series, mode) => <output data-mode={mode}>{series.map((item) => item.key).join(',')}</output>} />));
   expect([...container.querySelectorAll('output')].map((item) => item.dataset.mode)).toEqual(['trend', 'trend', 'trend']);
   const click = (text: string) => act(() => [...container.querySelectorAll('button')].find((button) => button.textContent === text)?.click());
   click('全量用户');
   click('真实数值');
-  expect([...container.querySelectorAll('output')].map((item) => item.dataset.mode)).toEqual(['actual', 'actual', 'actual']);
+  expect([...container.querySelectorAll('output')].map((item) => item.dataset.mode)).toEqual(['actual', 'trend', 'trend']);
+  expect(container.querySelectorAll('[role="group"]')).toHaveLength(3);
+  act(() => container.querySelectorAll<HTMLButtonElement>('[role="group"]')[2]?.querySelectorAll('button')[1]?.click());
+  expect([...container.querySelectorAll('output')].map((item) => item.dataset.mode)).toEqual(['actual', 'trend', 'actual']);
   expect(container.querySelector('output')?.textContent).toBe('orders');
   click('趋势对比');
   expect(container.querySelector('output')?.dataset.mode).toBe('trend');
