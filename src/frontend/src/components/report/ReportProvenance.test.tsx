@@ -2,7 +2,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it } from 'vitest';
 import type { ChartBinding, ChartExecution } from '@/api/reportProvenance';
-import { executionsForChart } from '@/api/reportProvenance';
+import { currentChartExecutions, executionsForChart } from '@/api/reportProvenance';
 import { ExecutionDetails } from './ReportProvenance';
 
 const binding: ChartBinding = { chart_key: 'orders', title: '有订单人群分布', query_keys: ['order_distribution'], formula: '当前公式', field_mapping: { x: 'level', value: 'user_count' } };
@@ -30,4 +30,12 @@ it('keeps historical query versions attached to their saved chart, not a reused 
   const unrelated = { ...execution, id: '2', bindings: [{ ...binding, chart_key: 'another-chart' }] };
   expect(executionsForChart([old, unrelated], 'orders').map((item) => item.id)).toEqual(['1']);
   expect(executionsForChart([{ ...execution, bindings: [] }], 'orders')).toEqual([]);
+});
+
+it('links a donut only to its displayed snapshot while a trend keeps the selected history', () => {
+  const previous = { ...execution, id: 'previous', start_date: '2026-09-09', end_date: '2026-09-09' };
+  const rows = [execution, previous];
+  expect(currentChartExecutions(rows, ['1', 'previous'], 'all_distribution', '2026-09-09', '2026-09-10', '2026-09-10').map((item) => item.id)).toEqual(['1']);
+  expect(currentChartExecutions(rows, ['1', 'previous'], 'all_trend', '2026-09-09', '2026-09-10', '2026-09-10')).toHaveLength(2);
+  expect(currentChartExecutions(rows, ['1'], 'all_distribution')).toEqual([]);
 });

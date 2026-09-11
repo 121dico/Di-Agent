@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Drawer, Empty, Select, Spin } from 'antd';
-import { executionsForChart, getChartProvenance, replayChartExecution } from '@/api/reportProvenance';
+import { currentChartExecutions, executionsForChart, getChartProvenance, replayChartExecution } from '@/api/reportProvenance';
 import type { ChartBinding, ChartExecution, ChartProvenance } from '@/api/reportProvenance';
 import styles from './ReportProvenance.module.css';
 
@@ -62,11 +62,7 @@ function ProvenanceBody({ reportId, executionIds, startDate, endDate, dataDate }
   }, [reportId, reload, idsKey]);
   const binding = data?.bindings?.find((item) => item.chart_key === chartKey);
   const linkedExecutions = executionsForChart(data?.executions ?? [], chartKey);
-  const snapshotOnly = chartKey === 'all_distribution' || chartKey === 'order_distribution';
-  const from = snapshotOnly ? dataDate : startDate;
-  const to = snapshotOnly ? dataDate : endDate;
-  const executions = scope === 'history' ? linkedExecutions : linkedExecutions.filter((item) => executionIds.includes(item.id)
-    && (!snapshotOnly || Boolean(dataDate)) && (!from || item.end_date >= from) && (!to || item.start_date <= to));
+  const executions = scope === 'history' ? linkedExecutions : currentChartExecutions(linkedExecutions, executionIds, chartKey, startDate, endDate, dataDate);
   const execution = executions.find((item) => item.id === executionId) ?? executions[0];
   const replay = async () => {
     if (!execution || running) return;
