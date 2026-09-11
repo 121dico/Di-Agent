@@ -37,7 +37,7 @@ export function ReportSnapshotTrends({ analytics, renderChart }: { analytics: Re
     {analytics?.trend.length ? renderChart(labels, series.filter((item) => !hidden.has(item.key))) : <Empty description="正在读取每日 dt 快照统计" />}
   </div>;
   return <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-trend">
-    <div className={styles.blockHead}><div><span>03</span><strong>每日标签快照趋势</strong></div><small>{analytics?.start_date} → {analytics?.end_date}</small></div>
+    <div className={styles.blockHead}><div><span>04</span><strong>每日标签快照趋势</strong></div><small>{analytics?.start_date} → {analytics?.end_date}</small></div>
     <p className={local.note}>按每天 dt 的完整快照统计，不是订单发生日期。点击图例可显隐；未加载或失败日期保留断点，不补 0。概览和环图展示最新成功日期。</p>
     <p className={local.note}>{analytics?.counting_basis}</p>
     {chart('每日人群规模', people)}

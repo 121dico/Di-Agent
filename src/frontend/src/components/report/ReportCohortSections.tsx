@@ -5,6 +5,7 @@ import { presentSensitivityDistribution } from '@/views/reportPresentation';
 import styles from '@/views/ReportsView.module.css';
 import local from './ReportCohortSections.module.css';
 import { ReportSnapshotTrends, type SnapshotChartRenderer } from './ReportSnapshotTrends';
+import { ReportSnapshotGrowth, SnapshotGrowthMetrics } from './ReportSnapshotGrowth';
 
 interface Props {
   analytics: ReportAnalyticsResult | null;
@@ -12,6 +13,8 @@ interface Props {
   error: string;
   progress?: string;
   renderChart?: SnapshotChartRenderer;
+  renderGrowthChart?: SnapshotChartRenderer;
+  renderBar?: (labels: string[], values: number[]) => ReactNode;
   renderDistribution: (items: Array<{ label: string; value: number }>, hidden: Set<string>, onToggle: (label: string) => void, label: string) => ReactNode;
 }
 
@@ -22,7 +25,7 @@ const pendingMetrics = [
   { title: '新增人群价敏分布', reason: '需将上述两类人群分别匹配当日标签后统计；不会用全量分布代替。' },
 ];
 
-export function ReportCohortSections({ analytics, loading, error, progress, renderChart, renderDistribution }: Props) {
+export function ReportCohortSections({ analytics, loading, error, progress, renderChart, renderGrowthChart, renderBar, renderDistribution }: Props) {
   const [hiddenAll, setHiddenAll] = useState<Set<string>>(() => new Set());
   const [hiddenOrders, setHiddenOrders] = useState<Set<string>>(() => new Set());
   const toggle = (current: Set<string>, label: string) => {
@@ -41,13 +44,14 @@ export function ReportCohortSections({ analytics, loading, error, progress, rend
     <section className={`${styles.summaryBlock} ${styles.overviewBlock}`} id="report-overview">
       {error && <Alert type="warning" showIcon message={available ? '部分 dt 统计失败，已保留成功数据' : '统计数据暂未生成'} description={error} />}
       {progress && <Alert type="info" message={progress} />}
-      <div className={styles.blockHead}><div><span>01</span><strong>全量人群</strong></div><small>标签快照 {analytics?.data_date || '—'}</small></div>
+      <div className={styles.blockHead}><div><span>01</span><strong>指标概览 · 全量人群</strong></div><small>标签快照 {analytics?.data_date || '—'}</small></div>
       <p className={local.note}>当前城市筛选内的完整标签人群，包含先验赋分与历史继承用户；不跨快照累加人数。</p>
       <Spin spinning={loading && !available}>
         {available ? <>
           <div className={styles.metrics}>
             {metric('全量用户数', analytics.summary.total_user_count.toLocaleString('zh-CN'), '人')}
             {metric('已赋价敏分用户', analytics.summary.calculated_user_count.toLocaleString('zh-CN'), '人')}
+            <SnapshotGrowthMetrics analytics={analytics} />
           </div>
           <div className={`${styles.card} ${local.distribution}`}>
             <div className={styles.cardTitle}><div><i />全量价敏分布</div></div>
@@ -57,8 +61,9 @@ export function ReportCohortSections({ analytics, loading, error, progress, rend
       </Spin>
     </section>
 
+    {renderGrowthChart && renderBar && <ReportSnapshotGrowth analytics={analytics} renderChart={renderGrowthChart} renderBar={renderBar} />}
     <section className={`${styles.summaryBlock} ${styles.trendBlock}`} id="report-order-cohort">
-      <div className={styles.blockHead}><div><span>02</span><strong>有订单人群</strong></div><small>订单置信度 ps_conf &gt; 0</small></div>
+      <div className={styles.blockHead}><div><span>03</span><strong>有订单人群</strong></div><small>订单置信度 ps_conf &gt; 0</small></div>
       <p className={local.note}>以标签最近刷新时保留的置信度为准，不等同于今日重新计算的180天活跃人群。分布分母仅为本组用户。</p>
       <Spin spinning={loading && !available}>
         {available && cohort ? <div className={local.cohortGrid}>
@@ -76,7 +81,7 @@ export function ReportCohortSections({ analytics, loading, error, progress, rend
 
     {renderChart && <ReportSnapshotTrends analytics={analytics} renderChart={renderChart} />}
     <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`}>
-      <div className={styles.blockHead}><div><span>04</span><strong>订单发生日新增（独立口径）</strong></div><small>不影响上方 dt 历史趋势</small></div>
+      <div className={styles.blockHead}><div><span>05</span><strong>订单发生日新增（独立口径）</strong></div><small>不影响上方 dt 历史趋势</small></div>
       <p className={local.note}>首次新增标签用户与当天有订单用户分别统计，两类人群可能重叠，不直接相加。当前 API 尚未提供所需日粒度指标。</p>
       <div className={local.pendingGrid}>{pendingMetrics.map((item) => <article className={styles.card} key={item.title}>
         <h3>{item.title}</h3><span className={local.pending}>待接入</span><p className={local.note}>{item.reason}</p>

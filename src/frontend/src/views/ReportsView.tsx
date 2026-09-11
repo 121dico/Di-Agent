@@ -557,7 +557,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
   useEffect(() => {
     const root = pageRef.current;
     if (!root || !selected) return;
-    const ids = ['report-overview', 'report-order-cohort', 'report-trend', 'report-search'];
+    const ids = ['report-overview', 'report-increments', 'report-order-cohort', 'report-trend', 'report-search'];
     if (access.canBrowseFullDetail) ids.push('report-detail');
     if (access.canViewRunHistory) ids.push('report-history');
     let frame = 0;
@@ -833,6 +833,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
 
             <nav className={styles.anchorBar} aria-label="报表板块导航">
               <a className={activeSection === 'report-overview' ? styles.anchorActive : ''} href="#report-overview" onClick={() => setActiveSection('report-overview')}>{isV12 ? '全量人群' : '指标概览'}</a>
+              {isV12 && <a className={activeSection === 'report-increments' ? styles.anchorActive : ''} href="#report-increments" onClick={() => setActiveSection('report-increments')}>增量分析</a>}
               {isV12 && <a className={activeSection === 'report-order-cohort' ? styles.anchorActive : ''} href="#report-order-cohort" onClick={() => setActiveSection('report-order-cohort')}>有订单人群</a>}
               <a className={activeSection === 'report-trend' ? styles.anchorActive : ''} href="#report-trend" onClick={() => setActiveSection('report-trend')}>{isV12 ? 'dt 历史趋势' : '趋势分析'}</a>
               <a className={activeSection === 'report-search' ? styles.anchorActive : ''} href="#report-search" onClick={() => setActiveSection('report-search')}>用户查询</a>
@@ -887,6 +888,8 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
             {isV12 ? <ReportCohortSections key={selectedId} analytics={analytics} loading={analyticsLoading} error={analyticsError}
               progress={snapshotProgress ? !analyticsLoading && snapshotProgress.completed === snapshotProgress.total && !snapshotProgress.failed.length ? `已载入保存的 dt 快照，共 ${snapshotProgress.total} 天` : `dt 快照：已处理 ${snapshotProgress.completed}/${snapshotProgress.total} 天，成功 ${snapshotProgress.completed - snapshotProgress.failed.length} 天${snapshotProgress.failed.length ? `，失败 ${snapshotProgress.failed.length} 天` : ''}` : undefined}
               renderChart={(labels, series) => <SmoothChart labels={labels} series={series} height={360} trendRule="raw" pendingText="请开启至少一个图例" />}
+              renderGrowthChart={(labels, series) => <SmoothChart labels={labels} series={series} height={270} trendRule="raw" pendingText="暂无连续快照可计算增长" />}
+              renderBar={(labels, values) => <IncrementBarChart labels={labels} values={values} raw />}
               renderDistribution={(items, hidden, onToggle, centerLabel) => <DonutChart distribution={items} hidden={hidden} onToggle={onToggle} centerLabel={centerLabel} />} /> : <>
             <section className={`${styles.summaryBlock} ${styles.overviewBlock}`} id="report-overview">
               {analyticsError && <Alert type="warning" showIcon message="统计数据暂未生成" description={analyticsError} />}
@@ -931,7 +934,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
 
             </>}
             <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-search">
-              <div className={styles.blockHead}><div><span>{isV12 ? '05' : '03'}</span><strong>用户查询</strong></div><small>输入完整 DUID · 仅返回精确匹配结果</small></div>
+              <div className={styles.blockHead}><div><span>{isV12 ? '06' : '03'}</span><strong>用户查询</strong></div><small>输入完整 DUID · 仅返回精确匹配结果</small></div>
               <div className={`${styles.card} ${styles.searchCard}`}>
                 <div className={styles.userSearchBar}>
                   <Input prefix={<SearchOutlined />} value={searchDUID} onChange={(event) => setSearchDUID(event.target.value.replace(/\D/g, ''))} onPressEnter={() => void handleSearch()} placeholder="请输入完整 DUID，例如 17592356441816" />
@@ -945,7 +948,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
             </section>
 
             {access.canBrowseFullDetail && <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-detail">
-              <div className={styles.blockHead}><div><span>{isV12 ? '06' : '04'}</span><strong>数据明细</strong></div><small>全量数据 · 服务端分页 · 共 {totalRows.toLocaleString('zh-CN')} 行</small></div>
+              <div className={styles.blockHead}><div><span>{isV12 ? '07' : '04'}</span><strong>数据明细</strong></div><small>全量数据 · 服务端分页 · 共 {totalRows.toLocaleString('zh-CN')} 行</small></div>
               <div className={`${styles.card} ${styles.tableCard}`}>
                 {orderedDetailColumns.length > 20 && <div className={styles.fieldGroups}>{fieldGroups.map((group) => <button key={group.value} type="button" className={fieldGroup === group.value ? styles.fieldGroupActive : ''} onClick={() => setFieldGroup(group.value)}>{group.label}<span>{reportColumnsForGroup(orderedDetailColumns, group.value).length}</span></button>)}</div>}
                 <div className={styles.tableToolbar}>
@@ -958,7 +961,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
             </section>}
 
             {access.canViewRunHistory && <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-history">
-              <div className={styles.blockHead}><div><span>{isV12 ? '07' : '05'}</span><strong>运行记录</strong></div><small>手动生成与每日任务共用同一流程</small></div>
+              <div className={styles.blockHead}><div><span>{isV12 ? '08' : '05'}</span><strong>运行记录</strong></div><small>手动生成与每日任务共用同一流程</small></div>
               <div className={styles.card}>
                 <div className={styles.runList}>{runs.map((run) => <div key={run.id} className={styles.runRow}><span className={`${styles.statusDot} ${styles[run.status]}`} /><strong>{statusLabel[run.status]}</strong><span>{run.trigger === 'scheduled' ? '每日 10:00' : '手动生成'}</span><span>{new Date(run.started_at).toLocaleString('zh-CN', { hour12: false })}</span><span>{run.source_partition || run.error_message || '—'}</span></div>)}{runs.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有运行记录" />}</div>
               </div>
