@@ -32,7 +32,7 @@ export function ReportSnapshotTrends({ analytics, renderChart }: { analytics: Re
     }) }));
   };
   const chart = (title: string, series: SnapshotSeries[]) => <div className={styles.card}>
-    <div className={styles.cardTitle}><div><i />{title}</div><small>{mode === 'trend' ? '纵轴：各自区间位置 0–100' : '单位：人'} · 横轴：dt（标签快照日期）</small></div>
+    <div className={styles.cardTitle}><div><i />{title}</div><small>{mode === 'trend' ? '独立趋势 · 不固定起终点' : '单位：人'} · 横轴：dt（标签快照日期）</small></div>
     <div className={local.legend}>{series.map((item) => <button key={item.key} type="button" aria-pressed={!hidden.has(item.key)} onClick={() => setHidden((current) => {
       const next = new Set(current); if (next.has(item.key)) next.delete(item.key); else next.add(item.key); return next;
     })}><svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="5" fill={hidden.has(item.key) ? '#bbb' : item.color} /></svg>{item.label}</button>)}</div>
@@ -44,8 +44,8 @@ export function ReportSnapshotTrends({ analytics, renderChart }: { analytics: Re
       <button type="button" aria-pressed={mode === 'trend'} onClick={() => setMode('trend')}>趋势对比</button>
       <button type="button" aria-pressed={mode === 'actual'} onClick={() => setMode('actual')}>真实数值</button>
     </div>
-    <p className={local.note}>{mode === 'trend' ? '各曲线在所选日期内独立缩放：最低为 0、最高为 100，数值不变时保持在 50。用于比较走势，不代表人数或增长率；悬停或聚焦日期查看真实人数和日变化率。' : '所有曲线使用同一人数坐标轴，保留真实量级差异；可点击图例隐藏大体量曲线。'}</p>
-    <p className={local.note}>按每天 dt 的完整快照统计，不是订单发生日期。点击图例可显隐；未加载或失败日期保留断点，不补 0。概览和环图展示最新成功日期。</p>
+    <p className={local.note}>{mode === 'trend' ? '按各曲线自身的平均水平和波动幅度缩放，不固定起点和终点。仅比较走势，高低不代表人数或增长率；悬停或聚焦日期查看真实人数和日变化率。' : '所有曲线使用同一人数坐标轴，保留真实量级差异；可点击图例隐藏大体量曲线。'}</p>
+    <p className={local.note}>按每天 dt 的完整快照统计，不是订单发生日期。点击图例可显隐；缺失日保留断点，不补 0。疑似孤立离群点以空心点单独标记，主线断开、不插值，真实值保留。概览和环图展示最新成功日期。</p>
     <p className={local.note}>{analytics?.counting_basis}</p>
     {chart('每日人群规模', people)}
     {chart('全量人群 · 每日价敏分布', distribution(false))}

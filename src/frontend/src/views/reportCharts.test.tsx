@@ -27,12 +27,36 @@ describe('report chart interactions', () => {
     ]} />));
     const paths = [...container.querySelectorAll('svg path')];
     expect(paths).toHaveLength(2);
-    expect(paths[0]?.getAttribute('d')).toBe(paths[1]?.getAttribute('d'));
+    const plotted = paths.map((path) => [...path.parentElement!.querySelectorAll('circle')].map((circle) => Number(circle.getAttribute('cy'))));
+    plotted[0]?.forEach((y, index) => expect(y).toBeCloseTo(plotted[1]![index]!, 6));
     expect(container.textContent).toContain('各曲线独立缩放');
     act(() => container.querySelector('[aria-label="2026-09-08，查看该日所有指标"]')?.dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
     expect(container.querySelector('[role="status"]')?.textContent).toContain('110,000,000');
     expect(container.querySelector('[role="status"]')?.textContent).toContain('+10.00%');
     expect(container.querySelector('[role="status"]')?.textContent).toContain('+50.00%');
+  });
+
+  it('does not pin different trend shapes to matching starts and ends or show normalized axis numbers', () => {
+    act(() => root.render(<SmoothChart labels={['2026-09-06', '2026-09-07', '2026-09-08', '2026-09-09']} scaleMode="trend" series={[
+      { label: '加速', values: [0, 2, 5, 10] },
+      { label: '减速', values: [1000, 1003, 1004, 1005] },
+    ]} />));
+    const groups = [...container.querySelectorAll('svg path')].map((path) => path.parentElement!);
+    const ys = groups.map((group) => [...group.querySelectorAll('circle')].map((circle) => circle.getAttribute('cy')));
+    expect(ys[0]?.[0]).not.toBe(ys[1]?.[0]);
+    expect(ys[0]?.[3]).not.toBe(ys[1]?.[3]);
+    expect([...container.querySelectorAll('svg text')].filter((node) => !node.querySelector('title'))).toHaveLength(0);
+  });
+
+  it.each(['actual', 'trend'] as const)('isolates a one-day spike without fitting it away in %s mode', (scaleMode) => {
+    const labels = ['2026-08-09', '2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13'];
+    act(() => root.render(<SmoothChart labels={labels} scaleMode={scaleMode} trendRule="raw" series={[{ label: '全量', values: [350000000, 350000000, 370000000, 350000000, 350000000] }]} />));
+    expect(container.textContent).toContain('疑似离群');
+    expect(container.querySelector('svg path')?.getAttribute('d')?.match(/M /g)).toHaveLength(2);
+    expect(container.querySelectorAll('[data-outlier="true"]')).toHaveLength(1);
+    expect(container.querySelector('[data-outlier="true"] title')?.textContent).toContain('370000000');
+    act(() => container.querySelector('[aria-label="2026-08-11，查看该日所有指标"]')?.dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('疑似离群');
   });
 
   it('keeps constant trends flat, missing days disconnected and zero baselines explicit', () => {

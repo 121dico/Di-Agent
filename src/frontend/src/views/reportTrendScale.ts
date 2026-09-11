@@ -1,11 +1,14 @@
 export type ReportScaleMode = 'actual' | 'trend';
 
 // 只转换绘图坐标，原始数值始终用于读数和变化率。
-export function normalizeReportTrend(values: number[]): number[] {
-  const finite = values.filter(Number.isFinite);
-  const min = Math.min(...finite);
-  const max = Math.max(...finite);
-  return values.map((value) => !Number.isFinite(value) ? NaN : max === min ? 50 : (value - min) / (max - min) * 100);
+export function normalizeReportTrend(values: number[], excluded: number[] = []): number[] {
+  const omitted = new Set(excluded);
+  const finite = values.filter((value, index) => Number.isFinite(value) && !omitted.has(index));
+  if (!finite.length) return values.map(() => NaN);
+  const mean = finite.reduce((sum, value) => sum + value, 0) / finite.length;
+  const deviation = Math.sqrt(finite.reduce((sum, value) => sum + (value - mean) ** 2, 0) / finite.length);
+  // 不用极值铺满画布，避免不同走势被固定到同样的起终点。
+  return values.map((value) => !Number.isFinite(value) ? NaN : deviation === 0 ? Math.sign(value - mean) * 3 : (value - mean) / deviation);
 }
 
 export function reportDailyRate(values: number[], labels: string[], index: number): string {

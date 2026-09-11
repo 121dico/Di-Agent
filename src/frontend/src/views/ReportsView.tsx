@@ -33,7 +33,7 @@ import {
 } from '@/api/report';
 import { useAuthStore } from '@/store/authStore';
 import type { ReportAnalyticsRange, ReportAnalyticsResult, ReportDataSource, ReportDefinition, ReportPageResult, ReportRun, ReportVisualization } from '@/types/report';
-import { buildChartDomain, buildDateTickIndexes, buildPriceSensitiveAnalyticsPresentation, buildReportPresentation, buildRobustTrend, buildSmoothChartPath, filterAndSortReportRows, formatChartDateTick, reportColumnsForGroup } from './reportPresentation';
+import { buildChartDomain, buildDateTickIndexes, buildPriceSensitiveAnalyticsPresentation, buildReportPresentation, filterAndSortReportRows, formatChartDateTick, reportColumnsForGroup } from './reportPresentation';
 import type { ReportFieldGroup, ReportSort } from './reportPresentation';
 import { buildReportAccessPolicy } from './reportAccess';
 import { filterReportSources } from './reportSourceSearch';
@@ -43,6 +43,8 @@ import { ReportCohortSections } from '@/components/report/ReportCohortSections';
 import { loadStoredSnapshotHistory, type SnapshotProgress } from './reportSnapshotHistory';
 import { formatReportAxisTick } from './reportAxisTick';
 import { normalizeReportTrend, reportDailyRate, type ReportScaleMode } from './reportTrendScale';
+import { detectReportOutliers } from './reportOutliers';
+import { buildObservedCurvePath } from './reportCurvePath';
 import { ChinaRegionPicker, expandChinaRegionSelection, summarizeChinaRegionSelection } from '@/components/report/ChinaRegionPicker';
 import styles from './ReportsView.module.css';
 
@@ -131,39 +133,23 @@ interface SmoothChartProps {
   scaleMode?: ReportScaleMode;
 }
 
-function trendRuleOutliers(values: number[], rule: SmoothChartProps['trendRule']): number[] {
-  if (rule === 'nonnegative') return values.flatMap((value, index) => value < 0 ? [index] : []);
-  if (rule !== 'nondecreasing') return [];
-  let peak = Number.NEGATIVE_INFINITY;
-  return values.flatMap((value, index) => {
-    if (value >= peak) {
-      peak = value;
-      return [];
-    }
-    return [index];
-  });
-}
-
 export function SmoothChart({ labels, series, pendingText, bounds, height = 360, trendRule = 'default', scaleMode = 'actual' }: SmoothChartProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [chartRef, width] = useResponsiveChartWidth();
   const chartHeight = labels.length <= 1 ? Math.min(height, 240) : height;
   const padding = { top: 26, right: 24, bottom: 44, left: 62 };
   const trendModels = useMemo(() => series.map((item) => {
-    const plotValues = scaleMode === 'trend' ? normalizeReportTrend(item.values) : item.values;
-    return { ...item, plotValues, trend: scaleMode === 'trend' || trendRule === 'raw'
-      ? { fittedValues: plotValues, outlierIndexes: [] as number[] }
-      : buildRobustTrend(item.values, { forcedOutlierIndexes: trendRuleOutliers(item.values, trendRule) }) };
-  }), [series, trendRule, scaleMode]);
+    const outlierIndexes = detectReportOutliers(item.values, labels);
+    const plotValues = scaleMode === 'trend' ? normalizeReportTrend(item.values, outlierIndexes) : item.values;
+    const outliers = new Set(outlierIndexes);
+    return { ...item, plotValues, trend: { fittedValues: plotValues.map((value, index) => outliers.has(index) ? NaN : value), outlierIndexes } };
+  }), [series, labels, scaleMode]);
   const values = series.flatMap((item) => item.values).filter(Number.isFinite);
   const domainValues = trendModels.flatMap((item) => {
     const outliers = new Set(item.trend.outlierIndexes);
-    return [
-      ...item.trend.fittedValues.filter(Number.isFinite),
-      ...item.values.filter((value, index) => Number.isFinite(value) && !outliers.has(index)),
-    ];
+    return scaleMode === 'trend' ? item.plotValues.filter((value, index) => Number.isFinite(value) && !outliers.has(index)) : item.values.filter(Number.isFinite);
   });
-  const domain = scaleMode === 'trend' ? { min: 0, max: 100 } : buildChartDomain(domainValues, bounds);
+  const domain = buildChartDomain(domainValues, scaleMode === 'trend' ? undefined : bounds);
   const min = domain.min;
   const max = domain.max;
   const range = max - min || 1;
@@ -171,15 +157,6 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
     x: count === 1 ? width / 2 : padding.left + (index * (width - padding.left - padding.right)) / Math.max(1, count - 1),
     y: chartHeight - padding.bottom - ((value - min) / range) * (chartHeight - padding.top - padding.bottom),
   });
-  const pathFor = (line: number[], raw: number[]) => {
-    const segments: Array<Array<{ x: number; y: number }>> = [[]];
-    line.forEach((value, index) => {
-      const gap = index > 0 && Date.parse(labels[index] ?? '') - Date.parse(labels[index - 1] ?? '') > 86400000;
-      if (gap || !Number.isFinite(raw[index])) segments.push([]);
-      if (Number.isFinite(raw[index]) && Number.isFinite(value)) segments[segments.length - 1]!.push(point(value, index, line.length));
-    });
-    return segments.map((points) => buildSmoothChartPath(points, width, padding.left)).join(' ');
-  };
   const hasValues = series.length > 0 && values.length > 0;
   const xFor = (index: number) => labels.length <= 1
     ? width / 2
@@ -216,24 +193,25 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
   return (
     <div ref={chartRef} className={styles.chartWrap} onMouseLeave={() => setActiveIndex(null)}>
       {hasValues && <div className={styles.chartReadout}>
-        <div className={styles.chartScaleMeta}><span>{scaleMode === 'trend' ? '各曲线独立缩放 · 区间位置，非增长率 · 以下为真实读数' : trendRule === 'raw' ? '真实日值 · 缺失日断开，不补零' : '真实值动态刻度 · 多数点稳健拟合'}</span><b>{formatChartValue(min)}–{formatChartValue(max)}</b></div>
+        <div className={styles.chartScaleMeta}><span>{scaleMode === 'trend' ? '各曲线独立缩放 · 不固定起终点 · 以下为真实读数' : trendRule === 'raw' ? '真实日值 · 缺失日断开，不补零' : '真实值动态刻度 · 疑似离群点单独标记'}</span>{scaleMode !== 'trend' && <b>{formatChartValue(min)}–{formatChartValue(max)}</b>}</div>
         <div className={styles.chartSignals}>{seriesInsights.map((item) => <div key={item.key}>
           <i style={{ background: item.color }} />
           <span>{item.label}</span>
           <strong>{formatChartValue(item.latest)}</strong>
-          <em data-direction={item.delta > 0 ? 'up' : item.delta < 0 ? 'down' : 'flat'}>{item.count < 2 ? '单日基准' : `${item.delta > 0 ? '+' : ''}${formatChartValue(item.delta)} · 波动 ${formatChartValue(item.spread)}${item.outlierCount ? ` · 忽略 ${item.outlierCount} 个偏移点` : ''}`}</em>
+          <em data-direction={item.delta > 0 ? 'up' : item.delta < 0 ? 'down' : 'flat'}>{item.count < 2 ? '单日基准' : `${item.delta > 0 ? '+' : ''}${formatChartValue(item.delta)} · 波动 ${formatChartValue(item.spread)}${item.outlierCount ? ` · ${item.outlierCount} 个疑似离群点` : ''}`}</em>
         </div>)}</div>
       </div>}
+      {trendModels.some((item) => item.trend.outlierIndexes.length > 0) && <div className={styles.singleDayHint}>空心点为疑似离群：前后相邻日回归，偏离同时超过局部波动阈值与 3%。主线在该日断开，不插值；真实值保留。{scaleMode === 'trend' && '超出趋势范围的空心点仅在边缘定位，不代表纵向数值。'}</div>}
       {hasValues && labels.length === 1 && <div className={styles.singleDayHint}>当前只有 1 个真实日期：仅标记基准点，不生成虚假曲线</div>}
       <svg viewBox={`0 0 ${width} ${chartHeight}`} className={styles.chart} role="img" aria-label="报表趋势图">
         {yTicks.map((tick, index) => {
           const y = padding.top + index * ((chartHeight - padding.top - padding.bottom) / 4);
-          return <g key={tick}><line x1={padding.left} x2={width - padding.right} y1={y} y2={y} className={styles.gridLine} /><text x={padding.left - 12} y={y + 4} textAnchor="end" className={styles.axisLabel}>{formatReportAxisTick(tick, range / 4)}</text></g>;
+          return <g key={tick}><line x1={padding.left} x2={width - padding.right} y1={y} y2={y} className={styles.gridLine} />{scaleMode !== 'trend' && <text x={padding.left - 12} y={y + 4} textAnchor="end" className={styles.axisLabel}>{formatReportAxisTick(tick, range / 4)}</text>}</g>;
         })}
         {xTicks.map((index) => <text key={index} x={xFor(index)} y={chartHeight - 13} textAnchor={index === 0 ? 'start' : index === labels.length - 1 ? 'end' : 'middle'} className={styles.axisLabel}><title>{labels[index]}</title>{formatChartDateTick(labels[index] ?? '')}</text>)}
         {hasValues && trendModels.map((item, index) => {
           const color = item.color ?? chartColors[index % chartColors.length];
-          const path = pathFor(item.trend.fittedValues, item.values);
+          const path = buildObservedCurvePath(labels, item.trend.fittedValues, (value, index) => point(value, index, labels.length));
           const outliers = new Set(item.trend.outlierIndexes);
           return (
             <g key={item.label}>
@@ -244,7 +222,7 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
                 const isOutlier = outliers.has(pointIndex);
                 const current = { ...rawPoint, y: isOutlier ? Math.max(padding.top, Math.min(chartHeight - padding.bottom, rawPoint.y)) : rawPoint.y };
                 const labelOffset = index % 2 === 0 ? -11 : 21;
-                return <g key={`${item.label}-${pointIndex}`} className={styles.chartPointGroup} style={{ animationDelay: `${Math.min(pointIndex * 16 + index * 45, 420)}ms` }}>{isOutlier && <circle cx={current.x} cy={current.y} r={activeIndex === pointIndex ? 9 : 7} fill="none" stroke={color} className={styles.chartPointOutlierHalo} />}<circle cx={current.x} cy={current.y} r={activeIndex === pointIndex ? 4.5 : isOutlier ? 3.4 : 2.6} fill={isOutlier ? '#fff' : color} stroke={isOutlier ? color : '#fff'} className={`${styles.chartPoint} ${isOutlier ? styles.chartPointOutlier : ''} ${activeIndex === pointIndex ? styles.chartPointActive : ''}`}><title>{`${labels[pointIndex] ?? ''} · ${item.label} ${Number(value.toFixed(2))}${isOutlier ? ' · 明显偏移，未参与趋势拟合' : ''}`}</title></circle>{item.values.length === 1 && <text x={current.x + 17} y={current.y + labelOffset} fill={color} className={styles.singlePointValue}>{Number(value.toFixed(2))}</text>}</g>;
+                return <g key={`${item.label}-${pointIndex}`} data-outlier={isOutlier || undefined} className={styles.chartPointGroup} style={{ animationDelay: `${Math.min(pointIndex * 16 + index * 45, 420)}ms` }}>{isOutlier && <circle cx={current.x} cy={current.y} r={activeIndex === pointIndex ? 9 : 7} fill="none" stroke={color} className={styles.chartPointOutlierHalo} />}<circle cx={current.x} cy={current.y} r={activeIndex === pointIndex ? 4.5 : isOutlier ? 3.4 : 2.6} fill={isOutlier ? '#fff' : color} stroke={isOutlier ? color : '#fff'} className={`${styles.chartPoint} ${isOutlier ? styles.chartPointOutlier : ''} ${activeIndex === pointIndex ? styles.chartPointActive : ''}`}><title>{`${labels[pointIndex] ?? ''} · ${item.label} ${Number(value.toFixed(2))}${isOutlier ? ' · 疑似离群，主线断开，真实值保留' : ''}`}</title></circle>{item.values.length === 1 && <text x={current.x + 17} y={current.y + labelOffset} fill={color} className={styles.singlePointValue}>{Number(value.toFixed(2))}</text>}</g>;
               })}
             </g>
           );
@@ -260,7 +238,7 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
       {!hasValues && <div className={styles.trendPending}><span>NO DATA</span><strong>暂无趋势数据</strong><p>{pendingText ?? '当前筛选范围没有可用数据'}</p></div>}
       {activeX != null && activeIndex != null && activeSeries.length > 0 && <div className={styles.chartTooltip} data-scale={scaleMode} data-align={tooltipAlign} style={{ left: `${activeX / width * 100}%` }} role="status">
         <strong>{labels[activeIndex]}</strong>
-        {activeSeries.map((item) => <span key={item.key ?? item.label}><i style={{ background: item.color }} /><b>{item.label}{item.isOutlier ? ' · 明显偏移' : ''}{scaleMode === 'trend' && <small>{reportDailyRate(item.values, labels, activeIndex)}</small>}</b><em>{scaleMode === 'trend' ? item.value.toLocaleString('zh-CN') : formatChartValue(item.value)}</em></span>)}
+        {activeSeries.map((item) => <span key={item.key ?? item.label}><i style={{ background: item.color }} /><b>{item.label}{item.isOutlier ? ' · 疑似离群' : ''}{scaleMode === 'trend' && <small>{reportDailyRate(item.values, labels, activeIndex)}{(item.isOutlier || item.trend.outlierIndexes.includes(activeIndex - 1)) && ' · 含疑似离群日'}</small>}</b><em>{scaleMode === 'trend' || item.isOutlier ? item.value.toLocaleString('zh-CN') : formatChartValue(item.value)}</em></span>)}
       </div>}
     </div>
   );
@@ -270,15 +248,17 @@ export function IncrementBarChart({ labels, values, height = 330, raw = false }:
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [chartRef, width] = useResponsiveChartWidth();
   const padding = { top: 34, right: 24, bottom: 44, left: 62 };
-  const trend = useMemo(() => raw ? { fittedValues: values, outlierIndexes: [] as number[] } : buildRobustTrend(values, {
-    forcedOutlierIndexes: values.flatMap((value, index) => value < 0 ? [index] : []),
-  }), [values, raw]);
+  const trend = useMemo(() => {
+    const outlierIndexes = raw ? [] : detectReportOutliers(values, labels);
+    const omitted = new Set(outlierIndexes);
+    return { fittedValues: values.map((value, index) => omitted.has(index) ? NaN : value), outlierIndexes };
+  }, [values, labels, raw]);
   const outliers = new Set(trend.outlierIndexes);
   const compress = (value: number) => Math.sign(value) * Math.sqrt(Math.abs(value));
   const expand = (value: number) => Math.sign(value) * value * value;
   const domain = buildChartDomain([
     ...trend.fittedValues.filter(Number.isFinite).map(compress),
-    ...values.filter((value, index) => Number.isFinite(value) && !outliers.has(index)).map(compress),
+    ...values.filter(Number.isFinite).map(compress),
     0,
   ]);
   const min = Math.min(0, domain.min);
@@ -297,13 +277,13 @@ export function IncrementBarChart({ labels, values, height = 330, raw = false }:
   const activeX = activeIndex == null ? null : xFor(activeIndex);
   const tooltipAlign = activeIndex === 0 ? 'start' : activeIndex === labels.length - 1 ? 'end' : 'center';
   const hasValues = labels.length > 0 && values.some(Number.isFinite);
-  const trendPath = raw ? '' : buildSmoothChartPath(trend.fittedValues.map((value, index) => ({ x: xFor(index), y: yFor(value) })), width, padding.left);
+  const trendPath = raw ? '' : buildObservedCurvePath(labels, trend.fittedValues, (value, index) => ({ x: xFor(index), y: yFor(value) }));
   return <div ref={chartRef} className={styles.chartWrap} onMouseLeave={() => setActiveIndex(null)}>
     <div className={styles.incrementMeta}>
       <span><i data-tone="positive" />正增长</span>
       <span><i data-tone="negative" />负增长</span>
-      {!raw && <span><i data-tone="trend" />稳健趋势</span>}
-      <small>{raw ? '符号压缩刻度 · 首日基准为0 · 缺失前一日时不计算日增量' : '符号压缩刻度 · 柱为真实值 · 趋势按多数点拟合 · 明显偏移不牵引曲线'}</small>
+      {!raw && <span><i data-tone="trend" />观测趋势</span>}
+      <small>{raw ? '符号压缩刻度 · 首日基准为0 · 缺失前一日时不计算日增量' : '符号压缩刻度 · 柱为真实值 · 疑似离群处曲线断开，不插值'}</small>
     </div>
     <svg viewBox={`0 0 ${width} ${height}`} className={styles.chart} role="img" aria-label="每日价敏用户净增柱状图">
       {yTicks.map((tick, index) => {
