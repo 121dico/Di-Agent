@@ -24,13 +24,13 @@ export function detectReportOutliers(values: number[], labels: string[]): number
 
 // 增量展示还需识别区间内极少量的超大幅度（包括末日），无需等下一天回落。
 // 这是正常趋势的展示分层，不判断源数据错误；多数数据或持续新水平不能被整批排除。
-export function detectIncrementOutliers(values: number[], labels: string[]): number[] {
+export function detectIncrementOutliers(values: number[], labels: string[], minimumMagnitude = 1): number[] {
   const isolated = detectReportOutliers(values, labels);
   const magnitudes = values.filter(Number.isFinite).map(Math.abs);
   if (magnitudes.length < 7) return isolated;
   const center = median(magnitudes);
   const mad = median(magnitudes.map((value) => Math.abs(value - center)));
-  const upper = Math.max(center * 6, center + mad * 1.4826 * 8, 1);
+  const upper = Math.max(center * 6, center + mad * 1.4826 * 8, minimumMagnitude);
   const extreme = values.flatMap((value, index) => Number.isFinite(value) && Math.abs(value) > upper ? [index] : []);
   return [...new Set([...isolated, ...(extreme.length <= Math.floor(magnitudes.length * 0.2) ? extreme : [])])].sort((a, b) => a - b);
 }

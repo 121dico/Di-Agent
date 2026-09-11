@@ -10,7 +10,6 @@ function snapshotGrowth(analytics: ReportAnalyticsResult) {
   const dates = [...points.keys()].sort();
   const first = dates[0];
   const last = dates[dates.length - 1];
-  const baseline = first ? points.get(first)?.calculated_user_count : undefined;
   const labels: string[] = [];
   for (let time = Date.parse(analytics.start_date); time <= Date.parse(analytics.end_date); time += day) labels.push(new Date(time).toISOString().slice(0, 10));
   // 缓存每个单日的增量均为零，必须从组装后的快照人数重算。
@@ -22,7 +21,6 @@ function snapshotGrowth(analytics: ReportAnalyticsResult) {
     const previous = points.get(new Date(Date.parse(date) - day).toISOString().slice(0, 10));
     return previous ? current.calculated_user_count - previous.calculated_user_count : NaN;
   });
-  const cumulative = labels.map((date) => points.has(date) && baseline !== undefined ? points.get(date)!.calculated_user_count - baseline : NaN);
   const rates = labels.map((date, i) => {
     if (date === first) return NaN;
     const previous = points.get(new Date(Date.parse(date) - day).toISOString().slice(0, 10));
@@ -32,8 +30,7 @@ function snapshotGrowth(analytics: ReportAnalyticsResult) {
   const changes = daily.filter((value, i) => labels[i] !== first && Number.isFinite(value));
   const latest = last ? points.get(last) : undefined;
   const total = latest?.total_user_count;
-  return { labels, daily, cumulative, rates, first, last, pairCount: changes.length,
-    net: cumulative[latestIndex] ?? NaN,
+  return { labels, daily, rates, first, last, pairCount: changes.length,
     latestNet: dates.length > 1 ? daily[latestIndex] ?? NaN : NaN,
     latestRate: dates.length > 1 ? rates[latestIndex] ?? NaN : NaN,
     average: changes.length ? changes.reduce((sum, value) => sum + value, 0) / changes.length : NaN,
@@ -45,7 +42,6 @@ export function SnapshotGrowthMetrics({ analytics }: { analytics: ReportAnalytic
   const growth = snapshotGrowth(analytics);
   const format = (value: number, percent = false) => Number.isFinite(value) ? `${!percent && value > 0 ? '+' : ''}${percent ? Number(value.toFixed(2)) : Math.round(value).toLocaleString('zh-CN')}` : '—';
   const metrics = [
-    { label: '本期累计净增', value: growth.net },
     { label: '最近一日净增', value: growth.latestNet },
     { label: '最近一日增长率', value: growth.latestRate, percent: true },
     { label: '日均净增', value: growth.average },
@@ -70,10 +66,10 @@ export function ReportSnapshotGrowth({ analytics, renderChart, renderBar }: {
         {renderBar(growth.labels, growth.daily)}
       </div>
       <div className={`${styles.card} ${styles.incrementAnalysisCard}`}>
-        <div className={styles.cardTitle}><div><i />累计与增长效率</div><small>日期：dt</small></div>
+        <div className={styles.cardTitle}><div><i />每日增长趋势</div><small>当天 − 前一天 · 日期：dt</small></div>
         <div className={styles.volumeTrendGrid}>
-          <section className={styles.volumeTrendPanel}><header><span>累计净增</span><small>较期初 · 人</small></header>
-            {renderChart(growth.labels, [{ key: 'cumulativeNet', label: '累计净增（人）', color: '#15857A', values: growth.cumulative }])}
+          <section className={styles.volumeTrendPanel}><header><span>每日单次净增</span><small>单位：人 · 疑似离群不参与正常趋势</small></header>
+            {renderChart(growth.labels, [{ key: 'dailyNet', label: '每日净增（人）', color: '#15857A', values: growth.daily }])}
           </section>
           <section className={styles.volumeTrendPanel}><header><span>每日增长率</span><small>单位：%</small></header>
             {renderChart(growth.labels, [{ key: 'growthRate', label: '每日增长率（%）', color: '#765BC4', values: growth.rates }])}

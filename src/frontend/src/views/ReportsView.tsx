@@ -140,7 +140,10 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
   const chartHeight = labels.length <= 1 ? Math.min(height, 240) : height;
   const padding = { top: 26, right: 24, bottom: 44, left: 62 };
   const trendModels = useMemo(() => series.map((item) => {
-    const outlierIndexes = detectReportOutliers(item.values, labels);
+    // 日增量的极端单次变化（包括末日）不能撑大正常趋势的刻度。
+    const outlierIndexes = item.key === 'dailyNet' || item.key === 'growthRate'
+      ? detectIncrementOutliers(item.values, labels, item.key === 'growthRate' ? 1e-6 : 1)
+      : detectReportOutliers(item.values, labels);
     const plotValues = scaleMode === 'trend' ? normalizeReportTrend(item.values, outlierIndexes) : item.values.map(Math.abs);
     const outliers = new Set(outlierIndexes);
     return { ...item, plotValues, trend: { fittedValues: plotValues.map((value, index) => outliers.has(index) ? NaN : value), outlierIndexes } };

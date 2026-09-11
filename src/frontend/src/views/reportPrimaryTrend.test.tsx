@@ -2,7 +2,26 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
-import { IncrementBarChart } from './ReportsView';
+import { IncrementBarChart, SmoothChart } from './ReportsView';
+
+it('keeps daily growth curves readable with an extreme final daily change', () => {
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  const values = [NaN, 100, 110, 120, 130, 140, 150, 160, 11000000];
+  const labels = values.map((_, i) => `2026-09-${String(i + 1).padStart(2, '0')}`);
+  try {
+    for (const series of [
+      { key: 'dailyNet', label: '每日净增', values },
+      { key: 'growthRate', label: '每日增长率', values: [NaN, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.9] },
+    ]) {
+      act(() => root.render(<SmoothChart labels={labels} series={[series]} />));
+      expect(container.querySelectorAll('g[data-outlier]')).toHaveLength(1);
+      expect(container.querySelector('g[data-outlier] title')?.textContent).toContain(String(series.values[8]));
+      const ticks = Array.from(container.querySelectorAll('text')).map(node => node.textContent);
+      expect(ticks).not.toContain('1500万');
+    }
+  } finally { act(() => root.unmount()); }
+});
 
 it('keeps ordinary movement readable when both an interior spike and the latest day are extreme', () => {
   const container = document.createElement('div');

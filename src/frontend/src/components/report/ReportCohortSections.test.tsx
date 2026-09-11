@@ -47,9 +47,9 @@ it('wires filtered snapshot increments into the overview and keeps report sectio
     renderGrowthChart={(_labels, series) => { growthCharts.push(series[0]!.values); return null; }}
     renderBar={(labels, values) => { bars.push({ labels, values }); return null; }} />);
   expect(bars).toEqual([{ labels: ['2026-09-09', '2026-09-10'], values: [NaN, -5] }]);
-  expect(growthCharts[0]).toEqual([0, -5]);
+  expect(growthCharts[0]).toEqual([NaN, -5]);
   expect(growthCharts[1]?.[1]).toBeCloseTo(-4.54545);
-  expect(html).toContain('本期累计净增');
+  expect(html).not.toContain('累计净增');
   expect(html).not.toContain('个连续日对');
   expect(html).not.toContain('+5');
   const sections = ['report-overview', 'report-order-cohort', 'report-increments', 'report-trend'];
