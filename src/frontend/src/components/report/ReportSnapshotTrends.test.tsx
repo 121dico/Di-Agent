@@ -19,50 +19,49 @@ const analytics = {
 
 it('switches only the chosen chart without losing hidden legends', () => {
   act(() => root.render(<ReportSnapshotTrends analytics={analytics} renderChart={(_labels, series, mode) => <output data-mode={mode}>{series.map((item) => item.key).join(',')}</output>} />));
-  expect([...container.querySelectorAll('output')].map((item) => item.dataset.mode)).toEqual(['trend', 'trend', 'trend']);
+  expect([...container.querySelectorAll('output')].map((item) => item.dataset.mode)).toEqual(['trend', 'trend']);
   const click = (text: string) => act(() => [...container.querySelectorAll('button')].find((button) => button.textContent === text)?.click());
-  click('全量用户');
+  click('高价敏');
   click('真实数值');
-  expect([...container.querySelectorAll('output')].map((item) => item.dataset.mode)).toEqual(['actual', 'trend', 'trend']);
-  expect(container.querySelectorAll('[role="group"]')).toHaveLength(3);
-  act(() => container.querySelectorAll<HTMLButtonElement>('[role="group"]')[2]?.querySelectorAll('button')[1]?.click());
-  expect([...container.querySelectorAll('output')].map((item) => item.dataset.mode)).toEqual(['actual', 'trend', 'actual']);
-  expect(container.querySelector('output')?.textContent).toBe('orders');
+  expect([...container.querySelectorAll('output')].map((item) => item.dataset.mode)).toEqual(['actual', 'trend']);
+  expect(container.querySelectorAll('[role="group"]')).toHaveLength(2);
+  act(() => container.querySelectorAll<HTMLButtonElement>('[role="group"]')[1]?.querySelectorAll('button')[1]?.click());
+  expect([...container.querySelectorAll('output')].map((item) => item.dataset.mode)).toEqual(['actual', 'actual']);
+  expect(container.querySelector('output')?.textContent).toBe('');
   click('趋势对比');
   expect(container.querySelector('output')?.dataset.mode).toBe('trend');
-  expect(container.querySelector('output')?.textContent).toBe('orders');
+  expect(container.querySelector('output')?.textContent).toBe('');
 });
 
-it('keeps the second chart mode through empty-to-loaded data and preserves its hidden legend', () => {
+it('keeps the first chart mode through empty-to-loaded data and preserves its hidden legend', () => {
   const renderChart = (_labels: string[], series: SnapshotSeries[], mode?: string) => <output data-mode={mode}>{series.map((item) => item.key).join(',')}</output>;
   act(() => root.render(<ReportSnapshotTrends analytics={null} renderChart={renderChart} />));
   expect(container.querySelectorAll('output')).toHaveLength(0);
-  expect(container.textContent?.match(/正在读取每日 dt 快照统计/g)).toHaveLength(3);
+  expect(container.textContent?.match(/正在读取每日 dt 快照统计/g)).toHaveLength(2);
   const group = container.querySelector('[role="group"][aria-label="全量人群 · 每日价敏分布展示模式"]')!;
   const actual = group.querySelectorAll('button')[1]!;
   act(() => actual.click());
   expect(actual.getAttribute('aria-pressed')).toBe('true');
   expect(container.querySelectorAll('output')).toHaveLength(0);
   act(() => root.render(<ReportSnapshotTrends analytics={analytics} renderChart={renderChart} />));
-  expect([...container.querySelectorAll('output')].map((item) => item.dataset.mode)).toEqual(['trend', 'actual', 'trend']);
+  expect([...container.querySelectorAll('output')].map((item) => item.dataset.mode)).toEqual(['actual', 'trend']);
   const legend = [...container.querySelectorAll('button')].filter((button) => button.textContent === '高价敏')[0]!;
   act(() => legend.click());
   act(() => group.querySelectorAll('button')[0]!.click());
-  expect([...container.querySelectorAll('output')].map((item) => item.dataset.mode)).toEqual(['trend', 'trend', 'trend']);
-  expect(container.querySelectorAll('output')[1]?.textContent).toBe('');
-  expect(container.querySelectorAll('output')[2]?.textContent).not.toBe('');
+  expect([...container.querySelectorAll('output')].map((item) => item.dataset.mode)).toEqual(['trend', 'trend']);
+  expect(container.querySelectorAll('output')[0]?.textContent).toBe('');
+  expect(container.querySelectorAll('output')[1]?.textContent).not.toBe('');
   expect(legend.getAttribute('aria-pressed')).toBe('false');
 });
 
-it('renders three charts with calendar dt axes and preserves missing-day gaps apart from genuine zero', () => {
+it('renders two distribution charts with calendar dt axes and preserves missing-day gaps apart from genuine zero', () => {
   const charts: { labels: string[]; series: SnapshotSeries[] }[] = [];
   act(() => root.render(<ReportSnapshotTrends analytics={analytics} renderChart={(labels, series) => { charts.push({ labels, series }); return <div data-chart />; }} />));
-  expect(container.querySelectorAll('[data-chart]')).toHaveLength(3);
+  expect(container.querySelectorAll('[data-chart]')).toHaveLength(2);
   for (const chart of charts) expect(chart.labels).toEqual(['2026-09-07', '2026-09-08', '2026-09-09']);
-  expect(charts[0]?.series[0]?.values).toEqual([100, NaN, 110]);
-  expect(charts[0]?.series[1]?.values).toEqual([20, NaN, 0]);
-  expect(charts[1]?.series[0]?.values).toEqual([30, NaN, 40]);
-  expect(charts[2]?.series[0]?.values).toEqual([4, NaN, 0]);
+  expect(container.textContent).not.toContain('每日人群规模');
+  expect(charts[0]?.series[0]?.values).toEqual([30, NaN, 40]);
+  expect(charts[1]?.series[0]?.values).toEqual([4, NaN, 0]);
 });
 
 it('lets each chart legend hide and restore its own series without hiding the other cohort', () => {
@@ -75,8 +74,8 @@ it('lets each chart legend hide and restore its own series without hiding the ot
   if (!button) throw new Error('missing high sensitivity legend');
   act(() => button.dispatchEvent(new MouseEvent('click', { bubbles: true })));
   expect(button.getAttribute('aria-pressed')).toBe('false');
-  expect(container.querySelectorAll('output')[1]?.textContent).toBe('');
-  expect(container.querySelectorAll('output')[2]?.textContent).not.toBe('');
+  expect(container.querySelectorAll('output')[0]?.textContent).toBe('');
+  expect(container.querySelectorAll('output')[1]?.textContent).not.toBe('');
   act(() => button.dispatchEvent(new MouseEvent('click', { bubbles: true })));
   expect(button.getAttribute('aria-pressed')).toBe('true');
   expect(container.querySelectorAll('output')[1]?.textContent).not.toBe('');

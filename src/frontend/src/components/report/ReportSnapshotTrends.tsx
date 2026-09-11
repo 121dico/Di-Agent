@@ -18,10 +18,6 @@ export function ReportSnapshotTrends({ analytics, renderChart }: { analytics: Re
     for (let time = Date.parse(`${analytics.start_date}T00:00:00Z`); time <= Date.parse(`${analytics.end_date}T00:00:00Z`); time += 86400000) labels.push(new Date(time).toISOString().slice(0, 10));
   }
   const points = new Map(analytics?.trend.map((point) => [point.dt, point]));
-  const people: SnapshotSeries[] = [
-    { key: 'all', label: '全量用户', color: '#2F6FDB', values: labels.map((date) => points.get(date)?.total_user_count ?? NaN) },
-    { key: 'orders', label: '有订单用户（ps_conf > 0）', color: '#15857A', values: labels.map((date) => points.get(date)?.order_user_count ?? NaN) },
-  ];
   const distribution = (order: boolean): SnapshotSeries[] => {
     const field = order ? 'order_distribution' : 'distribution';
     const levels = presentSensitivityDistribution([...new Set(analytics?.trend.flatMap((point) => point[field]?.map((item) => item.level) ?? []))].map((level) => ({ level, user_count: 0 })));
@@ -50,7 +46,6 @@ export function ReportSnapshotTrends({ analytics, renderChart }: { analytics: Re
   return <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-trend">
     <div className={styles.blockHead}><div><span>04</span><strong>每日标签快照趋势</strong></div><small>{analytics?.start_date} → {analytics?.end_date}</small></div>
     <div className={local.snapshotGrid}>
-      {chart('每日人群规模', people)}
       {chart('全量人群 · 每日价敏分布', distribution(false))}
       {chart('有订单人群 · 每日价敏分布', distribution(true))}
     </div>
