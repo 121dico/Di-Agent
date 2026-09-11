@@ -19,7 +19,7 @@ type reportProvenanceStore interface {
 	GetReportQueryExecution(context.Context, string, string) (*model.ReportQueryExecution, error)
 }
 
-const reportBindingVersion = "price_sensitive_v1_2:2026-09-11.1"
+const reportBindingVersion = "price_sensitive_v1_2:2026-09-11.2"
 
 func v12ChartBindings() []model.ReportChartBinding {
 	return []model.ReportChartBinding{
@@ -29,7 +29,7 @@ func v12ChartBindings() []model.ReportChartBinding {
 		{ChartKey: "daily_net", Title: "每日价敏用户净增", QueryKeys: []string{"assigned_distribution"}, Formula: "每天 C=SUM(user_count)；日净增=C(dt)-C(dt-1)。首日和缺少前一日时留空；真实负值保留。", FieldMapping: map[string]string{"date": "dt", "count": "user_count"}},
 		{ChartKey: "daily_net_line", Title: "每日单次净增", QueryKeys: []string{"assigned_distribution"}, Formula: "C(dt)-C(dt-1)；首日或缺前日留空；展示仅保留2026-07-29起快照。疑似离群不参与正常趋势，提示仍为真实值。", FieldMapping: map[string]string{"date": "dt", "count": "user_count"}},
 		{ChartKey: "daily_rate", Title: "每日增长率", QueryKeys: []string{"assigned_distribution"}, Formula: "(C(dt)-C(dt-1))/C(dt-1)×100；缺失前日或前日人数为0则不可计算。", FieldMapping: map[string]string{"date": "dt", "count": "user_count"}},
-		{ChartKey: "all_trend", Title: "全量人群每日价敏分布", QueryKeys: []string{"assigned_distribution"}, Formula: "按 dt、level 汇总 user_count。趋势对比按最近有效人数降序、每条自身min/max映射等高区间；真实数值共轴。缺失dt不补零。", FieldMapping: map[string]string{"date": "dt", "series": "level", "count": "user_count"}},
+		{ChartKey: "all_trend", Title: "全量人群每日价敏分布", QueryKeys: []string{"totals", "assigned_distribution"}, Formula: "按 dt、level 汇总 user_count；每个 dt 的 UNASSIGNED=totals.total_user_count-SUM(assigned_distribution.user_count)，仅正差值展示为未赋分。趋势对比按最近有效人数降序、每条自身min/max映射等高区间；真实数值共轴。缺失dt不补零。", FieldMapping: map[string]string{"date": "dt", "series": "assigned_distribution.level", "count": "assigned_distribution.user_count", "total": "totals.total_user_count", "UNASSIGNED": "同 dt 的 total-SUM(count)，仅展示正差值"}},
 		{ChartKey: "order_trend", Title: "有订单人群每日价敏分布", QueryKeys: []string{"order_distribution"}, Formula: "ps_conf>0；按 dt、level 汇总 user_count。趋势对比按最近有效人数降序、每条自身min/max映射等高区间；真实数值共轴。缺失dt不补零。", FieldMapping: map[string]string{"date": "dt", "series": "level", "count": "user_count"}},
 	}
 }

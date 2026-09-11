@@ -169,6 +169,26 @@ func TestProvenanceRejectsUntrustedReplayAndChangedContract(t *testing.T) {
 	}
 }
 
+func TestProvenanceAllTrendIncludesUnassignedDependencies(t *testing.T) {
+	catalog := &provenanceCatalogFake{v12CatalogFake: boundaryV12Catalog()}
+	runner := NewReportRunner(catalog, &reportRunnerStoreFake{}, &reportConnectorFake{})
+	svc := NewReportService(&provenanceServiceStoreFake{catalog: catalog}, &reportServiceUserStoreFake{admin: true}, runner)
+	result, err := svc.GetProvenance(context.Background(), "report-1", "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, binding := range result.Bindings {
+		if binding.ChartKey != "all_trend" {
+			continue
+		}
+		if strings.Join(binding.QueryKeys, ",") != "totals,assigned_distribution" || !strings.Contains(binding.Formula, "UNASSIGNED=totals.total_user_count-SUM(assigned_distribution.user_count)") || binding.FieldMapping["total"] != "totals.total_user_count" || binding.FieldMapping["UNASSIGNED"] == "" {
+			t.Fatalf("incomplete unassigned provenance: %+v", binding)
+		}
+		return
+	}
+	t.Fatal("missing all_trend binding")
+}
+
 func TestProvenanceFailedAndTruncatedQueriesAreSavedWithoutUsableRows(t *testing.T) {
 	for _, test := range []struct {
 		name   string
