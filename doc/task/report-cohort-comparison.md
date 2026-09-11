@@ -7,3 +7,5 @@ UI brief（myuiskill 默认模式）：沿用现有浅色表面、等级语义�
 Gate 0–7 auto-approved：沿用现有环图视觉参考；实现局限在 ReportCohortSections 与新独立对照组件/CSS，不改其他并行中的图表文件。Gate 8–9 待生产渲染检查。
 
 验证：组件公共渲染接口测试，覆盖共享单份等级、20%/50%独立分母、显隐互不影响和恢复。发布使用从 HEAD 构建的隔离目录叠加本次文件，避免发布工作区其他未提交改动。
+
+结果：前端完整306项测试通过，之后补充未加载/零/空分布与SVG键盘测试，比较组件4项通过。隔离TypeScript/Vite构建通过。三路审查无actionable问题。已部署前端，HTTP200；旧版保留在服务器 `/root/deploy-backups/report-cohort-FqqzRq/previous`，没有重启后端。浏览器被并行切换到数据调度平台，未完成真实报表的双图实机交互与多尺寸截图验收；Gate8–9仍为部分通过，不以单元测试替代。
