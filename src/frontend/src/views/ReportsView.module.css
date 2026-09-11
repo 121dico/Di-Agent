@@ -212,13 +212,13 @@
 .chartHitArea:focus { fill: rgba(47, 111, 219, .025); }
 .singlePointValue { font-family: var(--pr-number-font); font-size: 13px; font-weight: 700; }
 .singleDayHint { width: fit-content; max-width: 100%; padding: 5px 8px; margin: 4px auto 0; border: 1px solid var(--wb-border-subtle); border-radius: var(--radius-3); color: var(--text-2); background: var(--wb-surface-subtle); font-size: 9px; text-align: center; }
-.incrementMeta { min-height: 34px; display: flex; align-items: center; gap: 16px; padding: 8px 0; border-top: 1px solid var(--wb-border-subtle); color: var(--text-2); font-size: 9px; }
-.incrementMeta span { display: inline-flex; align-items: center; gap: 6px; }
+.incrementMeta { min-height: 34px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 8px 0; border-top: 1px solid var(--wb-border-subtle); color: var(--text-2); font-size: 9px; }
+.incrementMeta span { display: inline-flex; flex: 0 0 auto; white-space: nowrap; align-items: center; gap: 6px; }
 .incrementMeta i { width: 7px; height: 7px; border-radius: 2px; }
 .incrementMeta i[data-tone='positive'] { background: var(--report-blue); }
 .incrementMeta i[data-tone='negative'] { background: var(--wb-error); }
 .incrementMeta i[data-tone='trend'] { width: 16px; height: 0; border-top: 2px dashed var(--report-teal); border-radius: 0; background: transparent; }
-.incrementMeta small { margin-left: auto; color: var(--text-3); font-size: 8px; }
+.incrementMeta small { flex-basis: 100%; color: var(--text-3); font-size: 8px; line-height: 1.5; }
 .zeroLine { stroke: rgba(29, 29, 31, .5); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
 .incrementBar { fill: var(--report-blue); opacity: .82; outline: none; transform-box: fill-box; transform-origin: center bottom; transition: opacity var(--motion-fast) var(--ease-standard), transform var(--motion-fast) var(--ease-standard); animation: barIn 480ms var(--ease-out) both; }
 .incrementBar[data-direction='negative'] { fill: var(--wb-error); transform-origin: center top; }

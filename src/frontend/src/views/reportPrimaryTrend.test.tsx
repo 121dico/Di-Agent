@@ -27,3 +27,50 @@ it('keeps ordinary movement readable when both an interior spike and the latest 
     container.remove();
   }
 });
+
+it('does not hide a short sample endpoint or a sustained majority high level', () => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    [[40, 41, 1000000], [40, 41, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000]].forEach(values => {
+      const labels = values.map((_, i) => `2026-09-${String(i + 1).padStart(2, '0')}`);
+      act(() => root.render(<IncrementBarChart labels={labels} values={values} raw />));
+      expect(container.querySelectorAll('circle[data-outlier]')).toHaveLength(0);
+      expect(container.querySelectorAll('rect[data-direction]')).toHaveLength(values.length);
+    });
+  } finally { act(() => root.unmount()); container.remove(); }
+});
+
+it('does not remove an entire high block exceeding the rare-extreme allowance', () => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const values = [40, 40, 40, 40, 40, 40, 40, 1000000, 1000000, 1000000];
+  const labels = values.map((_, i) => `2026-09-${String(i + 1).padStart(2, '0')}`);
+  try {
+    act(() => root.render(<IncrementBarChart labels={labels} values={values} raw />));
+    expect(container.querySelectorAll('circle[data-outlier]')).toHaveLength(0);
+    expect(container.querySelectorAll('rect[data-direction]')).toHaveLength(10);
+  } finally { act(() => root.unmount()); container.remove(); }
+});
+
+it('opens a negative endpoint extreme from click, Enter and Space with its unmodified signed value', () => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const values = [40000, 41000, 42000, 43000, 44000, 45000, 46000, 47000, -11000000];
+  const labels = values.map((_, i) => `2026-09-${String(i + 1).padStart(2, '0')}`);
+  try {
+    act(() => root.render(<IncrementBarChart labels={labels} values={values} raw />));
+    const marker = container.querySelector('[aria-label="2026-09-09，价敏用户净增 -11000000"]')!;
+    expect(marker.tagName.toLowerCase()).toBe('circle');
+    expect(marker.getAttribute('tabindex')).toBe('0');
+    for (const event of [new MouseEvent('click', { bubbles: true }), new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }), new KeyboardEvent('keydown', { key: ' ', bubbles: true })]) {
+      act(() => marker.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+      expect(container.querySelector('[role="status"]')).toBeNull();
+      act(() => marker.dispatchEvent(event));
+      expect(container.querySelector('[role="status"]')?.textContent).toContain('-11,000,000');
+    }
+  } finally { act(() => root.unmount()); container.remove(); }
+});

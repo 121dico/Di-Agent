@@ -285,7 +285,7 @@ export function IncrementBarChart({ labels, values, height = 330, raw = false }:
       <small>主图只展示正常幅度 · {outliers.size} 个疑似离群 / 区间极端值不参与刻度与拟合，在上方以小圆点标记 · 点击查看原值{raw && ' · 首日基准为0'}</small>
       <small>线性幅度 · 柱高为绝对值，红色 ↓ 表示减少 · 虚线为跨离群日估计；末尾异常不外推</small>
     </div>
-    <svg viewBox={`0 0 ${width} ${height}`} className={styles.chart} role="img" aria-label="每日价敏用户净增柱状图">
+    <svg viewBox={`0 0 ${width} ${height}`} className={styles.chart} role="group" aria-label="每日价敏用户净增柱状图">
       {yTicks.map((tick, index) => {
         const y = padding.top + index * (plotHeight / 4);
         return <g key={`${tick}-${index}`}><line x1={padding.left} x2={width - padding.right} y1={y} y2={y} className={styles.gridLine} /><text x={padding.left - 12} y={y + 4} textAnchor="end" className={styles.axisLabel}>{formatChartValue(tick)}</text></g>;
@@ -297,7 +297,7 @@ export function IncrementBarChart({ labels, values, height = 330, raw = false }:
         const rawValueY = yFor(value);
         const isOutlier = outliers.has(index);
         if (isOutlier) return <circle key={`${labels[index]}-${index}`} cx={xFor(index)} cy={14} r={5} fill="none" stroke="var(--text-3)" strokeWidth="1.5" data-outlier="true" tabIndex={0} role="button" aria-label={`${labels[index]}，价敏用户净增 ${Math.round(value)}`} onMouseEnter={() => setActiveIndex(index)} onFocus={() => setActiveIndex(index)} onBlur={() => setActiveIndex(null)} onClick={() => setActiveIndex(index)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setActiveIndex(index); } }}><title>{`${labels[index]} · 区间极端值 ${value.toLocaleString('zh-CN')} · 不参与主图刻度与拟合`}</title></circle>;
-        const valueY = isOutlier ? Math.max(padding.top, Math.min(height - padding.bottom, rawValueY)) : rawValueY;
+        const valueY = rawValueY;
         const direction = value > 0 ? 'positive' : value < 0 ? 'negative' : 'flat';
         return <g key={`${labels[index]}-${index}`}><rect
           key={`${labels[index]}-${index}`}
@@ -306,9 +306,8 @@ export function IncrementBarChart({ labels, values, height = 330, raw = false }:
           width={barWidth}
           height={value === 0 ? 2 : Math.max(2, Math.abs(zeroY - valueY))}
           rx={Math.min(4, barWidth / 3)}
-          className={`${styles.incrementBar} ${isOutlier ? styles.incrementBarOutlier : ''} ${activeIndex === index ? styles.incrementBarActive : ''}`}
+          className={`${styles.incrementBar} ${activeIndex === index ? styles.incrementBarActive : ''}`}
           data-direction={direction}
-          data-outlier={isOutlier || undefined}
           style={{ animationDelay: `${Math.min(index * 18, 420)}ms` }}
           tabIndex={0}
           aria-label={`${labels[index]}，价敏用户净增 ${Math.round(value)}`}
