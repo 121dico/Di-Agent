@@ -46,6 +46,7 @@ import { formatReportAxisTick } from './reportAxisTick';
 import { normalizeReportTrend, reportDailyRate, type ReportScaleMode } from './reportTrendScale';
 import { detectIncrementOutliers, detectReportOutliers } from './reportOutliers';
 import { buildEstimatedCurvePath, buildObservedCurvePath } from './reportCurvePath';
+import { fitReportLocalTrend } from './reportLocalFit';
 import { ChinaRegionPicker, expandChinaRegionSelection, summarizeChinaRegionSelection } from '@/components/report/ChinaRegionPicker';
 import styles from './ReportsView.module.css';
 
@@ -146,7 +147,9 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
       : detectReportOutliers(item.values, labels);
     const plotValues = scaleMode === 'trend' ? normalizeReportTrend(item.values, outlierIndexes) : item.values.map(Math.abs);
     const outliers = new Set(outlierIndexes);
-    return { ...item, plotValues, trend: { fittedValues: plotValues.map((value, index) => outliers.has(index) ? NaN : value), outlierIndexes } };
+    const locallyFitted = item.key === 'dailyNet' || item.key === 'growthRate';
+    const fittedValues = locallyFitted ? fitReportLocalTrend(plotValues, labels, outlierIndexes) : plotValues.map((value, index) => outliers.has(index) ? NaN : value);
+    return { ...item, plotValues, locallyFitted, trend: { fittedValues, outlierIndexes } };
   }), [series, labels, scaleMode]);
   const values = series.flatMap((item) => item.values).filter(Number.isFinite);
   const domainValues = trendModels.flatMap((item) => {
@@ -206,6 +209,7 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
           <em data-direction={item.delta > 0 ? 'up' : item.delta < 0 ? 'down' : 'flat'}>{item.count < 2 ? '单日基准' : `${item.delta > 0 ? '+' : ''}${formatChartValue(item.delta)} · 波动 ${formatChartValue(item.spread)}${item.outlierCount ? ` · ${item.outlierCount} 个疑似离群点` : ''}`}</em>
         </div>)}</div>
       </div>}
+      {trendModels.some((item) => item.locallyFitted) && <div className={styles.singleDayHint}>曲线：7日局部平滑拟合 · 散点/悬停：真实值</div>}
       {trendModels.some((item) => item.trend.outlierIndexes.length > 0) && <div className={styles.singleDayHint}>○ 疑似离群 · 虚线：估计值</div>}
       <svg viewBox={`0 0 ${width} ${chartHeight}`} className={styles.chart} role="img" aria-label="报表趋势图">
         {yTicks.map((tick, index) => {
@@ -216,7 +220,8 @@ export function SmoothChart({ labels, series, pendingText, bounds, height = 360,
         {hasValues && trendModels.map((item, index) => {
           const color = item.color ?? chartColors[index % chartColors.length];
           const path = buildObservedCurvePath(labels, item.trend.fittedValues, (value, index) => point(value, index, labels.length));
-          const estimatedPath = buildEstimatedCurvePath(labels, item.plotValues, item.trend.outlierIndexes, (value, index) => point(value, index, labels.length));
+          const bridgeValues = item.locallyFitted ? item.trend.fittedValues.map((value, i) => item.trend.outlierIndexes.includes(i) ? item.plotValues[i]! : value) : item.plotValues;
+          const estimatedPath = buildEstimatedCurvePath(labels, bridgeValues, item.trend.outlierIndexes, (value, index) => point(value, index, labels.length));
           const outliers = new Set(item.trend.outlierIndexes);
           return (
             <g key={item.label}>
