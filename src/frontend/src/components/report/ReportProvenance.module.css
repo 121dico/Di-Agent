@@ -2,6 +2,9 @@
 .body > * { min-width: 0; }
 .field { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .field > span { font-weight: 600; }
+.field select { width: 100%; min-width: 0; min-height: 36px; padding: 7px 10px; border: 1px solid var(--border-color, #e5e7eb); border-radius: 8px; background: var(--wb-surface, #fff); color: inherit; font: inherit; text-overflow: ellipsis; }
+.field select:focus-visible { outline: 2px solid var(--primary-color, #2f6fe4); outline-offset: 2px; }
+.field select:disabled { opacity: .6; cursor: not-allowed; }
 .meta { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 10px 16px; margin: 0; }
 .meta dt { color: var(--text-secondary, #626871); }
 .meta dd { margin: 0; overflow-wrap: anywhere; }

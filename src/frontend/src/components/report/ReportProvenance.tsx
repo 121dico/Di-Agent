@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Button, Drawer, Empty, Select, Spin } from 'antd';
+import { Alert, Button, Drawer, Empty, Spin } from 'antd';
 import { currentChartExecutions, executionsForChart, getChartProvenance, replayChartExecution } from '@/api/reportProvenance';
 import type { ChartBinding, ChartExecution, ChartProvenance } from '@/api/reportProvenance';
 import styles from './ReportProvenance.module.css';
@@ -79,11 +79,17 @@ function ProvenanceBody({ reportId, executionIds, startDate, endDate, dataDate }
   return <Spin spinning={loading}><div className={styles.body}>
     {error && <Alert type="error" title={error} action={<Button disabled={running} onClick={() => setReload((value) => value + 1)}>重试</Button>} />}
     {notice && <Alert type="success" title={notice} />}
-    <label className={styles.field}><span>选择图表</span><Select aria-label="选择图表" value={chartKey || undefined} disabled={loading || running}
-      options={(data?.bindings ?? []).map((item) => ({ value: item.chart_key, label: item.title }))} onChange={(key) => { setChartKey(key); setExecutionId(''); setNotice(''); }} /></label>
-    <label className={styles.field}><span>记录范围</span><Select aria-label="记录范围" value={scope} disabled={loading || running} options={[{ value: 'current', label: '当前图表结果对应的执行' }, { value: 'history', label: '全部历史执行（含核验重跑）' }]} onChange={(value) => { setScope(value); setExecutionId(''); }} /></label>
-    {binding && <><p className={styles.hint}>{binding.formula}</p><label className={styles.field}><span>执行记录</span><Select aria-label="执行记录" value={execution?.id} disabled={loading || running}
-      placeholder="暂无对应记录" options={executions.map((item) => ({ value: item.id, label: `${item.created_at} · ${item.query_key} · ${item.status === 'succeeded' ? '成功' : '不可用'}` }))} onChange={setExecutionId} /></label></>}
+    <label className={styles.field}><span>选择图表</span><select aria-label="选择图表" value={chartKey} disabled={loading || running}
+      onChange={(event) => { setChartKey(event.target.value); setExecutionId(''); setNotice(''); }}>
+      {(data?.bindings ?? []).map((item) => <option key={item.chart_key} value={item.chart_key}>{item.title}</option>)}
+    </select></label>
+    <label className={styles.field}><span>记录范围</span><select aria-label="记录范围" value={scope} disabled={loading || running} onChange={(event) => { setScope(event.target.value); setExecutionId(''); }}>
+      <option value="current">当前图表结果对应的执行</option><option value="history">全部历史执行（含核验重跑）</option>
+    </select></label>
+    {binding && <><p className={styles.hint}>{binding.formula}</p><label className={styles.field}><span>执行记录</span><select aria-label="执行记录" value={execution?.id ?? ''} disabled={loading || running || !executions.length} onChange={(event) => setExecutionId(event.target.value)}>
+      {!executions.length && <option value="">暂无对应记录</option>}
+      {executions.map((item) => <option key={item.id} value={item.id}>{`${item.created_at} · ${item.query_key} · ${item.status === 'succeeded' ? '成功' : '不可用'}`}</option>)}
+    </select></label></>}
     {binding && execution ? <><ExecutionDetails binding={binding} execution={execution} /><div className={styles.actions}>
       <Button loading={running} disabled={loading} onClick={() => void replay()}>重跑并保存核验结果</Button><span className={styles.hint}>不会替换公开图表；更新图表请使用“立即生成”。</span>
     </div></> : !loading && <Empty description={scope === 'current' ? '当前缓存尚无可查看的对应执行记录；旧缓存不会补造来源，可查看历史执行或使用“立即生成”更新。' : data?.message || '此图暂未保存查询记录。'} />}
