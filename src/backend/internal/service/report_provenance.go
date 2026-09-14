@@ -86,7 +86,7 @@ func redactReportTrace(text string, source *model.ReportDataSource) string {
 }
 
 func (r *ReportRunner) executeV12Aggregate(ctx context.Context, report *model.ReportDefinition, source *model.ReportDataSource, key string, raw json.RawMessage, start, end string, cities []string, replayOf string) (model.ReportQueryResult, *model.ReportQueryExecution, error) {
-	execution := &model.ReportQueryExecution{ID: uuid.NewString(), ReportID: report.ID, SourceID: source.ID, APIName: source.APIName, SourceName: source.Name, QueryKey: key, CreatedAt: r.now(), StartDate: start, EndDate: end, Cities: append([]string{}, cities...), BindingVersion: reportBindingVersion, Bindings: v12ChartBindings(), Rows: []map[string]any{}, ReplayOf: replayOf, Status: "succeeded"}
+	execution := &model.ReportQueryExecution{ID: uuid.NewString(), ReportID: report.ID, SourceID: source.ID, APIName: source.APIName, SourceName: source.Name, QueryKey: key, CreatedAt: r.now(), StartDate: start, EndDate: end, Cities: append([]string{}, cities...), BindingVersion: reportBindingVersion, Bindings: reportChartBindingsForQuery(key), Rows: []map[string]any{}, ReplayOf: replayOf, Status: "succeeded"}
 	var request map[string]any
 	if err := json.Unmarshal(raw, &request); err != nil {
 		return model.ReportQueryResult{}, nil, err
@@ -265,10 +265,17 @@ func (s *ReportService) ReplayProvenance(ctx context.Context, reportID, userID, 
 			index = i
 		}
 	}
-	if index < 0 {
+	var expected map[string]any
+	if strings.HasPrefix(saved.QueryKey, "order_count_") {
+		expected, err = trustedOrderCountReplay(report, source, saved, decoded)
+		if err != nil {
+			return nil, err
+		}
+	} else if index >= 0 {
+		expected = queries[index]
+	} else {
 		return nil, fmt.Errorf("%w: 禁止重跑非受信聚合查询", ErrReportInvalid)
 	}
-	expected := queries[index]
 	expected["apiName"] = source.APIName
 	canonical, _ := json.Marshal(expected)
 	var trusted map[string]any

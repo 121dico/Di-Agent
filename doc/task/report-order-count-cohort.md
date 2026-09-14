@@ -9,6 +9,7 @@ V1.2 价敏分布对比中保留全量人群，右侧支持全部有订单、精
 `GET /api/reports/:id/order-cohort?date=YYYY-MM-DD&orders=all|1..10|gt10&city=城市`
 
 复用已登录用户的报表查看权限。只返回聚合，凭据和DUID明细不下发。
+查询追踪使用独立的笔数分布绑定；核验重跑只接受根据当前报表契约重建的白名单查询，篡改字段或条件会被拒绝。
 响应沿用 analytics 结构，使用 `data_date`、`fetched_at`、`cached`、`counting_basis`、`order_cohort.user_count/distribution`；不使用其余总览字段。
 
 ## 性能与失败

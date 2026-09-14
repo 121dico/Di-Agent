@@ -21,10 +21,7 @@ func (r *ReportRunner) QueryOrderCohort(ctx context.Context, reportID, date, ord
 	if _, err := time.Parse("2006-01-02", date); err != nil {
 		return nil, fmt.Errorf("%w: 请选择有效快照日期", ErrReportInvalid)
 	}
-	op, value := "EQ", orders
-	if orders == "gt10" {
-		op, value = "GQ", "10"
-	} else if n, err := strconv.Atoi(orders); orders != "all" && (err != nil || n < 1 || n > 10 || strconv.Itoa(n) != orders) {
+	if n, err := strconv.Atoi(orders); orders != "all" && orders != "gt10" && (err != nil || n < 1 || n > 10 || strconv.Itoa(n) != orders) {
 		return nil, fmt.Errorf("%w: 订单笔数必须为1至10、gt10或all", ErrReportInvalid)
 	}
 	report, source, err := r.resolve(ctx, reportID)
@@ -51,20 +48,12 @@ func (r *ReportRunner) QueryOrderCohort(ctx context.Context, reportID, date, ord
 	}
 	sort.Strings(cities)
 	base := &model.ReportAnalyticsResult{Range: "1d", StartDate: date, EndDate: date}
-	queries, _, err := buildV12AggregateQueries(report, base, cities)
+	queries, err := buildOrderCountQueries(report, base, cities, orders)
 	if err != nil {
 		return nil, err
 	}
-	q := queries[2]
-	existence := map[string]any{"fieldList": []map[string]any{analyticsField("dt", "", "")}, "conditionList": queries[0]["conditionList"], "groupList": []string{"dt"}, "orderBy": "dt"}
-	conditions := append(q["conditionList"].([]map[string]any), map[string]any{"name": "duid", "operatorEnum": "GQ", "value": "0"})
-	if orders != "all" {
-		conditions = append(conditions, map[string]any{"name": "order_cnt_180d", "operatorEnum": op, "value": value})
-	}
-	q["conditionList"] = conditions
-	q["fieldList"] = []map[string]any{analyticsField("dt", "", ""), analyticsField("ps_level", "level", ""), analyticsField("duid", "user_count", "COUNT_DISTINCT")}
-	total := map[string]any{"fieldList": []map[string]any{analyticsField("dt", "", ""), analyticsField("duid", "user_count", "COUNT_DISTINCT")}, "conditionList": conditions, "groupList": []string{"dt"}, "orderBy": "dt"}
-	queries = []map[string]any{q, total}
+	existence := queries[2]
+	queries = queries[:2]
 	available := map[string]model.ReportFieldContract{}
 	for _, f := range contract.Fields {
 		available[f.Name] = f
