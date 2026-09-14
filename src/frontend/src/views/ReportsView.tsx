@@ -549,10 +549,11 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
   useEffect(() => {
     const root = pageRef.current;
     if (!root || !selected) return;
-    const ids = ['report-overview', 'report-order-cohort', 'report-increments', 'report-trend', 'report-search'];
+    const ids = ['report-overview', 'report-order-cohort', 'report-increments', 'report-trend'];
+    if (isV12) ids.push('report-station-validation');
+    ids.push('report-search');
     if (access.canBrowseFullDetail) ids.push('report-detail');
     if (access.canViewRunHistory) ids.push('report-history');
-    if (isV12) ids.push('report-station-validation');
     let frame = 0;
     const updateActiveSection = () => {
       cancelAnimationFrame(frame);
@@ -830,10 +831,10 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
               {isV12 && <a className={activeSection === 'report-order-cohort' ? styles.anchorActive : ''} href="#report-order-cohort" onClick={() => setActiveSection('report-order-cohort')}>价敏人群分布</a>}
               {isV12 && <a className={activeSection === 'report-increments' ? styles.anchorActive : ''} href="#report-increments" onClick={() => setActiveSection('report-increments')}>增量分析</a>}
               <a className={activeSection === 'report-trend' ? styles.anchorActive : ''} href="#report-trend" onClick={() => setActiveSection('report-trend')}>{isV12 ? 'dt 历史趋势' : '趋势分析'}</a>
+              {isV12 && <a className={activeSection === 'report-station-validation' ? styles.anchorActive : ''} href="#report-station-validation" onClick={() => setActiveSection('report-station-validation')}>数据验证</a>}
               <a className={activeSection === 'report-search' ? styles.anchorActive : ''} href="#report-search" onClick={() => setActiveSection('report-search')}>用户查询</a>
               {access.canBrowseFullDetail && <a className={activeSection === 'report-detail' ? styles.anchorActive : ''} href="#report-detail" onClick={() => setActiveSection('report-detail')}>数据明细</a>}
               {access.canViewRunHistory && <a className={activeSection === 'report-history' ? styles.anchorActive : ''} href="#report-history" onClick={() => setActiveSection('report-history')}>运行记录</a>}
-              {isV12 && <a className={activeSection === 'report-station-validation' ? styles.anchorActive : ''} href="#report-station-validation" onClick={() => setActiveSection('report-station-validation')}>数据验证</a>}
             </nav>
 
             <section className={styles.filterDock} aria-label="报表全局筛选">
@@ -927,8 +928,9 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
             </section>
 
             </>}
+            {isV12 && <StationValidation key={`validation-${selectedId}`} reportId={selectedId} isAdmin={isAdmin} renderChart={(labels, series) => <SmoothChart labels={labels} series={series} height={270} pendingText="暂无有效数据，或图例已全部关闭" />} />}
             <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-search">
-              <div className={styles.blockHead}><div><span>{isV12 ? '05' : '03'}</span><strong>用户查询</strong></div><small>输入完整 DUID · 仅返回精确匹配结果</small></div>
+              <div className={styles.blockHead}><div><span>{isV12 ? '06' : '03'}</span><strong>用户查询</strong></div><small>输入完整 DUID · 仅返回精确匹配结果</small></div>
               <div className={`${styles.card} ${styles.searchCard}`}>
                 <div className={styles.userSearchBar}>
                   <Input prefix={<SearchOutlined />} value={searchDUID} onChange={(event) => setSearchDUID(event.target.value.replace(/\D/g, ''))} onPressEnter={() => void handleSearch()} placeholder="请输入完整 DUID，例如 17592356441816" />
@@ -942,7 +944,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
             </section>
 
             {access.canBrowseFullDetail && <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-detail">
-              <div className={styles.blockHead}><div><span>{isV12 ? '06' : '04'}</span><strong>数据明细</strong></div><small>全量数据 · 服务端分页 · 共 {totalRows.toLocaleString('zh-CN')} 行</small></div>
+              <div className={styles.blockHead}><div><span>{isV12 ? '07' : '04'}</span><strong>数据明细</strong></div><small>全量数据 · 服务端分页 · 共 {totalRows.toLocaleString('zh-CN')} 行</small></div>
               <div className={`${styles.card} ${styles.tableCard}`}>
                 {orderedDetailColumns.length > 20 && <div className={styles.fieldGroups}>{fieldGroups.map((group) => <button key={group.value} type="button" className={fieldGroup === group.value ? styles.fieldGroupActive : ''} onClick={() => setFieldGroup(group.value)}>{group.label}<span>{reportColumnsForGroup(orderedDetailColumns, group.value).length}</span></button>)}</div>}
                 <div className={styles.tableToolbar}>
@@ -955,12 +957,11 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
             </section>}
 
             {access.canViewRunHistory && <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-history">
-              <div className={styles.blockHead}><div><span>{isV12 ? '07' : '05'}</span><strong>运行记录</strong></div></div>
+              <div className={styles.blockHead}><div><span>{isV12 ? '08' : '05'}</span><strong>运行记录</strong></div></div>
               <div className={styles.card}>
                 <div className={styles.runList}>{runs.map((run) => <div key={run.id} className={styles.runRow}><span className={`${styles.statusDot} ${styles[run.status]}`} /><strong>{statusLabel[run.status]}</strong><span>{run.trigger === 'scheduled' ? '每日 10:00' : '手动生成'}</span><span>{new Date(run.started_at).toLocaleString('zh-CN', { hour12: false })}</span><span>{run.source_partition || run.error_message || '—'}</span></div>)}{runs.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有运行记录" />}</div>
               </div>
             </section>}
-            {isV12 && <StationValidation key={`validation-${selectedId}`} reportId={selectedId} isAdmin={isAdmin} renderChart={(labels, series) => <SmoothChart labels={labels} series={series} height={270} pendingText="暂无有效数据，或图例已全部关闭" />} />}
           </> : <div className={styles.emptyCard}><Empty description="先创建一份报表" /></div>}
         </div>
       </section>
