@@ -881,7 +881,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
               </div>
             </section>
 
-            {isV12 ? <ReportCohortSections key={selectedId} analytics={analytics} loading={analyticsLoading} error={analyticsError}
+            {isV12 ? <ReportCohortSections key={selectedId} reportId={selectedId} cities={expandedAppliedCities} analytics={analytics} loading={analyticsLoading} error={analyticsError}
               renderChart={(labels, series, mode) => mode === 'trend' ? <ReportLaneTrends labels={labels} series={series} /> : <SmoothChart labels={labels} series={series} scaleMode={mode} height={270} trendRule="raw" pendingText="请开启至少一个图例" />}
               renderGrowthChart={(labels, series) => <SmoothChart labels={labels} series={series} height={270} trendRule="raw" pendingText="暂无连续快照可计算增长" />}
               renderBar={(labels, values) => <IncrementBarChart labels={labels} values={values} raw />}

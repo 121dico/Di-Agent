@@ -27,6 +27,12 @@ export const queryReportAnalytics = (id: string, range: ReportAnalyticsRange | '
   return get<ReportAnalyticsResult>(`/api/reports/${id}/analytics?${params.toString()}`);
 };
 
+export const queryReportOrderCohort = (id: string, date: string, orders: string, cities: string[]) => {
+  const params = new URLSearchParams({ date, orders });
+  cities.forEach((city) => params.append('city', city));
+  return get<ReportAnalyticsResult>(`/api/reports/${id}/order-cohort?${params.toString()}`);
+};
+
 export async function downloadReportRun(reportId: string, runId: string): Promise<void> {
   const response = await fetch(`/api/reports/${reportId}/runs/${runId}/download`, { headers: getAuthHeaders() });
   if (!response.ok) throw new Error('下载报表失败');

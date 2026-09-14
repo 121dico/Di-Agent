@@ -132,6 +132,11 @@ func (h *ReportHandler) QueryAnalytics(c *gin.Context) {
 	h.respond(c, result, err)
 }
 
+func (h *ReportHandler) QueryOrderCohort(c *gin.Context) {
+	result, err := h.svc.QueryOrderCohort(c.Request.Context(), c.Param("id"), c.Query("date"), c.DefaultQuery("orders", "all"), c.QueryArray("city"))
+	h.respond(c, result, err)
+}
+
 func (h *ReportHandler) QueryStationValidation(c *gin.Context) {
 	result, err := h.svc.QueryStationValidation(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), c.Query("refresh") == "true")
 	h.respond(c, result, err)

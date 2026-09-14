@@ -7,8 +7,11 @@ import local from './ReportCohortSections.module.css';
 import { ReportSnapshotTrends, type SnapshotChartRenderer } from './ReportSnapshotTrends';
 import { ReportSnapshotGrowth, SnapshotGrowthMetrics } from './ReportSnapshotGrowth';
 import { ReportCohortComparison } from './ReportCohortComparison';
+import { ReportOrderCountDistribution } from './ReportOrderCountDistribution';
 
 interface Props {
+  reportId?: string;
+  cities?: string[];
   analytics: ReportAnalyticsResult | null;
   loading: boolean;
   error: string;
@@ -19,7 +22,7 @@ interface Props {
   renderDistribution: (items: Array<{ label: string; value: number }>, hidden: Set<string>, onToggle: (label: string) => void, label: string) => ReactNode;
 }
 
-export function ReportCohortSections({ analytics, loading, error, renderChart, renderGrowthChart, renderBar }: Props) {
+export function ReportCohortSections({ reportId, cities, analytics, loading, error, renderChart, renderGrowthChart, renderBar }: Props) {
   const available = analytics && analytics.data_date;
   const allDistribution = presentSensitivityDistribution(analytics?.distribution ?? []);
   const unassigned = analytics ? analytics.summary.total_user_count - analytics.summary.calculated_user_count : 0;
@@ -44,7 +47,7 @@ export function ReportCohortSections({ analytics, loading, error, renderChart, r
     <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-order-cohort">
       <div className={styles.blockHead}><div><span>02</span><strong>价敏人群分布对比</strong></div><small>全量人群 / 有订单人群（ps_conf &gt; 0）</small></div>
       <Spin spinning={loading && !available}>
-        {available ? <>
+        {available ? reportId ? <ReportOrderCountDistribution reportId={reportId} date={analytics.data_date!} cities={cities ?? []} all={allDistribution} /> : <>
           {cohort && <div className={styles.metrics}>
             {metric('有订单用户数', cohort.user_count.toLocaleString('zh-CN'), '人')}
             {metric('占全量人群', `${Number(cohort.share.toFixed(2))}%`, '')}
