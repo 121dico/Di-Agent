@@ -132,6 +132,16 @@ func (h *ReportHandler) QueryAnalytics(c *gin.Context) {
 	h.respond(c, result, err)
 }
 
+func (h *ReportHandler) QueryStationValidation(c *gin.Context) {
+	result, err := h.svc.QueryStationValidation(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), c.Query("refresh") == "true")
+	h.respond(c, result, err)
+}
+
+func (h *ReportHandler) QueryStationPeople(c *gin.Context) {
+	result, err := h.svc.QueryStationPeople(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), c.Query("station"), c.Query("start"), c.Query("end"), c.Query("refresh") == "true")
+	h.respond(c, result, err)
+}
+
 func (h *ReportHandler) DownloadCSV(c *gin.Context) {
 	run, err := h.svc.GetRun(c.Request.Context(), c.Param("runId"), middleware.GetUserID(c))
 	if err != nil || run == nil {

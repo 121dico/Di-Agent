@@ -41,6 +41,7 @@ import { PersonalReportsLibrary } from '@/components/personal-report/PersonalRep
 import { ReportTemplateModal } from '@/components/report/ReportTemplateModal';
 import { ReportProvenance } from '@/components/report/ReportProvenance';
 import { ReportCohortSections } from '@/components/report/ReportCohortSections';
+import { StationValidation } from '@/components/report/StationValidation';
 import { ReportLaneTrends } from '@/components/report/ReportLaneTrends';
 import { loadStoredSnapshotHistory } from './reportSnapshotHistory';
 import { formatReportAxisTick } from './reportAxisTick';
@@ -551,6 +552,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
     const ids = ['report-overview', 'report-order-cohort', 'report-increments', 'report-trend', 'report-search'];
     if (access.canBrowseFullDetail) ids.push('report-detail');
     if (access.canViewRunHistory) ids.push('report-history');
+    if (isV12) ids.push('report-station-validation');
     let frame = 0;
     const updateActiveSection = () => {
       cancelAnimationFrame(frame);
@@ -569,7 +571,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
       root.removeEventListener('scroll', updateActiveSection);
       cancelAnimationFrame(frame);
     };
-  }, [selected, access.canBrowseFullDetail, access.canViewRunHistory]);
+  }, [selected, isV12, access.canBrowseFullDetail, access.canViewRunHistory]);
 
   const toggleTableSort = (column: string) => {
     setTableSort((current) => current?.column !== column
@@ -831,6 +833,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
               <a className={activeSection === 'report-search' ? styles.anchorActive : ''} href="#report-search" onClick={() => setActiveSection('report-search')}>用户查询</a>
               {access.canBrowseFullDetail && <a className={activeSection === 'report-detail' ? styles.anchorActive : ''} href="#report-detail" onClick={() => setActiveSection('report-detail')}>数据明细</a>}
               {access.canViewRunHistory && <a className={activeSection === 'report-history' ? styles.anchorActive : ''} href="#report-history" onClick={() => setActiveSection('report-history')}>运行记录</a>}
+              {isV12 && <a className={activeSection === 'report-station-validation' ? styles.anchorActive : ''} href="#report-station-validation" onClick={() => setActiveSection('report-station-validation')}>数据验证</a>}
             </nav>
 
             <section className={styles.filterDock} aria-label="报表全局筛选">
@@ -957,6 +960,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
                 <div className={styles.runList}>{runs.map((run) => <div key={run.id} className={styles.runRow}><span className={`${styles.statusDot} ${styles[run.status]}`} /><strong>{statusLabel[run.status]}</strong><span>{run.trigger === 'scheduled' ? '每日 10:00' : '手动生成'}</span><span>{new Date(run.started_at).toLocaleString('zh-CN', { hour12: false })}</span><span>{run.source_partition || run.error_message || '—'}</span></div>)}{runs.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有运行记录" />}</div>
               </div>
             </section>}
+            {isV12 && <StationValidation key={`validation-${selectedId}`} reportId={selectedId} isAdmin={isAdmin} renderChart={(labels, series) => <SmoothChart labels={labels} series={series} height={270} pendingText="暂无有效数据，或图例已全部关闭" />} />}
           </> : <div className={styles.emptyCard}><Empty description="先创建一份报表" /></div>}
         </div>
       </section>
