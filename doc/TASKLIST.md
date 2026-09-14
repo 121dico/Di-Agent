@@ -501,7 +501,7 @@ M0 → M1 → M2 → M3 ──→ M6(单聊跑通) → M7(群聊跑通) → M8(�
 
 ## 2026-09-14 V1.2 数据验证
 
-- [ ] [计划提价前后固定人群核验](task/station-price-response-verification.md)：真实API分析与辅助板块后置。
+- [x] [计划提价前后固定人群核验](task/station-price-response-verification.md)：真实API描述性分析完成，辅助板块已后置并部署，桌面真实查询验收通过；缺少实付/电量/对照，不能作因果判断。
 
 - [ ] [试点站 API 数据验证区](task/report-station-validation.md)：已部署，待真实页面与视口验收。
 - [ ] [用户复购与人群重合](task/report-station-people.md)：DUID级新老用户/重复下单/跨日跨站/7日同等级重合已部署，新增自动测试通过，产品验收待完成。
