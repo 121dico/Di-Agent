@@ -51,6 +51,13 @@ func (r *ReportRunner) preparedRows(ctx context.Context, report *model.ReportDef
 		if result.Pagination.Total > 100000 {
 			return nil, nil, fmt.Errorf("%w: 聚合组超过100000", ErrReportInvalid)
 		}
+		// 大页必须有可核对的总量；不能把网关静默截断的一页当作完整结果。
+		if len(result.Rows) > 0 && result.Pagination.Total <= 0 {
+			return nil, nil, fmt.Errorf("%w: 非空聚合缺少分页总量", ErrReportInvalid)
+		}
+		if result.Pagination.PageSize > 0 && result.Pagination.PageSize != 10000 {
+			return nil, nil, fmt.Errorf("%w: 上游聚合分页大小与请求不一致", ErrReportInvalid)
+		}
 		if page == 1 {
 			expected = result.Pagination.Total
 		} else if expected != result.Pagination.Total {
