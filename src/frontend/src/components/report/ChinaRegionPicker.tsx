@@ -5,6 +5,7 @@ import { chinaRegions } from './chinaRegionData';
 import styles from './ChinaRegionPicker.module.css';
 
 interface ChinaRegionPickerProps {
+  compact?: boolean;
   value: string[];
   onChange: (cities: string[]) => void;
   provinceCodes?: string[];
@@ -79,7 +80,7 @@ export function expandChinaRegionSelection(values: string[], provinceCodes: stri
   return expanded;
 }
 
-export const ChinaRegionMapPanel: React.FC<ChinaRegionMapPanelProps> = ({ value, onChange, provinceCodes, onProvinceChange, onRequestClose }) => {
+export const ChinaRegionMapPanel: React.FC<ChinaRegionMapPanelProps> = ({ value, onChange, provinceCodes, onProvinceChange, onRequestClose, compact = false }) => {
   const [localProvinceCodes, setLocalProvinceCodes] = useState<string[]>([]);
   const selectedProvinceCodes = provinceCodes ?? localProvinceCodes;
   const updateProvinceCodes = onProvinceChange ?? setLocalProvinceCodes;
@@ -131,16 +132,16 @@ export const ChinaRegionMapPanel: React.FC<ChinaRegionMapPanelProps> = ({ value,
   };
 
   return (
-    <section className={styles.panel} aria-label="中国地图城市选择器">
-      <header className={styles.panelHeader}>
+    <section className={`${styles.panel} ${compact ? styles.compact : ''}`} aria-label="中国地图城市选择器">
+      {!compact && <header className={styles.panelHeader}>
         <div className={styles.panelHeading}>
           <strong>选择区域</strong>
           <span>点击省份多选，再次点击取消</span>
         </div>
         <div className={styles.selectionCount}><span>已选</span><strong>{selectedRegionCount}</strong><span>个区域</span></div>
-      </header>
+      </header>}
 
-      <div className={`${styles.panelBody} ${activeProvince ? styles.panelBodyWithCities : ''}`}>
+      <div className={`${styles.panelBody} ${activeProvince && !compact ? styles.panelBodyWithCities : ''}`}>
         <div className={styles.mapStage}>
           <svg viewBox="60 8 420 320" role="group" aria-label="中国省级行政区域交互地图" preserveAspectRatio="xMidYMid meet">
             {chinaRegions.map((region) => {
@@ -175,7 +176,7 @@ export const ChinaRegionMapPanel: React.FC<ChinaRegionMapPanelProps> = ({ value,
           </svg>
         </div>
 
-        {activeProvince && <aside className={styles.cityPanel} aria-live="polite">
+        {!compact && activeProvince && <aside className={styles.cityPanel} aria-live="polite">
             <div className={styles.cityPanelHead}>
               <div><span>当前区域</span><strong>{activeProvince.name}</strong></div>
               <em>{activeCities.length} 个可选城市</em>
@@ -205,7 +206,7 @@ export const ChinaRegionMapPanel: React.FC<ChinaRegionMapPanelProps> = ({ value,
         </aside>}
       </div>
 
-      {(value.length > 0 || selectedProvinceCodes.length > 0 || onRequestClose) && <footer className={styles.panelFooter}>
+      {!compact && (value.length > 0 || selectedProvinceCodes.length > 0 || onRequestClose) && <footer className={styles.panelFooter}>
         <div className={styles.selectedCities}>
           {value.length === 0 && selectedProvinceCodes.length === 0 ? <span>未选择区域 · 默认查看全部城市</span> : selectionSummaries.map((summary) => <button
             key={summary.key}
@@ -231,6 +232,6 @@ export const ChinaRegionMapPanel: React.FC<ChinaRegionMapPanelProps> = ({ value,
   );
 };
 
-export const ChinaRegionPicker: React.FC<ChinaRegionPickerProps> = ({ value, onChange, provinceCodes, onProvinceChange }) => {
-  return <ChinaRegionMapPanel value={value} onChange={onChange} provinceCodes={provinceCodes} onProvinceChange={onProvinceChange} />;
+export const ChinaRegionPicker: React.FC<ChinaRegionPickerProps> = (props) => {
+  return <ChinaRegionMapPanel {...props} />;
 };

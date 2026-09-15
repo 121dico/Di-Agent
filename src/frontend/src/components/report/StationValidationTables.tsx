@@ -3,8 +3,8 @@ import type { StationValidationResult } from '@/types/stationValidation';
 import { stationLevels, stationSelection, stationLevelCount as count, stationNumber as n, stationPercent as pct, stationRatio as ratio, stationDelta as delta, stationSigned as signed, stationPreviousDate } from './stationValidationModel';
 import styles from './StationValidation.module.css';
 
-export function StationDataTable({ title, note, headers, rows }: { title: string; note: string; headers: string[]; rows: ReactNode[][] }) {
-  return <section className={styles.card}><h3>{title}</h3><p className={styles.note}>{note}</p><div className={styles.tableScroll} tabIndex={0} role="region" aria-label={title}><table><thead><tr>{headers.map((h) => <th key={h} scope="col">{h}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={index}>{row.map((cell, i) => <td key={i}>{cell}</td>)}</tr>)}</tbody></table></div></section>;
+export function StationDataTable({ title, headers, rows }: { title: string; note: string; headers: string[]; rows: ReactNode[][] }) {
+  return <section className={styles.card}><h3>{title}</h3><div className={styles.tableScroll} tabIndex={0} role="region" aria-label={title}><table><thead><tr>{headers.map((h) => <th key={h} scope="col">{h}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={index}>{row.map((cell, i) => <td key={i}>{cell}</td>)}</tr>)}</tbody></table></div></section>;
 }
 
 const DataTable = StationDataTable;

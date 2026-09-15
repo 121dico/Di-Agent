@@ -87,3 +87,6 @@
 @media (prefers-reduced-motion: reduce) {
   .province, .cityGrid button { transition: none; }
 }
+.compact { border: 0; background: transparent; }
+.compact .mapStage { height: 220px; padding: 0; background: transparent; }
+.compact .mapStage svg { height: 220px; }

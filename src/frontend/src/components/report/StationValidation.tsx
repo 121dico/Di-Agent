@@ -62,8 +62,6 @@ export function StationValidation({ reportId, isAdmin, renderChart }: { reportId
   const labels = view ? stationCalendar(range ? from : first, to) : [];
   return <section className={`${shared.summaryBlock} ${shared.fullWidthBlock} ${styles.root}`} id="report-station-validation" aria-label="数据验证">
     <div className={shared.blockHead}><div><span>验证</span><strong>数据验证</strong></div><Button disabled={loading} onClick={() => void load(isAdmin)}>{isAdmin ? '刷新验证数据' : '重新加载'}</Button></div>
-    <p className={styles.note}>试点站消费人群验证 · 按订单日 dt · 本区场站与日期筛选独立于上方标签快照筛选</p>
-    {data && <p className={styles.note}>{first || '—'} — {last || '—'} · {stations.length} 个场站 · {data.available_dates.length} 个数据日 · 更新于 {new Date(data.fetched_at).toLocaleString('zh-CN', { hour12: false })}</p>}
     {error && <Alert type="error" showIcon message={error} description={data ? '刷新未成功，下面仍为上次成功读取的数据。' : '未使用离线样例或模拟数据代替真实查询。'} action={<Button onClick={() => void load(isAdmin)}>重试</Button>} />}
     <Spin spinning={loading} tip="正在读取试点站聚合数据"><div aria-busy={loading}>
       {!data ? <div className={styles.empty}>{loading ? '首次读取后将保存汇总，重新进入无需逐日初始化。' : '暂无验证结果'}</div> : data.available_dates.length === 0 ? <Empty description="接口尚无可查询的订单日期" /> : <>
@@ -76,13 +74,12 @@ export function StationValidation({ reportId, isAdmin, renderChart }: { reportId
         </div>
         {search && <p className={styles.note} role="status">找到 {found.length} 个场站；搜索仅筛选选项，请选择场站查看。</p>}
         {!valid ? <Alert type="warning" message="请选择有数据的有效日期，区间开始不能晚于结束。" /> : view && <>
-          <p className={styles.note} role="status">{station === 'ALL' ? '全部场站（跨站去重）' : stations.find(([id]) => id === station)?.[1]} · {range ? `${from} 至 ${to}` : to} · 基准日 {baseline}。比较的是消费人数净变化，不是新增或流失用户。</p>
           {view.missing.length > 0 && <Alert type="warning" message={`有 ${view.missing.length} 天缺失：${view.missing.join('、')}；曲线断开，区间统计仅包含已返回日期。`} />}
           <div className={styles.metrics}>
             <article><span>查看日消费人数</span><strong>{n(view.current?.users)}</strong><small>前一天 {n(view.previous?.users)} 人</small></article>
             <article><span>较前一天变化</span><strong>{signed(delta(view.current?.users, view.previous?.users))}</strong><small>{pct(ratio(delta(view.current?.users, view.previous?.users), view.previous?.users))}</small></article>
             <article><span>较基准日变化</span><strong>{signed(delta(view.current?.users, view.base?.users))}</strong><small>{pct(ratio(delta(view.current?.users, view.base?.users), view.base?.users))} · 基准 {n(view.base?.users)} 人</small></article>
-            <article><span>{range ? '区间日均消费人数' : '当天高＋极高人数'}</span><strong>{range ? n(ratio(view.userDays, view.rows.length), 1) : n(view.current ? (view.current.levels.HIGH ?? 0) + (view.current.levels.VERY_HIGH ?? 0) : undefined)}</strong><small>{range ? `${view.rows.length} 个数据日 · ${n(view.userDays)} 用户日` : '包含会员；非全量订单人群'}</small></article>
+            <article><span>{range ? '区间日均消费人数' : '当天高＋极高人数'}</span><strong>{range ? n(ratio(view.userDays, view.rows.length), 1) : n(view.current ? (view.current.levels.HIGH ?? 0) + (view.current.levels.VERY_HIGH ?? 0) : undefined)}</strong><small>{range ? `${view.rows.length} 个数据日 · ${n(view.userDays)} 用户日` : ''}</small></article>
           </div>
           <div className={styles.charts}>
             {seriesChart('每日消费人数', labels, [{ key: 'validation-users', label: '消费人数（人）', color: '#356ba2', values: labels.map((date) => view.lookup.get(date)?.users ?? NaN) }])}
@@ -94,12 +91,6 @@ export function StationValidation({ reportId, isAdmin, renderChart }: { reportId
           <StationValidationTables data={data} id={station} start={from} end={to} baseline={baseline} range={range} onStation={chooseStation} />
           <StationPeople key={data.fetched_at} reportId={reportId} station={station} dates={data.available_dates} isAdmin={isAdmin} renderChart={renderChart} />
         </>}
-        <details className={styles.boundary}><summary>统计口径与解读边界</summary>
-          <p>来源：{data.source_name}。有效 DUID（大于0）、成功匹配标签（MATCHED）、vehicle_type=private，包含会员。private 沿用上游类别，不代表已核验真实车辆用途；未匹配与身份未知不在分母内。</p>
-          <p>ALL 每天独立跨站去重；各站人数不可相加替代全站人数。跨日期累计为用户日，不是区间去重用户。缺失前一天不改用前一条记录。</p>
-          <p>每天使用当日匹配标签，组成变化可能来自标签迁移。自选基准日不是自动提价前窗口，人数变化不代表因果效果、标签精确率或固定用户留存。</p>
-          <p>汇总保存在服务端，缓存到下一个北京时间10点后首次访问更新；管理员可刷新重跑数据。本区不读取上方报表城市筛选，场站城市与用户城市不是同一口径。</p>
-        </details>
       </>}
     </div></Spin>
   </section>;

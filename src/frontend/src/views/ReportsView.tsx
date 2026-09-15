@@ -7,11 +7,8 @@ import {
   DatabaseOutlined,
   DownloadOutlined,
   EditOutlined,
-  EnvironmentOutlined,
-  FilterOutlined,
   PlayCircleOutlined,
   PlusOutlined,
-  ReloadOutlined,
   RightOutlined,
   SearchOutlined,
 } from '@ant-design/icons';
@@ -49,7 +46,8 @@ import { normalizeReportTrend, reportDailyRate, type ReportScaleMode } from './r
 import { detectIncrementOutliers, detectReportOutliers } from './reportOutliers';
 import { buildEstimatedCurvePath, buildObservedCurvePath } from './reportCurvePath';
 import { fitReportLocalTrend } from './reportLocalFit';
-import { ChinaRegionPicker, expandChinaRegionSelection, summarizeChinaRegionSelection } from '@/components/report/ChinaRegionPicker';
+import { expandChinaRegionSelection, summarizeChinaRegionSelection } from '@/components/report/ChinaRegionPicker';
+import { ReportRegionFilter } from '@/components/report/ReportRegionFilter';
 import styles from './ReportsView.module.css';
 
 const defaultQuery = JSON.stringify({ fieldList: [{ name: 'duid', alias: 'user_count', aggFunctionEnum: 'COUNT DISTINCT' }], conditionList: [], groupList: [], needPagination: false }, null, 2);
@@ -82,8 +80,6 @@ const rangeOptions: Array<{ value: ReportAnalyticsRange; label: string }> = [
   { value: '31d', label: '近 31 天' },
   { value: '365d', label: '近 1 年' },
 ];
-const cityOptions = ['北京市', '上海市', '广州市', '深圳市', '杭州市', '成都市', '武汉市', '南京市', '重庆市', '西安市', '苏州市', '天津市']
-  .map((city) => ({ label: city, value: city }));
 const fieldGroups: Array<{ value: ReportFieldGroup; label: string }> = [
   { value: 'result', label: '核心结果' },
   { value: 'd1', label: 'D1 价格' },
@@ -591,17 +587,6 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
     });
   };
 
-  const applyDashboardFilters = () => {
-    if (expandChinaRegionSelection(draftCities, draftProvinceCodes).length > 50) {
-      message.warning('单次最多查询50个城市，请减少已选区域');
-      return;
-    }
-    setAppliedCities(draftCities);
-    setAppliedProvinceCodes(draftProvinceCodes);
-    setAppliedDashboardRange(draftDashboardRange);
-    message.success(draftCities.length > 0 || draftProvinceCodes.length > 0 ? '区域与时间筛选已应用' : '已切换为全部城市');
-  };
-
   // 地图多选合并为一次查询；旧请求由 analytics effect 的 active 标记隔离。
   const draftFilterKey = JSON.stringify([selectedId, draftCities, draftProvinceCodes, draftDashboardRange]);
   useEffect(() => {
@@ -853,54 +838,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
               {access.canViewRunHistory && <a className={activeSection === 'report-history' ? styles.anchorActive : ''} href="#report-history" onClick={() => setActiveSection('report-history')}>运行记录</a>}
             </nav>
 
-            <section className={styles.filterDock} aria-label="报表全局筛选">
-              <div className={styles.filterIntro}>
-                <span><FilterOutlined /></span>
-                <div><strong>分析筛选</strong></div>
-              </div>
-              <div className={styles.filterFields}>
-                <label className={styles.filterField}>
-                  <span><EnvironmentOutlined />城市</span>
-                  <div className={styles.cityPickerControl}>
-                    <Select
-                      mode="tags"
-                      allowClear
-                      maxTagCount={1}
-                      maxTagPlaceholder={(omitted) => `+${omitted.length} 城市`}
-                      value={draftCities}
-                      options={cityOptions}
-                      placeholder={draftProvinceCodes.length > 0 ? `已选 ${draftProvinceCodes.length} 个省级区域` : '全部城市'}
-                      onChange={setDraftCities}
-                      aria-label="选择城市"
-                    />
-                  </div>
-                </label>
-                <div className={styles.filterField}>
-                  <span>时间范围</span>
-                  <div className={styles.rangeControl} role="tablist" aria-label="选择时间范围">
-                    {rangeOptions.filter((option) => isV12 || (option.value !== '1d' && option.value !== 'all')).map((option) => <button key={option.value} type="button" role="tab" aria-selected={draftDashboardRange === option.value} className={draftDashboardRange === option.value ? styles.rangeActive : ''} onClick={() => setDraftDashboardRange(option.value)}>{option.label}</button>)}
-                  </div>
-                </div>
-              </div>
-              {isV12 ? <section className={styles.regionDetails} aria-label="地图选择区域">
-                <strong>地图选择区域{draftProvinceCodes.length > 0 ? ` · 已选 ${draftProvinceCodes.length} 个区域` : ''}</strong>
-                <div className={styles.filterMap}><ChinaRegionPicker value={draftCities} onChange={setDraftCities} provinceCodes={draftProvinceCodes} onProvinceChange={setDraftProvinceCodes} /></div>
-              </section> : <div className={styles.filterMap}>
-                <ChinaRegionPicker
-                  value={draftCities}
-                  onChange={setDraftCities}
-                  provinceCodes={draftProvinceCodes}
-                  onProvinceChange={setDraftProvinceCodes}
-                />
-              </div>}
-              <div className={styles.filterActions}>
-                {expandChinaRegionSelection(draftCities, draftProvinceCodes).length > 50 && <small role="alert">最多50个城市，请减少已选区域</small>}
-                <small>选择区域或时间后自动应用</small>
-                <small>当前查看：{appliedCityLabel} · {selectedRangeLabel}</small>
-                <Button icon={<ReloadOutlined />} onClick={resetDashboardFilters}>重置</Button>
-                <Button type="primary" icon={<FilterOutlined />} onClick={applyDashboardFilters}>应用筛选</Button>
-              </div>
-            </section>
+            <ReportRegionFilter cities={draftCities} provinces={draftProvinceCodes} onCities={setDraftCities} onProvinces={setDraftProvinceCodes} onReset={resetDashboardFilters} />
 
             {isV12 ? <ReportCohortSections key={selectedId} reportId={selectedId} cities={expandedAppliedCities} analytics={analytics} loading={analyticsLoading} error={analyticsError}
               renderChart={(labels, series, mode) => mode === 'trend' ? <ReportLaneTrends labels={labels} series={series} /> : <SmoothChart labels={labels} series={series} scaleMode={mode} height={270} trendRule="raw" pendingText="请开启至少一个图例" />}

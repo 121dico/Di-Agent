@@ -41,7 +41,7 @@ export function ReportCohortSections({ reportId, cities, analytics, loading, err
     </section>
 
     <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-order-cohort">
-      <div className={styles.blockHead}><div><span>02</span><strong>价敏人群分布对比</strong></div><small>全量人群 / 有订单人群（ps_conf &gt; 0）</small></div>
+      <div className={styles.blockHead}><div><span>02</span><strong>价敏人群分布对比</strong></div></div>
       <Spin spinning={loading && !available}>
         {available ? reportId ? <ReportOrderCountDistribution reportId={reportId} date={analytics.data_date!} cities={cities ?? []} all={allDistribution} /> : <>
           {cohort && <div className={styles.metrics}>

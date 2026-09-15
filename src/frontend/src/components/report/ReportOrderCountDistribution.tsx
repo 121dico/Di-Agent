@@ -82,9 +82,8 @@ export function ReportOrderCountDistribution({ reportId, date, cities, all }: Pr
       </select></label>
       <span>快照 {date} · {cities.length ? `${cities.length} 个城市` : '全部城市'}</span>
     </div>
-    <p className={styles.note}>按 order_cnt_180d（标签最近更新时的订单数）筛选，ps_conf &gt; 0、DUID &gt; 0。组内占比 = 该等级人数 ÷ 所选笔数组总人数；占同等级总人数 = 该等级人数 ÷ 全部有订单人群中该等级人数。两者使用相同快照、城市和报表条件。</p>
     {baselineError ? <p className={styles.error} role="alert">{baselineError} <button type="button" onClick={() => setBaselineRetry((value) => value + 1)}>重试同等级基数</button></p> : !baselineResult && orders !== 'all' ? <p role="status">同等级基数加载中，占同等级总人数暂显示 —。</p> : null}
-    {error ? <p className={styles.error} role="alert">{error} <button type="button" onClick={() => setRetry((value) => value + 1)}>重新查询</button></p> : !cohort ? !(orders === 'all' && baselineError) && <p role="status">正在查询{label}的真实人数…</p> : <p className={styles.total} role="status">{label}：<strong>{cohort.user_count.toLocaleString('zh-CN')} 人</strong><span>服务端去重统计 · 分级合计已核对</span></p>}
+    {error ? <p className={styles.error} role="alert">{error} <button type="button" onClick={() => setRetry((value) => value + 1)}>重新查询</button></p> : !cohort ? !(orders === 'all' && baselineError) && <p role="status">正在查询{label}的真实人数…</p> : <p className={styles.total} role="status">{label}：<strong>{cohort.user_count.toLocaleString('zh-CN')} 人</strong></p>}
     <ReportOrderGradeCharts items={cohort ? presentSensitivityDistribution(cohort.distribution) : null} baseline={baselineResult?.order_cohort ? presentSensitivityDistribution(baselineResult.order_cohort.distribution) : null} loading={!cohort && !(orders === 'all' ? baselineError : error)} label={label} />
     <ReportCohortComparison key={`${key}:${Boolean(cohort)}`} all={all} orders={cohort ? presentSensitivityDistribution(cohort.distribution) : null} ordersLoading={!cohort && !(orders === 'all' ? baselineError : error)} ordersLabel={label} precision={2} orderGradeTotals={baselineResult?.order_cohort ? presentSensitivityDistribution(baselineResult.order_cohort.distribution) : null} />
   </div>;
