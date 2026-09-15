@@ -12,6 +12,7 @@
 
 - [x] [订单人数与同等级占比柱图](task/report-order-grade-charts.md)：复用订单筛选结果，等级多选，人数和比例分别显示。
 - [~] [地图常驻与自动筛选](task/report-map-filters.md)：城市和时间自动应用，地图比例修正，省市条件联动。
+- [~] [报表筛选与文案精简](task/report-region-filter-compact.md)：左侧搜索及推荐城市、右侧紧凑地图；删除时间控件和解释注释，浏览器验收中。
 
 - [x] [有订单人群按笔数筛选](task/report-order-count-cohort.md)：1至10笔及超过10笔真实去重人数、组内占比、同等级占比、独立缓存与核验重跑已部署；已通过浏览器主路径验收，详见任务记录。
 

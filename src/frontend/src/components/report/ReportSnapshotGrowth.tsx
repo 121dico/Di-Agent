@@ -66,9 +66,9 @@ export function ReportSnapshotGrowth({ analytics, renderChart, renderBar }: {
         {renderBar(growth.labels, growth.daily)}
       </div>
       <div className={`${styles.card} ${styles.incrementAnalysisCard}`}>
-        <div className={styles.cardTitle}><div><i />每日增长趋势</div><small>当天 − 前一天 · 日期：dt</small></div>
+        <div className={styles.cardTitle}><div><i />每日增长趋势</div></div>
         <div className={styles.volumeTrendGrid}>
-          <section className={styles.volumeTrendPanel}><header><span>每日单次净增</span><small>单位：人 · 疑似离群不参与正常趋势</small></header>
+          <section className={styles.volumeTrendPanel}><header><span>每日单次净增</span><small>单位：人</small></header>
             {renderChart(growth.labels, [{ key: 'dailyNet', label: '每日净增（人）', color: '#15857A', values: growth.daily }])}
           </section>
           <section className={styles.volumeTrendPanel}><header><span>每日增长率</span><small>单位：%</small></header>

@@ -37,7 +37,7 @@ const EvidenceCase: FC<EvidenceCaseProps> = ({ item }) => {
   const scoreTable = (fields: string[]) => <div className={styles.tableScroll}><table><thead><tr><th>判分字段</th><th>真实值</th></tr></thead><tbody>{fields.map((key) => <tr key={key}><td>{fieldLabels[key] ?? key}<small>{fieldLabels[key] ? key : '原始证据字段'}</small></td><td>{value(key)}</td></tr>)}</tbody></table></div>;
   return <details className={styles.boundary}>
     <summary>DUID {item.duid} · {stationNumber(item.orders)} 笔订单 / {item.consumption_days} 个消费日 · {item.level === 'VERY_HIGH' ? '极高价敏' : '高价敏'}</summary>
-    <p className={styles.note}>首末消费日 {item.first_date} — {item.last_date} · 对应标签快照 {item.label_date || '未提供'}。等级取区间最后消费日，不使用最新标签替代历史。</p>
+    <p className={styles.note}>首末消费日 {item.first_date} — {item.last_date} · 对应标签快照 {item.label_date || '未提供'}</p>
     {item.status !== 'matched' ? <Alert type="warning" message="判分依据不可用" description={item.reason || '未获得同日唯一标签记录。'} /> : <>
       {item.reason && <p className={styles.note}>{item.reason}</p>}
       <p className={styles.note}>总分 {value('ps_score')} · 置信度 {value('ps_conf')} · 基础分 {value('base_score')} × 画像调节系数 {value('profile_factor')}。{contributions[0] ? `已返回的观测维度中，${contributions[0].label}加权贡献最大（${contributionText(contributions[0].value)}）；不等同于已证明最终判分的唯一原因。` : '观测维度贡献未提供，无法比较主要贡献。'}</p>
@@ -47,7 +47,6 @@ const EvidenceCase: FC<EvidenceCaseProps> = ({ item }) => {
         <li>用券证据：已使用 {value('coupon_used_cnt')} 张，过期 {value('coupon_expired_cnt')} 张；用券率原始值 {value('coupon_use_rate')}。</li>
         <li>时间证据：可比订单 {value('time_cmp_cnt')} 笔，忙时订单 {value('busy_order_cnt')} 笔，其中忙时低价 {value('busy_low_cnt')} 笔。</li>
       </ul>
-      <p className={styles.note}>以上不是最终总分的完整拆解：缺失维度的先验、画像调节等可能影响最终分数。原始证据缺失时不猜测触发原因，消费频繁也不直接代表不价敏。</p>
       {scoreTable(scoreFields)}
       <details className={styles.boundary}><summary>查看完整原始证据字段</summary>{scoreTable(keys)}</details>
     </>}
@@ -81,16 +80,6 @@ export const StationScoreEvidence: FC<StationScoreEvidenceProps> = ({ reportId, 
   if (!isAdmin) return null;
   return <section className={styles.card} aria-label="高价敏判分依据">
     <h3>高价敏判分依据</h3>
-    <p className={styles.note}>管理员案例核验 · 沿用上方复购消费区间 {start} — {end}。按同站消费日数、订单数优先展示最多 20 个案例，不代表全量人群结论。</p>
-    <details className={styles.boundary}><summary>提供的 SQL 判分规则（用于对照，未核验线上版本）</summary>
-      <ul className={styles.note}>
-        <li>价格分取三项最大值：50 + 50 × 价格方向指标；至少 5 笔谷时可判断订单后按谷时占比分段映射；存在价格排序验证时保送 80 分。并非订单越多直接加分。</li>
-        <li>用券分 = 已使用券数 ÷（已使用 + 已过期）× 100，有券机会才计算。</li>
-        <li>时间分 = 忙时低价订单数 ÷ 时间可比订单数 × 100，限制在 0 至 100，有可比订单才计算。</li>
-        <li>基础分按价格 50%、用券 30%、时间 20% 合成；缺失维度使用对应先验。之后结合画像调节并限制在 0 至 100，四舍五入后至少 80 为极高、至少 70 为高。</li>
-      </ul>
-      <p className={styles.note}>规则来自用户提供的评分 SQL，不能仅凭字段非空就认定触发。以下返回值是实际快照证据；如果标签版本、分数与规则不一致，需要核对线上任务，不能据此编造归因。</p>
-    </details>
     <div className={styles.controls}>
       <label>核验价敏等级<select value={level} onChange={(event) => setLevel(event.target.value)}><option value="VERY_HIGH">极高价敏</option><option value="HIGH">高价敏</option></select></label>
       <label>最少同站消费日<input type="number" min="1" max="365" step="1" value={minDays} onChange={(event) => setMinDays(event.target.value)} /></label>
@@ -102,7 +91,7 @@ export const StationScoreEvidence: FC<StationScoreEvidenceProps> = ({ reportId, 
     {error && <Alert type="error" message={error} action={<Button disabled={!canLoad || loading} onClick={() => void load()}>重试判分依据</Button>} />}
     {loading && <p className={styles.note} role="status">正在匹配同一用户消费当日的真实标签与评分证据…</p>}
     {data && <>
-      <p className={styles.note} role="status">符合条件 {stationNumber(data.candidate_count)} 人 · 展示 {data.cases.length} 个案例 · 至少 {data.min_days} 个消费日 · 查询于 {new Date(data.fetched_at).toLocaleString('zh-CN')}</p>
+      <p className={styles.note} role="status">符合条件 {stationNumber(data.candidate_count)} 人 · 展示 {data.cases.length} 个案例 · 至少 {data.min_days} 个消费日</p>
       {data.cases.length === 0 ? <p className={styles.note}>当前场站和区间没有符合条件的用户。</p> : data.cases.map((item) => <EvidenceCase key={item.duid} item={item} />)}
     </>}
   </section>;

@@ -785,7 +785,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
       <header className={styles.sectionHead}>
         <div className={styles.sectionTitle}>
           <span className={styles.sectionLine} />
-          <div><h1>数据报表</h1><p>固定业务口径 · 每日 10:00 更新 · 可追溯数据快照</p></div>
+          <div><h1>数据报表</h1></div>
         </div>
         <div className={styles.actions}>
           {access.canManageReports && <Button onClick={() => setTemplateOpen(true)}>套用模板</Button>}
@@ -802,7 +802,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
           {reports.map((report) => (
             <button key={report.id} type="button" className={`${styles.reportItem} ${report.id === selectedId ? styles.reportItemActive : ''}`} onClick={() => setSelectedId(report.id)}>
               <BarChartOutlined />
-              <span><strong>{report.name}</strong><small>{report.description || '固定业务报表'}</small></span>
+              <span><strong>{report.name}</strong></span>
             </button>
           ))}
           {reports.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无报表" />}
@@ -815,7 +815,6 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
               <div>
                 <span className={styles.eyebrow}>REPORT OVERVIEW · BUSINESS INSIGHT</span>
                 <h2>{selected.name}</h2>
-                <p>{selected.description || '基于固定数据接口生成的业务报表'}</p>
                 <div className={styles.summaryMeta}>
                   <span>数据分区 {activePartition}</span>
                   <span>{access.canBrowseFullDetail ? `${totalRows.toLocaleString('zh-CN')} 行数据` : `${sharedUserCount.toLocaleString('zh-CN')} 位已计算用户`}</span>

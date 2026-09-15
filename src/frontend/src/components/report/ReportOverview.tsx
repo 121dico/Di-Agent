@@ -34,10 +34,8 @@ export const ReportOverview: FC<ReportOverviewProps> = ({ analytics }) => {
       {metrics.map(metric => <article key={metric.label} className={local.metric} data-overview-metric={metric.label}>
         <span>{metric.label}</span>
         <strong>{number(metric.value)}{number(metric.value) !== '—' && <small>{metric.unit}</small>}</strong>
-        <p>{metric.note}</p>
       </article>)}
     </div>
     <div className={local.growth} aria-label="快照增长概览"><SnapshotGrowthMetrics analytics={analytics} compact /></div>
-    <p className={local.note}>统计范围 {analytics.start_date} → {analytics.end_date} · 增长为相邻连续 dt 快照差，非新增注册；日均净增包含疑似离群日。</p>
   </div>;
 };
