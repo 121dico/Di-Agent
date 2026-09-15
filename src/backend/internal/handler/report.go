@@ -147,6 +147,12 @@ func (h *ReportHandler) QueryStationPeople(c *gin.Context) {
 	h.respond(c, result, err)
 }
 
+func (h *ReportHandler) QueryStationScoreEvidence(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	result, err := h.svc.QueryStationScoreEvidence(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), c.Query("station"), c.Query("start"), c.Query("end"), c.DefaultQuery("level", "VERY_HIGH"), c.DefaultQuery("min_days", "2"))
+	h.respond(c, result, err)
+}
+
 func (h *ReportHandler) DownloadCSV(c *gin.Context) {
 	run, err := h.svc.GetRun(c.Request.Context(), c.Param("runId"), middleware.GetUserID(c))
 	if err != nil || run == nil {

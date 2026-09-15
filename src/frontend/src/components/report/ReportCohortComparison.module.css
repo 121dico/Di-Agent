@@ -25,3 +25,4 @@
 @media (max-width: 1200px) { .layout { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 520px) { .charts { grid-template-columns: minmax(0, 1fr); } .legend th, .legend td { padding: 7px 2px; } .legend table { font-size: 11px; } }
 @media (prefers-reduced-motion: reduce) { .sector { transition: none; } }
+.loading { min-height: 260px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 16px; padding: 20px; color: var(--wb-text-secondary); font-size: 14px; text-align: center; }

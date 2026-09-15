@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Button } from 'antd';
 import { queryStationPeople } from '@/api/stationValidation';
 import type { StationPeopleResult } from '@/types/stationPeople';
 import type { SnapshotChartRenderer } from './ReportSnapshotTrends';
 import { StationDataTable } from './StationValidationTables';
+import { StationScoreEvidence } from './StationScoreEvidence';
 import { stationCalendar, stationLevels, stationNumber, stationPercent, stationRatio } from './stationValidationModel';
 import styles from './StationValidation.module.css';
 
@@ -17,10 +18,9 @@ export function StationPeople({ reportId, station, dates, isAdmin, renderChart }
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const request = useRef(0);
-  useEffect(() => { request.current++; setLoading(false); setError(''); setData(null); }, [station, start, end, reportId]);
-  useEffect(() => () => { request.current++; }, []);
   const valid = dates.includes(start) && dates.includes(end) && start <= end;
-  const load = async (refresh = false) => {
+  const load = useCallback(async (refresh = false) => {
+    if (!valid) return;
     const epoch = ++request.current;
     setLoading(true); setError('');
     try {
@@ -29,23 +29,29 @@ export function StationPeople({ reportId, station, dates, isAdmin, renderChart }
     } catch (cause) {
       if (request.current === epoch) setError(cause instanceof Error ? cause.message : '用户复购分析失败');
     } finally { if (request.current === epoch) setLoading(false); }
-  };
+  }, [reportId, station, start, end, valid]);
+  useEffect(() => {
+    request.current++; setLoading(false); setError(''); setData(null);
+    // 日期输入连续变化时只请求最终有效范围，旧范围结果不得覆盖当前选择。
+    const timer = valid ? window.setTimeout(() => void load(), 300) : undefined;
+    return () => { window.clearTimeout(timer); request.current++; };
+  }, [load, valid]);
   const calendar = stationCalendar(start, end);
   const lookup = new Map(data?.days.map((day) => [day.dt, day]));
   const missing = calendar.filter((date) => !dates.includes(date));
-  return <section className={styles.card} aria-label="用户复购与人群重合">
+  return <><section className={styles.card} aria-label="用户复购与人群重合">
     <h3>用户复购与人群重合</h3>
-    <p className={styles.note}>跟踪同一 DUID，而不是比较人数差。跟随上方场站选择；本区使用独立消费区间，首次点击后计算并缓存。</p>
+    <p className={styles.note}>跟踪同一 DUID，而不是比较人数差。跟随上方场站选择；本区使用独立消费区间，自动优先读取缓存，未缓存时计算。</p>
     <div className={styles.controls}>
       <label>复购开始日期<input type="date" min={dates[0]} max={dates[dates.length - 1]} value={start} onChange={(event) => setStart(event.target.value)} /></label>
       <label>复购结束日期<input type="date" min={dates[0]} max={dates[dates.length - 1]} value={end} onChange={(event) => setEnd(event.target.value)} /></label>
-      <Button type="primary" disabled={!valid || loading} loading={loading} onClick={() => void load()}>分析用户复购</Button>
+      <Button disabled={!valid || loading} loading={loading} onClick={() => void load()}>重新加载复购</Button>
       {isAdmin && <Button disabled={!valid || loading} onClick={() => void load(true)}>重新计算</Button>}
     </div>
     {!valid && <Alert type="warning" message="请选择有数据的日期，开始不能晚于结束。" />}
-    {error && <Alert type="error" message={error} description={data ? '重新计算失败，仍显示上次成功结果。' : '没有用人数差、示例数据或部分分页替代真实用户比对。'} />}
+    {error && <Alert type="error" message={error} description={data ? '重新计算失败，仍显示上次成功结果。' : '没有用人数差、示例数据或部分分页替代真实用户比对。'} action={<Button disabled={loading} onClick={() => void load()}>重试复购</Button>} />}
     {missing.length > 0 && <Alert type="warning" message={`区间缺少 ${missing.length} 个数据日，频次与回访只能依据可查询日期；缺失日不补零。`} />}
-    {!data ? <p className={styles.note} role="status">{loading ? '正在服务端比对真实用户身份，页面不接收 DUID 明细…' : '选择消费区间后点击分析；普通打开报表不会触发用户级扫描。'}</p> : <>
+    {!data ? <p className={styles.note} role="status">{loading ? '正在读取缓存或比对真实用户身份，页面不接收 DUID 明细…' : error ? '未能加载复购结果，请重试。' : valid ? '正在准备加载复购结果…' : '请选择有效消费区间。'}</p> : <>
       <p className={styles.note}>消费区间 {data.start} — {data.end} · 历史从 {data.history_start} 起 · 更新于 {new Date(data.fetched_at).toLocaleString('zh-CN')}。回访仅指在可查询历史内，此前曾以相同统计口径消费。</p>
       <div className={styles.metrics}>
         <article><span>区间去重消费用户</span><strong>{stationNumber(data.users)}</strong><small>跨日期去重，不是用户日</small></article>
@@ -70,5 +76,5 @@ export function StationPeople({ reportId, station, dates, isAdmin, renderChart }
         rows={data.days.map((day) => [day.dt, day.users, day.new, day.returning, day.previous_available ? day.previous : '—', day.week_days_available ? `${day.previous_week}${day.week_days_available < 7 ? `（仅覆盖${day.week_days_available}/7天）` : ''}` : '—'])} />
       <p className={styles.note}>分母沿用有效 DUID、MATCHED、private，包含会员；不代表全量订单人群。DUID=0 不参与身份比对。首次出现不是平台新注册，同日标签冲突会报错而非任意选取。</p>
     </>}
-  </section>;
+  </section><StationScoreEvidence reportId={reportId} station={station} start={start} end={end} valid={valid} isAdmin={isAdmin} /></>;
 }

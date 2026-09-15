@@ -18,20 +18,23 @@ const response = { start: '2026-08-01', end: '2026-08-02', history_start: '2026-
     levels: { VERY_HIGH: { users: 1, new: 1, returning: 0, previous_week: 0, same_level_week: 0 } } }],
 };
 
-it('loads only on request, defaults to very high and hides recalculation for ordinary users', async () => {
+it('automatically loads cached results, defaults to very high and hides recalculation for ordinary users', async () => {
   const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ code: 0, data: response }) });
   vi.stubGlobal('fetch', fetcher);
   await act(async () => root.render(<StationPeople reportId="report" station="ALL" dates={['2026-08-01', '2026-08-02']} isAdmin={false} renderChart={(_, series) => <div>{series.map((s) => s.label).join('/')}</div>} />));
-  expect(fetcher).not.toHaveBeenCalled();
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 350)); });
+  expect(fetcher).toHaveBeenCalledTimes(1);
   expect(host.textContent).not.toContain('重新计算');
-  await act(async () => host.querySelector('button')?.click());
   expect(String(fetcher.mock.calls[0]?.[0])).toContain('station=ALL&start=2026-08-01&end=2026-08-02');
+  expect(String(fetcher.mock.calls[0]?.[0])).toContain('refresh=false');
   expect(host.querySelector('select')?.value).toBe('VERY_HIGH');
   expect(host.textContent).toContain('仅覆盖1/7天');
   expect(host.textContent).toContain('窗口不完整');
   await act(async () => root.render(<StationPeople reportId="report" station="A" dates={['2026-08-01', '2026-08-02']} isAdmin={false} renderChart={() => null} />));
   expect(host.textContent).not.toContain('多次消费用户是什么价敏等级');
   expect(fetcher).toHaveBeenCalledTimes(1);
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 350)); });
+  expect(fetcher).toHaveBeenCalledTimes(2);
 });
 
 it('does not show a late result from the previous station', async () => {
@@ -39,8 +42,32 @@ it('does not show a late result from the previous station', async () => {
   vi.stubGlobal('fetch', vi.fn(() => new Promise((resolve) => { finish = resolve; })));
   const render = (station: string) => <StationPeople reportId="report" station={station} dates={['2026-08-01', '2026-08-02']} isAdmin={false} renderChart={() => null} />;
   await act(async () => root.render(render('ALL')));
-  await act(async () => host.querySelector('button')?.click());
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 350)); });
   await act(async () => root.render(render('A')));
   await act(async () => finish?.({ ok: true, json: async () => ({ code: 0, data: response }) }));
   expect(host.textContent).not.toContain('多次消费用户是什么价敏等级');
+});
+
+it('does not request invalid date ranges, and lets users retry an automatic load failure', async () => {
+  const fetcher = vi.fn().mockRejectedValueOnce(new Error('暂时不可用')).mockResolvedValue({ ok: true, json: async () => ({ code: 0, data: response }) });
+  vi.stubGlobal('fetch', fetcher);
+  await act(async () => root.render(<StationPeople reportId="report" station="A" dates={[]} isAdmin={false} renderChart={() => null} />));
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 350)); });
+  expect(fetcher).not.toHaveBeenCalled();
+  await act(async () => root.render(<StationPeople key="valid" reportId="report" station="A" dates={['2026-08-01', '2026-08-02']} isAdmin={false} renderChart={() => null} />));
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 350)); });
+  expect(host.textContent).toContain('网络连接失败');
+  const retry = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('重试复购'));
+  await act(async () => retry?.click());
+  expect(host.textContent).toContain('多次消费用户是什么价敏等级');
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  const startInput = host.querySelector('input');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(startInput, '2026-08-03');
+    startInput?.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 350)); });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(host.textContent).not.toContain('多次消费用户是什么价敏等级');
+  expect(host.textContent).toContain('开始不能晚于结束');
 });

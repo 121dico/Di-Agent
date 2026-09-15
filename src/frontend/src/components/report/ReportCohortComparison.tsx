@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Empty } from 'antd';
+import { Empty, Spin } from 'antd';
 import styles from './ReportCohortComparison.module.css';
 
 type Item = { label: string; value: number };
@@ -7,7 +7,7 @@ const colors: Record<string, string> = { 极高价敏: '#A63437', 高价敏: '#D
 const count = (value: number) => value.toLocaleString('zh-CN');
 const compactCount = (value: number) => value >= 100000000 ? `${Number((value / 100000000).toFixed(2))}亿` : value >= 10000 ? `${Number((value / 10000).toFixed(1))}万` : count(value);
 
-export function ReportCohortComparison({ all, orders, ordersLabel = '有订单人群', precision = 1, orderGradeTotals }: { all: Item[]; orders: Item[] | null; ordersLabel?: string; precision?: number; orderGradeTotals?: Item[] | null }) {
+export function ReportCohortComparison({ all, orders, ordersLabel = '有订单人群', precision = 1, orderGradeTotals, ordersLoading = false }: { all: Item[]; orders: Item[] | null; ordersLabel?: string; precision?: number; orderGradeTotals?: Item[] | null; ordersLoading?: boolean }) {
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
   const [active, setActive] = useState<string | null>(null);
   const groups = [{ key: 'all', title: '全量人群', items: all }, { key: 'orders', title: ordersLabel, items: orders }];
@@ -18,10 +18,11 @@ export function ReportCohortComparison({ all, orders, ordersLabel = '有订单�
     <div className={styles.charts}>{groups.map((group, index) => {
       const total = totals[index] ?? 0;
       const activeItem = group.items?.find((item) => `${group.key}:${item.label}` === active);
+      const pending = group.key === 'orders' && ordersLoading;
       let consumed = 0;
-      return <section className={styles.chart} key={group.key} aria-label={`${group.title}价敏分布`}>
-        <h3>{group.title}</h3><p>{group.items ? `${count(total)} 人` : '尚无可用统计'}</p>
-        {group.items && total > 0 ? <svg viewBox="0 0 260 260" aria-label={`${group.title}环形图`}>
+      return <section className={styles.chart} key={group.key} aria-label={`${group.title}价敏分布`} aria-busy={pending}>
+        <h3>{group.title}</h3><p>{pending ? '正在加载真实统计…' : group.items ? `${count(total)} 人` : '尚无可用统计'}</p>
+        {pending ? <div className={styles.loading} role="status"><Spin /><span>正在加载{group.title}，首次查询可能需要几秒。</span></div> : group.items && total > 0 ? <svg viewBox="0 0 260 260" aria-label={`${group.title}环形图`}>
           <circle cx="130" cy="130" r="84" fill="none" stroke="var(--wb-surface-hover)" strokeWidth="30" />
           <g transform="rotate(-90 130 130)">{group.items.filter((item) => item.value > 0).map((item) => {
             const key = `${group.key}:${item.label}`;

@@ -221,6 +221,7 @@ func Setup(r *gin.Engine, deps Deps) {
 				reportRoutes.GET("/:id/order-cohort", deps.ReportHandler.QueryOrderCohort)
 				reportRoutes.GET("/:id/station-validation", deps.ReportHandler.QueryStationValidation)
 				reportRoutes.GET("/:id/station-people", deps.ReportHandler.QueryStationPeople)
+				reportRoutes.GET("/:id/station-score-evidence", deps.ReportHandler.QueryStationScoreEvidence)
 				reportRoutes.GET("/:id/provenance", deps.ReportHandler.GetProvenance)
 				reportRoutes.POST("/:id/provenance/replay", deps.ReportHandler.ReplayProvenance)
 				reportRoutes.GET("/:id/runs", deps.ReportHandler.ListRuns)

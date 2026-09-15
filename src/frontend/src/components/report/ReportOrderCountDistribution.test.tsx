@@ -8,6 +8,118 @@ import { ReportOrderCountDistribution } from './ReportOrderCountDistribution';
 
 vi.mock('@/api/report', () => ({ queryReportOrderCohort: vi.fn() }));
 
+it('shows loading rather than an empty statistic inside the actual chart while an order group is pending', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.mocked(queryReportOrderCohort).mockReset()
+    .mockResolvedValueOnce({ order_cohort: { user_count: 40, distribution: [{ level: 'HIGH', user_count: 40 }] } } as ReportAnalyticsResult)
+    .mockImplementationOnce(() => new Promise(() => {}));
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(<ReportOrderCountDistribution reportId="r" date="2026-09-13" cities={[]} all={[{ label: '高价敏', value: 100 }]} />));
+    await act(async () => { const select = host.querySelector('select')!; select.value = '9'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+    const chart = host.querySelector('section[aria-label="9 笔订单人群价敏分布"]')!;
+    expect(chart.textContent).not.toContain('尚无可用统计');
+    expect(chart.textContent).not.toContain('未加载');
+    expect(chart.textContent).toContain('正在加载');
+    expect(chart.getAttribute('aria-busy')).toBe('true');
+  } finally { act(() => root.unmount()); vi.unstubAllGlobals(); }
+});
+
+it('immediately reuses successful groups within the current scope without refetching or loading flicker', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const response = (n: number) => ({ order_cohort: { user_count: n, distribution: [{ level: 'HIGH', user_count: n }] } }) as ReportAnalyticsResult;
+  vi.mocked(queryReportOrderCohort).mockReset().mockResolvedValue(response(9)).mockResolvedValueOnce(response(40)).mockResolvedValueOnce(response(9)).mockResolvedValueOnce(response(10));
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  const choose = async (value: string) => act(async () => { const select = host.querySelector('select')!; select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  try {
+    await act(async () => root.render(<ReportOrderCountDistribution reportId="r" date="2026-09-13" cities={[]} all={[]} />));
+    await choose('9');
+    await choose('10');
+    await choose('9');
+    expect(queryReportOrderCohort).toHaveBeenCalledTimes(3);
+    const chart = host.querySelector('section[aria-label="9 笔订单人群价敏分布"]')!;
+    expect(chart.getAttribute('aria-busy')).toBe('false');
+    expect(chart.textContent).toContain('9 人');
+    expect(host.querySelector('tbody tr')?.lastElementChild?.textContent).toBe('22.50%');
+  } finally { act(() => root.unmount()); vi.unstubAllGlobals(); }
+});
+
+it('expires the baseline and selected-group cache after ten minutes and clears it when the scope changes', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const now = vi.spyOn(Date, 'now').mockReturnValue(1000000);
+  const response = (n: number) => ({ order_cohort: { user_count: n, distribution: [{ level: 'HIGH', user_count: n }] } }) as ReportAnalyticsResult;
+  vi.mocked(queryReportOrderCohort).mockReset().mockResolvedValue(response(20));
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  const render = (date: string) => root.render(<ReportOrderCountDistribution reportId="r" date={date} cities={[]} all={[]} />);
+  const choose = async (value: string) => act(async () => { const select = host.querySelector('select')!; select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  try {
+    await act(async () => render('2026-09-13'));
+    await choose('9');
+    await choose('all');
+    expect(queryReportOrderCohort).toHaveBeenCalledTimes(2);
+    now.mockReturnValue(1600001);
+    await choose('9');
+    expect(queryReportOrderCohort).toHaveBeenCalledTimes(4);
+    expect(queryReportOrderCohort).toHaveBeenNthCalledWith(3, 'r', '2026-09-13', 'all', []);
+    expect(queryReportOrderCohort).toHaveBeenNthCalledWith(4, 'r', '2026-09-13', '9', []);
+    await act(async () => render('2026-09-14'));
+    expect(queryReportOrderCohort).toHaveBeenCalledTimes(6);
+    await act(async () => render('2026-09-13'));
+    expect(queryReportOrderCohort).toHaveBeenCalledTimes(8);
+  } finally { act(() => root.unmount()); now.mockRestore(); vi.unstubAllGlobals(); }
+});
+
+it('never caches failed groups and retries when the user selects the group again', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const response = { order_cohort: { user_count: 9, distribution: [{ level: 'HIGH', user_count: 9 }] } } as ReportAnalyticsResult;
+  vi.mocked(queryReportOrderCohort).mockReset().mockResolvedValueOnce(response).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(response);
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  const choose = async (value: string) => act(async () => { const select = host.querySelector('select')!; select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  try {
+    await act(async () => root.render(<ReportOrderCountDistribution reportId="r" date="2026-09-13" cities={[]} all={[]} />));
+    await choose('9');
+    expect(host.textContent).toContain('该组人群查询失败');
+    await choose('all');
+    await choose('9');
+    expect(queryReportOrderCohort).toHaveBeenCalledTimes(3);
+    expect(host.textContent).not.toContain('该组人群查询失败');
+    expect(host.querySelector('section[aria-label="9 笔订单人群价敏分布"]')?.textContent).toContain('9 人');
+  } finally { act(() => root.unmount()); vi.unstubAllGlobals(); }
+});
+
+it('keeps the displayed successful scope after TTL on unrelated renders and while another group finishes', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const now = vi.spyOn(Date, 'now').mockReturnValue(1000000);
+  const response = (n: number) => ({ order_cohort: { user_count: n, distribution: [{ level: 'HIGH', user_count: n }] } }) as ReportAnalyticsResult;
+  let finish!: (result: ReportAnalyticsResult) => void;
+  vi.mocked(queryReportOrderCohort).mockReset().mockResolvedValueOnce(response(40)).mockResolvedValueOnce(response(9)).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  const render = () => root.render(<ReportOrderCountDistribution reportId="r" date="2026-09-13" cities={[]} all={[{ label: '高价敏', value: 100 }]} />);
+  const choose = async (value: string) => act(async () => { const select = host.querySelector('select')!; select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  try {
+    await act(async () => render());
+    await choose('9');
+    now.mockReturnValue(1599999);
+    await choose('10');
+    now.mockReturnValue(1600001);
+    await act(async () => finish(response(10)));
+    expect(host.textContent).not.toContain('同等级基数加载中');
+    expect(host.querySelector('tbody tr')?.lastElementChild?.textContent).toBe('25.00%');
+    now.mockReturnValue(2200002);
+    await act(async () => render());
+    const chart = host.querySelector('section[aria-label="10 笔订单人群价敏分布"]')!;
+    expect(chart.getAttribute('aria-busy')).toBe('false');
+    expect(chart.textContent).toContain('10 人');
+    expect(host.querySelector('tbody tr')?.lastElementChild?.textContent).toBe('25.00%');
+    expect(queryReportOrderCohort).toHaveBeenCalledTimes(3);
+  } finally { act(() => root.unmount()); now.mockRestore(); vi.unstubAllGlobals(); }
+});
+
 it('preserves loaded group statistics while the denominator fails and retries only that baseline', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   const response = (distribution: Array<{ level: string; user_count: number }>) => ({ order_cohort: { user_count: 10, distribution } }) as ReportAnalyticsResult;
