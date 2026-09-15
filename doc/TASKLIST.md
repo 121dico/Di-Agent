@@ -10,6 +10,8 @@
 
 ## P0
 
+- [x] [数据源可用时间核验](task/report-source-time-coverage.md)：卡片查看分区与业务日期，管理员手动真实核验并持久保存，已部署。
+
 - [x] [城市与订单档位持久预计算](task/report-prepared-snapshots.md)：已上线，最新日全部城市/订单档位验证通过；首次历史补齐后台继续。
 
 - [x] [订单人数与同等级占比柱图](task/report-order-grade-charts.md)：复用订单筛选结果，等级多选，人数和比例分别显示。

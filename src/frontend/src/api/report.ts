@@ -1,10 +1,12 @@
 import { get, post, put, getAuthHeaders } from './client';
-import type { ReportAnalyticsRange, ReportAnalyticsResult, ReportDataSource, ReportDataSourceContract, ReportDefinition, ReportPageResult, ReportRun, ReportTemplate } from '@/types/report';
+import type { ReportAnalyticsRange, ReportAnalyticsResult, ReportDataSource, ReportDataSourceContract, ReportDefinition, ReportPageResult, ReportRun, ReportTemplate, ReportSourceTimeCoverage } from '@/types/report';
 
 export const listReportTemplates = () => get<ReportTemplate[]>('/api/reports/templates');
 export const applyReportTemplate = (templateId: string, sourceId: string) => post<ReportDefinition>('/api/reports/templates/apply', { template_id: templateId, source_id: sourceId });
 
 export const listReportSources = () => get<ReportDataSource[] | null>('/api/reports/sources').then((rows) => rows ?? []);
+export const getReportSourceTimeCoverage = (id: string) => get<ReportSourceTimeCoverage>(`/api/reports/sources/${encodeURIComponent(id)}/time-coverage`);
+export const refreshReportSourceTimeCoverage = (id: string) => post<ReportSourceTimeCoverage>(`/api/reports/sources/${encodeURIComponent(id)}/time-coverage`);
 export const createReportSource = (body: Omit<ReportDataSource, 'id' | 'created_at'>) => post<ReportDataSource>('/api/reports/sources', body);
 export const getReportSourceContract = (id: string) => get<ReportDataSourceContract>(`/api/reports/sources/${id}/contract`);
 export const saveReportSourceContract = (id: string, body: ReportDataSourceContract) => put<ReportDataSourceContract>(`/api/reports/sources/${id}/contract`, body);

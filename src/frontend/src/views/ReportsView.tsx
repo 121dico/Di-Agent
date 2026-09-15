@@ -9,7 +9,6 @@ import {
   EditOutlined,
   PlayCircleOutlined,
   PlusOutlined,
-  RightOutlined,
   SearchOutlined,
 } from '@ant-design/icons';
 import { message } from '@/utils/message';
@@ -38,6 +37,7 @@ import { PersonalReportsLibrary } from '@/components/personal-report/PersonalRep
 import { ReportTemplateModal } from '@/components/report/ReportTemplateModal';
 import { ReportProvenance } from '@/components/report/ReportProvenance';
 import { ReportCohortSections } from '@/components/report/ReportCohortSections';
+import { ReportSourceCard } from '@/components/report/ReportSourceCard';
 import { StationValidation } from '@/components/report/StationValidation';
 import { ReportLaneTrends } from '@/components/report/ReportLaneTrends';
 import { loadStoredSnapshotHistory } from './reportSnapshotHistory';
@@ -949,15 +949,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
                 <span>{filteredSources.length} / {sources.length}</span>
               </div>
               {filteredSources.length > 0 ? <div className={styles.sourceGrid}>{filteredSources.map((source) => (
-                <button key={source.id} type="button" className={styles.sourceCard} onClick={() => void openSourceDetail(source.id)}>
-                  <span className={styles.sourceCardIcon}><DatabaseOutlined /></span>
-                  <span className={styles.sourceCardBody}>
-                    <strong>{source.name}</strong>
-                    <span className={styles.sourceDescription}>{source.description || '尚未添加中文用途说明'}</span>
-                    <span className={styles.sourceMeta}><code>{source.api_name}</code><em data-enabled={source.enabled}>{source.enabled ? '已启用' : '已停用'}</em></span>
-                  </span>
-                  <RightOutlined className={styles.sourceCardArrow} />
-                </button>
+                <ReportSourceCard key={source.id} source={source} active={sourceOpen} onOpen={(id) => void openSourceDetail(id)} />
               ))}</div> : <div className={styles.sourceEmpty}><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的数据源" /><Button onClick={() => setSourceCatalogQuery('')}>清除查询</Button></div>}
             </> : <div className={styles.sourceEmpty}><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有数据源" /><Button type="primary" onClick={openNewSource}>创建第一个数据源</Button></div>}
           </div>

@@ -1,5 +1,24 @@
 export type ReportRow = Record<string, unknown>;
 
+export interface ReportSourceTimeRange {
+  field: string;
+  start: string | null;
+  end: string | null;
+  empty: boolean;
+  partition?: string;
+}
+
+export interface ReportSourceTimeCoverage {
+  source_id: string;
+  status: 'unchecked' | 'verified' | 'failed' | 'stale';
+  checked_at?: string;
+  attempted_at?: string;
+  error?: string;
+  partition?: ReportSourceTimeRange;
+  business?: ReportSourceTimeRange;
+  continuous: false;
+}
+
 export interface ReportDataSource {
   id: string;
   name: string;

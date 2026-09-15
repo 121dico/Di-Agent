@@ -34,6 +34,15 @@
 .sourceCard { min-width: 0; min-height: 142px; display: grid; grid-template-columns: 42px minmax(0, 1fr) 16px; gap: 13px; align-items: start; padding: 18px; border: 1px solid var(--wb-border-subtle); border-radius: var(--radius-5); color: inherit; background: var(--wb-surface); box-shadow: var(--shadow-card); text-align: left; cursor: pointer; transition: border-color var(--motion-control) var(--ease-standard), box-shadow var(--motion-control) var(--ease-standard), transform var(--motion-control) var(--ease-out); }
 .sourceCard:hover { border-color: rgba(20, 119, 109, .38); box-shadow: 0 12px 28px rgba(27, 42, 50, .09); transform: translateY(-1px); }
 .sourceCard:focus-visible { outline: 2px solid var(--wb-focus); outline-offset: 2px; }
+.sourceCardShell { min-width: 0; overflow: hidden; border: 1px solid var(--wb-border-subtle); border-radius: var(--radius-5); background: var(--wb-surface); box-shadow: var(--shadow-card); }
+.sourceCardShell .sourceCard { width: 100%; border: 0; border-radius: 0; box-shadow: none; }
+.sourceCardShell .sourceCard:focus-visible { outline-offset: -3px; }
+.sourceCoverage { margin: 0 18px; padding: 12px 0 16px; border-top: 1px solid var(--wb-border-subtle); font-size: 13px; color: var(--wb-text-secondary); overflow-wrap: anywhere; }
+.sourceCoverageHead { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.sourceCoverageHead > strong { color: var(--wb-text-primary); font-weight: 600; }
+.sourceCoverage p { margin: 4px 0; line-height: 1.6; }
+.sourceCoverage small { display: block; font-size: 12px; line-height: 1.6; color: var(--wb-text-tertiary); }
+.sourceCoverage .sourceCoverageWarning { color: var(--wb-text-primary); font-weight: 550; }
 .sourceCardIcon, .sourceDetailIcon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: var(--radius-4); color: var(--wb-action); background: rgba(20, 119, 109, .09); font-size: 18px; }
 .sourceCardBody { min-width: 0; display: flex; flex-direction: column; }
 .sourceCardBody > strong { overflow: hidden; color: var(--wb-text-primary); font-size: 13px; font-weight: 680; text-overflow: ellipsis; white-space: nowrap; }

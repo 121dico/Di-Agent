@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
@@ -39,9 +40,10 @@ type ReportUserStore interface {
 }
 
 type ReportService struct {
-	store  ReportStore
-	users  ReportUserStore
-	runner *ReportRunner
+	sourceTimeMu sync.Mutex
+	store        ReportStore
+	users        ReportUserStore
+	runner       *ReportRunner
 }
 
 func NewReportService(store ReportStore, users ReportUserStore, runner *ReportRunner) *ReportService {

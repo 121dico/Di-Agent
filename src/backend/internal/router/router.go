@@ -209,6 +209,8 @@ func Setup(r *gin.Engine, deps Deps) {
 				reportRoutes.POST("/templates/apply", deps.ReportHandler.ApplyTemplate)
 				reportRoutes.POST("/sources", deps.ReportHandler.CreateSource)
 				reportRoutes.GET("/sources/:id/contract", deps.ReportHandler.GetSourceContract)
+				reportRoutes.GET("/sources/:id/time-coverage", deps.ReportHandler.SourceTimeCoverage)
+				reportRoutes.POST("/sources/:id/time-coverage", deps.ReportHandler.SourceTimeCoverage)
 				reportRoutes.PUT("/sources/:id/contract", deps.ReportHandler.SaveSourceContract)
 				reportRoutes.GET("/contracts", deps.ReportHandler.ListAgentContracts)
 				reportRoutes.GET("", deps.ReportHandler.ListDefinitions)
