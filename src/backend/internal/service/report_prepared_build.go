@@ -29,7 +29,7 @@ func (r *ReportRunner) preparedRows(ctx context.Context, report *model.ReportDef
 	seen := map[string]bool{}
 	expected := int64(-1)
 	for page := 1; page <= 100; page++ {
-		query["needPagination"], query["pageSize"], query["page"] = true, 1000, page
+		query["needPagination"], query["pageSize"], query["page"] = true, 10000, page
 		raw, err := json.Marshal(query)
 		if err != nil {
 			return nil, nil, err
@@ -97,7 +97,7 @@ func (r *ReportRunner) preparedRows(ctx context.Context, report *model.ReportDef
 		if expected > 0 && (len(result.Rows) == 0 || int64(len(rows)) > expected) {
 			return nil, nil, fmt.Errorf("%w: 聚合分页缺失", ErrReportInvalid)
 		}
-		if expected <= 0 && len(result.Rows) < 1000 && result.Pagination.PageCount <= 1 {
+		if expected <= 0 && len(result.Rows) < 10000 && result.Pagination.PageCount <= 1 {
 			return rows, ids, nil
 		}
 	}

@@ -42,6 +42,10 @@ func trustedPreparedReplay(report *model.ReportDefinition, saved *model.ReportQu
 	if query == nil {
 		return nil, ErrReportInvalid
 	}
-	query["needPagination"], query["pageSize"], query["page"] = true, 1000, int(page)
+	size, ok := decoded["pageSize"].(float64)
+	if !ok || (size != 1000 && size != 10000) {
+		return nil, ErrReportInvalid
+	}
+	query["needPagination"], query["pageSize"], query["page"] = true, int(size), int(page)
 	return query, nil
 }

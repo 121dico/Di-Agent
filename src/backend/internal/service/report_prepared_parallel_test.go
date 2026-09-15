@@ -72,19 +72,19 @@ func TestPreparedRunUsesBoundedParallelRequests(t *testing.T) {
 			t.Error("run did not finish")
 		}
 	}()
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 2; i++ {
 		select {
 		case <-connector.entered:
 		case <-time.After(time.Second):
-			t.Fatal("history still serial: four independent dates did not start")
+			t.Fatal("history still serial: two independent dates did not start")
 		}
 	}
 	select {
 	case <-connector.entered:
-		t.Fatal("more than four upstream requests")
+		t.Fatal("more than two upstream requests")
 	case <-time.After(30 * time.Millisecond):
 	}
-	if connector.peak.Load() != 4 {
+	if connector.peak.Load() != 2 {
 		t.Fatalf("peak = %d", connector.peak.Load())
 	}
 }

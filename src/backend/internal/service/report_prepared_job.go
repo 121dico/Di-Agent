@@ -44,8 +44,8 @@ func (r *ReportRunner) prepareReportHistory(ctx context.Context, report *model.R
 		sort.Sort(sort.Reverse(sort.StringSlice(directory.AvailableDates)))
 		var failed atomic.Int32
 		workers, workCtx := errgroup.WithContext(ctx)
-		// 每个日期内部串行，跨日期最多4个请求，避免无界并发压垮上游。
-		workers.SetLimit(4)
+		// 线上四路会触发上游30秒执行保护；两路配合大页聚合减少重复扫描。
+		workers.SetLimit(2)
 		cutoff := "9999-12-31"
 		if refreshDays > 0 && len(directory.AvailableDates) > 0 {
 			latest, _ := time.Parse("2006-01-02", directory.AvailableDates[0])
