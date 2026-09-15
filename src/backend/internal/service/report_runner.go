@@ -516,6 +516,9 @@ func (r *ReportRunner) Run(ctx context.Context, reportID, trigger, requestedBy s
 	if err != nil {
 		return nil, err
 	}
+	if _, ok := r.catalog.(reportPreparedStore); ok && isV12Report(report) {
+		return r.startPreparedRun(ctx, report, source, trigger, requestedBy)
+	}
 	run := &model.ReportRun{ID: uuid.NewString(), ReportID: report.ID, Trigger: trigger, Status: model.ReportRunPending, RequestedBy: requestedBy, StartedAt: r.now()}
 	if err := r.runs.StartReportRun(ctx, run); err != nil {
 		return nil, fmt.Errorf("start report run: %w", err)

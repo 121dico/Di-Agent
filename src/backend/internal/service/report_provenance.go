@@ -98,12 +98,15 @@ func (r *ReportRunner) executeV12Aggregate(ctx context.Context, report *model.Re
 	execution.DurationMS = time.Since(began).Milliseconds()
 	execution.SQL = redactReportTrace(result.SQL, source)
 	execution.QueryID = redactReportTrace(result.QueryID, source)
-	if queryErr == nil && (result.Pagination.Total > int64(len(result.Rows)) || result.Pagination.PageCount > 1 || len(result.Rows) >= 1000) {
+	if queryErr == nil && !strings.HasPrefix(key, "prepared_") && (result.Pagination.Total > int64(len(result.Rows)) || result.Pagination.PageCount > 1 || len(result.Rows) >= 1000) {
 		queryErr = fmt.Errorf("%w: 聚合结果不完整", ErrReportInvalid)
 	}
 	if queryErr == nil {
 		// 仅保存预期聚合字段，禁止意外的用户明细列进入快照。
 		allowed := map[string]bool{"dt": true, "level": true, "score_type": true, "user_count": true, "total_user_count": true, "total_order_count": true, "price_avg": true, "price_n": true, "d1_avg": true, "d1_n": true, "d2_avg": true, "d2_n": true, "d3_avg": true, "d3_n": true}
+		if strings.HasPrefix(key, "prepared_") {
+			allowed["city"] = true
+		}
 		for _, row := range result.Rows {
 			clean := map[string]any{}
 			for field, value := range row {

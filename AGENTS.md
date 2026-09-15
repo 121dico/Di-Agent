@@ -86,6 +86,13 @@ npm run test:e2e:agent            # runs e2e/agent-connect.spec.ts
 
 ## Key Architecture Facts
 
+### Persistent reporting preference (2026-09-15)
+
+- 用户明确要求：初始化和每日快照生成可以较慢，日常打开报表与切换城市、订单笔数、价敏等级必须快。
+- 报表统计计算前移到后台预计算，持久保存聚合结果、查询过程与图表对应关系；不为提速保存用户明细。
+- 已发布快照的筛选不得临时扫描上游大表；版本完整校验后原子发布，失败保留上一版。不能只延长短期缓存来宣称已完成预计算。
+- 多城市合并必须有可加性依据；不同日期的人群不能直接累加。响应速度用实测报告，不承诺未测得的毫秒级。
+
 - **Backend DI**: All dependency wiring is in `cmd/server/main.go`. Handlers receive Service interfaces, Services receive Repository interfaces. No `init()` or global state.
 - **WebSocket**: Two separate WS endpoints — `/ws?token=` for user chat and a daemon WS (token-authenticated via `config.yaml → daemon.token`). The WS hub is in `pkg/ws/`.
 - **Migrations**: Sequential numbered SQL files in `src/backend/migrations/`. Applied by `dev.sh` via `psql` or manually. No migration tool binary in the build.

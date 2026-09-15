@@ -21,6 +21,20 @@ func NewReportScheduler(reports *ReportService, runner *ReportRunner, logger *sl
 }
 
 func (s *ReportScheduler) Start(ctx context.Context) {
+	go func() {
+		reports, err := s.reports.EnabledDefinitions(ctx)
+		if err != nil {
+			s.logger.Error("list initial reports failed", "error", err)
+			return
+		}
+		for _, report := range reports {
+			if isV12Report(&report) {
+				if _, err := s.runner.Run(ctx, report.ID, "startup", ""); err != nil {
+					s.logger.Error("initialize report failed", "report_id", report.ID, "error", err)
+				}
+			}
+		}
+	}()
 	ticker := time.NewTicker(30 * time.Second)
 	go func() {
 		defer ticker.Stop()

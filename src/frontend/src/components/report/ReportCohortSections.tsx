@@ -43,7 +43,7 @@ export function ReportCohortSections({ reportId, cities, analytics, loading, err
     <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-order-cohort">
       <div className={styles.blockHead}><div><span>02</span><strong>价敏人群分布对比</strong></div></div>
       <Spin spinning={loading && !available}>
-        {available ? reportId ? <ReportOrderCountDistribution reportId={reportId} date={analytics.data_date!} cities={cities ?? []} all={allDistribution} /> : <>
+        {available ? reportId ? <ReportOrderCountDistribution reportId={reportId} date={analytics.data_date!} cities={cities ?? []} all={allDistribution} preparedGroups={analytics.order_groups} /> : <>
           {cohort && <div className={styles.metrics}>
             {metric('有订单用户数', cohort.user_count.toLocaleString('zh-CN'), '人')}
             {metric('占全量人群', `${Number(cohort.share.toFixed(2))}%`, '')}

@@ -8,6 +8,20 @@ import { ReportOrderCountDistribution } from './ReportOrderCountDistribution';
 
 vi.mock('@/api/report', () => ({ queryReportOrderCohort: vi.fn() }));
 
+it('switches prepared order groups immediately without any request', async () => {
+  vi.mocked(queryReportOrderCohort).mockReset();
+  const host = document.createElement('div'); const root = createRoot(host);
+  const cohort = (n: number) => ({user_count:n, share:0, distribution:[{level:'VERY_HIGH',user_count:n}]});
+  try {
+    await act(async () => root.render(<ReportOrderCountDistribution reportId="r" date="2026-09-14" cities={['北京市']} all={[]} preparedGroups={{all:cohort(10),'1':cohort(3)}} />));
+    act(() => {const select=host.querySelector('select')!;select.value='1';select.dispatchEvent(new Event('change',{bubbles:true}));});
+    expect(host.textContent).toContain('3 人');
+    expect(host.textContent).toContain('30.00%');
+    expect(host.textContent).not.toContain('正在查询');
+    expect(queryReportOrderCohort).not.toHaveBeenCalled();
+  } finally {act(()=>root.unmount());}
+});
+
 it('shows loading rather than an empty statistic inside the actual chart while an order group is pending', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.mocked(queryReportOrderCohort).mockReset()

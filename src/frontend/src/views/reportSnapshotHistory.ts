@@ -71,5 +71,6 @@ export async function loadStoredSnapshotHistory(
   const trend=saved.trend.filter(point=>point.dt>=start);
   publish({...saved,range,start_date:start,trend,available_dates:saved.available_dates?.filter(date=>date>=start),missing_dates:saved.missing_dates?.filter(date=>date>=start)},{completed:trend.length,total:trend.length,failed:[]});
  }
+ if (saved.prepared) return;
  await loadSnapshotHistory(query,id,range,cities,publish,active,saved);
 }

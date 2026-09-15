@@ -7,6 +7,7 @@ import { ReportOrderGradeCharts } from './ReportOrderGradeCharts';
 import styles from './ReportOrderCountDistribution.module.css';
 
 interface Props {
+  preparedGroups?: ReportAnalyticsResult['order_groups'];
   reportId: string;
   date: string;
   cities: string[];
@@ -16,7 +17,7 @@ interface Props {
 const cohortCacheTTL = 10 * 60 * 1000;
 interface CachedCohort { result: ReportAnalyticsResult; expiresAt: number }
 
-export function ReportOrderCountDistribution({ reportId, date, cities, all }: Props) {
+export function ReportOrderCountDistribution({ reportId, date, cities, all, preparedGroups }: Props) {
   const [orders, setOrders] = useState('all');
   const [retry, setRetry] = useState(0);
   const [baselineRetry, setBaselineRetry] = useState(0);
@@ -34,6 +35,7 @@ export function ReportOrderCountDistribution({ reportId, date, cities, all }: Pr
   const baselineKey = JSON.stringify([reportId, date, citiesKey, baselineRetry]);
   useEffect(() => { cache.current = { scope: scopeKey, groups: {} }; }, [scopeKey]);
   useEffect(() => {
+    if (preparedGroups) return;
     let current = true;
     setBaseline({ key: baselineKey });
     void queryReportOrderCohort(reportId, date, 'all', JSON.parse(citiesKey) as string[]).then((result) => {
@@ -45,8 +47,9 @@ export function ReportOrderCountDistribution({ reportId, date, cities, all }: Pr
       if (current) setBaseline({ key: baselineKey, error: '全部有订单人群的同等级基数查询失败，暂不展示同等级占比。' });
     });
     return () => { current = false; };
-  }, [reportId, date, citiesKey, baselineKey]);
+  }, [reportId, date, citiesKey, baselineKey, preparedGroups]);
   useEffect(() => {
+    if (preparedGroups) return;
     if (orders === 'all') return;
     let current = true;
     const entry = cache.current.groups[orders];
@@ -61,12 +64,12 @@ export function ReportOrderCountDistribution({ reportId, date, cities, all }: Pr
       if (current) setState({ key, error: '该组人群查询失败，请重试；未使用旧数据或样本替代。' });
     });
     return () => { current = false; };
-  }, [reportId, date, orders, citiesKey, key]);
+  }, [reportId, date, orders, citiesKey, key, preparedGroups]);
   // TTL 只用于下一次切换的复用决策；已展示结果不能因无关重渲染凭空变成加载中。
-  const baselineResult = baseline.key === baselineKey ? baseline.result : cached('all');
-  const baselineError = baseline.key === baselineKey ? baseline.error : undefined;
-  const result = orders === 'all' ? baselineResult : state.key === key ? state.result : cached(orders);
-  const error = orders === 'all' ? undefined : state.key === key ? state.error : undefined;
+  const baselineResult = preparedGroups ? { order_cohort: preparedGroups.all } : baseline.key === baselineKey ? baseline.result : cached('all');
+  const baselineError = preparedGroups ? undefined : baseline.key === baselineKey ? baseline.error : undefined;
+  const result = preparedGroups ? { order_cohort: preparedGroups[orders] } : orders === 'all' ? baselineResult : state.key === key ? state.result : cached(orders);
+  const error = preparedGroups || orders === 'all' ? undefined : state.key === key ? state.error : undefined;
   const label = orders === 'all' ? '全部有订单人群' : orders === 'gt10' ? '超过 10 笔订单人群' : `${orders} 笔订单人群`;
   const cohort = result?.order_cohort;
   return <div>
@@ -74,7 +77,7 @@ export function ReportOrderCountDistribution({ reportId, date, cities, all }: Pr
       <label>订单笔数 <select aria-label="订单笔数" value={orders} onChange={(event) => {
         setOrders(event.target.value);
         // 切换时检查分母有效期；过期后也必须更新 all，不能和新分子混算。
-        if (baseline.key === baselineKey && baseline.result && !cached('all')) setBaselineRetry((value) => value + 1);
+        if (!preparedGroups && baseline.key === baselineKey && baseline.result && !cached('all')) setBaselineRetry((value) => value + 1);
       }}>
         <option value="all">全部有订单</option>
         {Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={String(i + 1)}>{i + 1} 笔</option>)}

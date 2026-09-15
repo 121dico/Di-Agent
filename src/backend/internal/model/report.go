@@ -227,24 +227,26 @@ type ReportAnalyticsCohort struct {
 
 // ReportAnalyticsResult 是固定价敏报表按时间范围聚合后的指标与图表数据。
 type ReportAnalyticsResult struct {
-	ExecutionIDs   []string                      `json:"execution_ids,omitempty"`
-	AvailableDates []string                      `json:"available_dates,omitempty"`
-	CountingBasis  string                        `json:"counting_basis,omitempty"`
-	OrderCohort    *ReportAnalyticsCohort        `json:"order_cohort,omitempty"`
-	Profile        string                        `json:"profile,omitempty"`
-	DataDate       string                        `json:"data_date,omitempty"`
-	FetchedAt      string                        `json:"fetched_at,omitempty"`
-	QueryIDs       []string                      `json:"query_ids,omitempty"`
-	MissingDates   []string                      `json:"missing_dates,omitempty"`
-	AssignedByType map[string]int64              `json:"assigned_by_type,omitempty"`
-	Range          string                        `json:"range"`
-	StartDate      string                        `json:"start_date"`
-	EndDate        string                        `json:"end_date"`
-	Cached         bool                          `json:"cached"`
-	Summary        ReportAnalyticsSummary        `json:"summary"`
-	Trend          []ReportAnalyticsTrendPoint   `json:"trend"`
-	Distribution   []ReportAnalyticsDistribution `json:"distribution"`
-	DurationMS     int64                         `json:"duration_ms"`
+	Prepared       bool                              `json:"prepared,omitempty"`
+	OrderGroups    map[string]*ReportAnalyticsCohort `json:"order_groups,omitempty"`
+	ExecutionIDs   []string                          `json:"execution_ids,omitempty"`
+	AvailableDates []string                          `json:"available_dates,omitempty"`
+	CountingBasis  string                            `json:"counting_basis,omitempty"`
+	OrderCohort    *ReportAnalyticsCohort            `json:"order_cohort,omitempty"`
+	Profile        string                            `json:"profile,omitempty"`
+	DataDate       string                            `json:"data_date,omitempty"`
+	FetchedAt      string                            `json:"fetched_at,omitempty"`
+	QueryIDs       []string                          `json:"query_ids,omitempty"`
+	MissingDates   []string                          `json:"missing_dates,omitempty"`
+	AssignedByType map[string]int64                  `json:"assigned_by_type,omitempty"`
+	Range          string                            `json:"range"`
+	StartDate      string                            `json:"start_date"`
+	EndDate        string                            `json:"end_date"`
+	Cached         bool                              `json:"cached"`
+	Summary        ReportAnalyticsSummary            `json:"summary"`
+	Trend          []ReportAnalyticsTrendPoint       `json:"trend"`
+	Distribution   []ReportAnalyticsDistribution     `json:"distribution"`
+	DurationMS     int64                             `json:"duration_ms"`
 }
 
 // ReportDailyAnalytics 是每日 10 点逐日积累的价敏聚合快照。

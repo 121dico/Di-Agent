@@ -59,6 +59,9 @@ func (r *ReportRunner) queryV12Analytics(ctx context.Context, report *model.Repo
 		return nil, fmt.Errorf("%w: 城市筛选最多支持50项", ErrReportInvalid)
 	}
 	sort.Strings(cities)
+	if _, ok := r.catalog.(reportPreparedStore); ok && !option.ForceRefresh {
+		return r.readPreparedAnalytics(ctx, report, source, contract, base, cities)
+	}
 	if base.Range == "saved" {
 		return r.savedV12History(ctx, report, source, base, cities)
 	}

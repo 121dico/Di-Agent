@@ -79,6 +79,8 @@ export interface ReportAnalyticsTrendPoint {
 }
 
 export interface ReportAnalyticsResult {
+  prepared?: boolean;
+  order_groups?: Record<string, NonNullable<ReportAnalyticsResult['order_cohort']>>;
   execution_ids?: string[];
   available_dates?: string[];
   counting_basis?: string;

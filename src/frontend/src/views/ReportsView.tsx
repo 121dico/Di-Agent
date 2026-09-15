@@ -595,7 +595,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
       setAppliedCities((current) => JSON.stringify(current) === JSON.stringify(draftCities) ? current : draftCities);
       setAppliedProvinceCodes((current) => JSON.stringify(current) === JSON.stringify(draftProvinceCodes) ? current : draftProvinceCodes);
       setAppliedDashboardRange(draftDashboardRange);
-    }, 500);
+    }, 25);
     return () => window.clearTimeout(timer);
   }, [draftFilterKey]);
 
@@ -629,7 +629,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
         setAnalytics(await queryReportAnalytics(selectedId, appliedDashboardRange === 'all' ? '31d' : appliedDashboardRange, completedRun.source_partition, expandedAppliedCities));
         setAnalyticsError('');
       }
-      message.success(isV12 ? '最新快照已刷新，所选 dt 历史正在逐日加载' : '报表生成完成');
+      message.success(isV12 ? '后台预计算已提交，完成后刷新报表查看' : '报表生成完成');
     } catch (error: unknown) {
       setRuns(await listReportRuns(selectedId).catch(() => []));
       message.error(error instanceof Error ? error.message : '报表生成失败');

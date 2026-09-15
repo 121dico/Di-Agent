@@ -73,6 +73,17 @@ func (r *ReportRunner) QueryOrderCohort(ctx context.Context, reportID, date, ord
 			return nil, err
 		}
 	}
+	if _, ok := r.catalog.(reportPreparedStore); ok {
+		result, err := r.readPreparedAnalytics(ctx, report, source, contract, base, cities)
+		if err != nil {
+			return nil, err
+		}
+		if result.DataDate != date || result.OrderGroups[orders] == nil {
+			return nil, fmt.Errorf("%w: 该日期正在后台初始化", ErrReportInvalid)
+		}
+		result.OrderCohort = result.OrderGroups[orders]
+		return result, nil
+	}
 	// 撤销字段权限先于缓存；配置变化自动隔离旧结果。
 	keyJSON, err := json.Marshal([]any{"order-count-v1", report, source, contract.Fields, date, orders, cities})
 	if err != nil {
