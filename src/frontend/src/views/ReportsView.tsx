@@ -808,7 +808,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
           <div className={styles.railFoot}><span>DATA UPDATE</span><strong>{latestTime}</strong></div>
         </aside>
 
-        <div className={styles.dashboard}>
+        <div className={`${styles.dashboard} ${isV12 ? styles.v12Dashboard : ''}`}>
           {selected ? <>
             <section className={styles.summaryHero}>
               <div>
@@ -866,14 +866,17 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
                   </div>
                 </div>
               </div>
-              <div className={styles.filterMap}>
+              {isV12 ? <details className={styles.regionDetails}>
+                <summary>地图选择区域{draftProvinceCodes.length > 0 ? ` · 已选 ${draftProvinceCodes.length} 个区域` : ''}</summary>
+                <div className={styles.filterMap}><ChinaRegionPicker value={draftCities} onChange={setDraftCities} provinceCodes={draftProvinceCodes} onProvinceChange={setDraftProvinceCodes} /></div>
+              </details> : <div className={styles.filterMap}>
                 <ChinaRegionPicker
                   value={draftCities}
                   onChange={setDraftCities}
                   provinceCodes={draftProvinceCodes}
                   onProvinceChange={setDraftProvinceCodes}
                 />
-              </div>
+              </div>}
               <div className={styles.filterActions}>
                 <small>当前查看：{appliedCityLabel} · {selectedRangeLabel}</small>
                 <Button icon={<ReloadOutlined />} onClick={resetDashboardFilters}>重置</Button>

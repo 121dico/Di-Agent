@@ -38,7 +38,7 @@ function snapshotGrowth(analytics: ReportAnalyticsResult) {
   };
 }
 
-export function SnapshotGrowthMetrics({ analytics }: { analytics: ReportAnalyticsResult }) {
+export function SnapshotGrowthMetrics({ analytics, compact = false }: { analytics: ReportAnalyticsResult; compact?: boolean }) {
   const growth = snapshotGrowth(analytics);
   const format = (value: number, percent = false) => Number.isFinite(value) ? `${!percent && value > 0 ? '+' : ''}${percent ? Number(value.toFixed(2)) : Math.round(value).toLocaleString('zh-CN')}` : '—';
   const metrics = [
@@ -47,7 +47,7 @@ export function SnapshotGrowthMetrics({ analytics }: { analytics: ReportAnalytic
     { label: '日均净增', value: growth.average },
     { label: '价敏赋分覆盖率', value: growth.coverage, percent: true },
   ];
-  return <>{metrics.map((item) => <article key={item.label} className={styles.metricCard} data-direction={item.value > 0 ? 'up' : item.value < 0 ? 'down' : 'flat'}>
+  return <>{(compact ? metrics.slice(0, 3) : metrics).map((item) => <article key={item.label} className={styles.metricCard} data-direction={item.value > 0 ? 'up' : item.value < 0 ? 'down' : 'flat'}>
     <span>{item.label}</span><strong>{format(item.value, item.percent)}<small>{Number.isFinite(item.value) ? item.percent ? '%' : '人' : ''}</small></strong>
   </article>)}</>;
 }

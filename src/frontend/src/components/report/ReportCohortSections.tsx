@@ -5,7 +5,8 @@ import { presentSensitivityDistribution } from '@/views/reportPresentation';
 import styles from '@/views/ReportsView.module.css';
 import local from './ReportCohortSections.module.css';
 import { ReportSnapshotTrends, type SnapshotChartRenderer } from './ReportSnapshotTrends';
-import { ReportSnapshotGrowth, SnapshotGrowthMetrics } from './ReportSnapshotGrowth';
+import { ReportSnapshotGrowth } from './ReportSnapshotGrowth';
+import { ReportOverview } from './ReportOverview';
 import { ReportCohortComparison } from './ReportCohortComparison';
 import { ReportOrderCountDistribution } from './ReportOrderCountDistribution';
 
@@ -31,16 +32,11 @@ export function ReportCohortSections({ reportId, cities, analytics, loading, err
   const metric = (label: string, value: string, suffix: string) => <article className={styles.metricCard}><span>{label}</span><strong>{value}<small>{suffix}</small></strong></article>;
 
   return <>
-    <section className={`${styles.summaryBlock} ${styles.overviewBlock}`} id="report-overview">
+    <section className={`${styles.summaryBlock} ${styles.fullWidthBlock}`} id="report-overview">
       {error && <Alert type="warning" showIcon message={available ? '部分 dt 统计失败，已保留成功数据' : '统计数据暂未生成'} description={error} />}
       <div className={styles.blockHead}><div><span>01</span><strong>指标概览 · 全量人群</strong></div><small>标签快照 {analytics?.data_date || '—'}</small></div>
       <Spin spinning={loading && !available}>
-        {available ? <>
-          <div className={styles.metrics}>
-            {metric('已赋价敏分用户', analytics.summary.calculated_user_count.toLocaleString('zh-CN'), '人')}
-            <SnapshotGrowthMetrics analytics={analytics} />
-          </div>
-        </> : <Empty description="尚无可用统计" />}
+        {available ? <ReportOverview analytics={analytics} /> : <Empty description="尚无可用统计" />}
       </Spin>
     </section>
 

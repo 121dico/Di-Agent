@@ -22,6 +22,6 @@ it('does not place two report sections in the same explicit desktop grid row', (
     const sections = [...host.querySelectorAll(':scope > section')];
     const occupied = sections.map((section) => getComputedStyle(section).gridRow).filter((row) => row && row !== 'auto');
     expect(new Set(occupied).size).toBe(occupied.length);
-    expect(sections.slice(0,4).map((section) => section.id)).toEqual(['report-overview', 'report-increments', 'report-order-cohort', 'report-trend']);
+    expect(sections.slice(0,4).map((section) => section.id)).toEqual(['report-overview', 'report-order-cohort', 'report-increments', 'report-trend']);
   } finally { host.remove(); style.remove(); }
 });

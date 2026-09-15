@@ -163,6 +163,33 @@
 .overviewBlock .metricCard:nth-child(2n) { border-right: 0; }
 .overviewBlock .metricCard:nth-last-child(-n + 2) { border-bottom: 0; }
 
+/* V1.2 占满报表宽度；旧版仍保持原侧栏筛选。 */
+.dashboard.v12Dashboard { grid-template-columns: minmax(0, 1fr); }
+.v12Dashboard .filterDock { grid-column: 1 / -1; grid-row: auto; grid-template-columns: minmax(0, 1fr) auto; gap: 12px 20px; margin-bottom: 22px; padding: 16px 20px; }
+.v12Dashboard .filterIntro { grid-column: 1 / -1; border-bottom: 0; padding-bottom: 0; }
+.v12Dashboard .filterIntro > span { display: none; }
+.v12Dashboard .filterFields { grid-column: 1; grid-row: 2; grid-template-columns: minmax(200px, .8fr) minmax(0, 1.2fr); align-items: end; gap: 20px; }
+.v12Dashboard .filterActions { grid-column: 2; grid-row: 2; grid-template-columns: auto auto; align-content: end; }
+.v12Dashboard .filterActions small { max-width: 280px; font-size: 12px; }
+.v12Dashboard .rangeControl { gap: 14px; flex-wrap: wrap; }
+.v12Dashboard .rangeControl button { min-height: 36px; white-space: nowrap; }
+.regionDetails { grid-column: 1 / -1; min-width: 0; color: var(--text-2); font-size: 13px; }
+.regionDetails > summary { width: fit-content; cursor: pointer; padding: 4px 0; }
+.regionDetails > summary:focus-visible { outline: 2px solid var(--wb-focus); outline-offset: 3px; border-radius: var(--radius-2); }
+.regionDetails > .filterMap { max-width: 680px; margin-top: 12px; }
+@media (max-width: 1100px) {
+  .v12Dashboard .filterDock { grid-template-columns: minmax(0, 1fr); }
+  .v12Dashboard .filterActions { grid-column: 1; grid-row: 3; display: flex; flex-wrap: wrap; align-items: center; }
+  .v12Dashboard .filterActions small { flex: 1 1 250px; max-width: none; }
+  .v12Dashboard .filterActions :global(.ant-btn) { width: auto; }
+}
+@media (max-width: 650px) {
+  .v12Dashboard .filterDock { padding: 14px; }
+  .v12Dashboard .filterFields { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .v12Dashboard .filterActions small { white-space: normal; }
+  .v12Dashboard .rangeControl { gap: 12px; }
+}
+
 .card, .emptyCard { border: 1px solid var(--wb-border-subtle); border-radius: var(--radius-5); background: var(--wb-surface); }
 .card { min-width: 0; padding: 18px; }
 .emptyCard { min-height: 156px; display: grid; place-items: center; padding: 28px; }
