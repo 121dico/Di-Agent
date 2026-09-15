@@ -10,6 +10,8 @@
 
 ## P0
 
+- [x] [城市与订单档位持久预计算](task/report-prepared-snapshots.md)：已上线，最新日全部城市/订单档位验证通过；首次历史补齐后台继续。
+
 - [x] [订单人数与同等级占比柱图](task/report-order-grade-charts.md)：复用订单筛选结果，等级多选，人数和比例分别显示。
 - [~] [地图常驻与自动筛选](task/report-map-filters.md)：城市和时间自动应用，地图比例修正，省市条件联动。
 - [~] [报表筛选与文案精简](task/report-region-filter-compact.md)：左侧搜索及推荐城市、右侧紧凑地图；删除时间控件和解释注释，浏览器验收中。
