@@ -630,8 +630,14 @@ func validateQueryContractLevel(query map[string]any, available map[string]model
 			return fmt.Errorf("%w: orderBy 格式错误", ErrReportInvalid)
 		}
 		if name = strings.TrimSpace(name); name != "" {
-			if _, err := requireReportFieldCapabilityWithOutputs(available, outputs, name, "sort"); err != nil {
-				return err
+			for _, part := range strings.Split(name, ",") {
+				field, _, err := normalizeReportOrderBy(strings.TrimSpace(part))
+				if err != nil || field == "" {
+					return fmt.Errorf("%w: orderBy 格式错误", ErrReportInvalid)
+				}
+				if _, err := requireReportFieldCapabilityWithOutputs(available, outputs, field, "sort"); err != nil {
+					return err
+				}
 			}
 		}
 	}
