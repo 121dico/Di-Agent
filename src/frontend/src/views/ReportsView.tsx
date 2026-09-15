@@ -607,8 +607,8 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
   useEffect(() => {
     const timer = window.setTimeout(() => {
       if (expandChinaRegionSelection(draftCities, draftProvinceCodes).length > 50) return;
-      setAppliedCities(draftCities);
-      setAppliedProvinceCodes(draftProvinceCodes);
+      setAppliedCities((current) => JSON.stringify(current) === JSON.stringify(draftCities) ? current : draftCities);
+      setAppliedProvinceCodes((current) => JSON.stringify(current) === JSON.stringify(draftProvinceCodes) ? current : draftProvinceCodes);
       setAppliedDashboardRange(draftDashboardRange);
     }, 500);
     return () => window.clearTimeout(timer);

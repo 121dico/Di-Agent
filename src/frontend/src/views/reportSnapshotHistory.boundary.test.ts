@@ -6,7 +6,7 @@ const daily = (date: string): ReportAnalyticsResult => ({
   data_date: date, trend: [{ dt: date }], summary: { total_user_count: 123 },
 } as ReportAnalyticsResult);
 
-it('limits the week to latest available dt and preserves the selected cities on every API query', async () => {
+it('uses the global partition directory but preserves selected cities on daily queries within the week', async () => {
   const requests: { range: string; end?: string; cities?: string[] }[] = [];
   const updates: (ReportAnalyticsResult | null)[] = [];
   await loadSnapshotHistory(async (_id, range, end, cities) => {
@@ -14,7 +14,7 @@ it('limits the week to latest available dt and preserves the selected cities on 
     return range === 'dates' ? { available_dates: ['2026-08-31', '2026-09-03', '2026-09-09', '2026-09-09'] } as ReportAnalyticsResult : daily(end!);
   }, 'report', '7d', ['北京', '上海'], (result) => updates.push(result));
   expect(requests).toEqual([
-    { range: 'dates', end: undefined, cities: ['北京', '上海'] },
+    { range: 'dates', end: undefined, cities: [] },
     { range: '1d', end: '2026-09-09', cities: ['北京', '上海'] },
     { range: '1d', end: '2026-09-03', cities: ['北京', '上海'] },
   ]);

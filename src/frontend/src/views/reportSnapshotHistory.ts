@@ -14,7 +14,9 @@ export async function loadSnapshotHistory(
   active: () => boolean = () => true,
   retained?: ReportAnalyticsResult,
 ): Promise<void> {
-  const directory = await query(id, 'dates', undefined, cities);
+  // 日期目录是全表分区元数据；按城市扫描一年目录会触发上游资源限制。
+  // 人数/分布查询仍逐日携带城市条件，不复用全国统计。
+  const directory = await query(id, 'dates', undefined, []);
   if (!active()) return;
   const available = [...new Set(directory.available_dates ?? [])].filter(date => date >= FIRST_RELIABLE_SNAPSHOT).sort();
   const end = available[available.length - 1];

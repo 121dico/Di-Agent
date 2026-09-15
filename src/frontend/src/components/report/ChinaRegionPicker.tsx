@@ -111,6 +111,8 @@ export const ChinaRegionMapPanel: React.FC<ChinaRegionMapPanelProps> = ({ value,
     const provinceCode = findProvinceCodeForCity(city);
     if (selectedProvinceCodes.includes(provinceCode)) {
       updateProvinceCodes(selectedProvinceCodes.filter((code) => code !== provinceCode));
+      onChange(isCitySelected(value, city) ? value : [...value, city]);
+      return;
     }
     onChange(toggleValue(value, city));
   };

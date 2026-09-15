@@ -48,6 +48,20 @@ describe('ChinaRegionMapPanel', () => {
     expect(onChange).toHaveBeenCalledWith(['石家庄市']);
   });
 
+  it('keeps an existing city when narrowing its selected province back to that city', () => {
+    const Harness = () => {
+      const [cities, setCities] = useState<string[]>(['杭州市']);
+      const [provinces, setProvinces] = useState<string[]>([]);
+      return <><ChinaRegionMapPanel value={cities} onChange={setCities} provinceCodes={provinces} onProvinceChange={setProvinces} />
+        <output>{expandChinaRegionSelection(cities, provinces).join(',')}</output></>;
+    };
+    act(() => root.render(<Harness />));
+    act(() => container.querySelector('[aria-label="选择浙江省"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(container.querySelector('output')?.textContent).toContain('宁波市');
+    act(() => container.querySelector('[aria-label="选择杭州市"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(container.querySelector('output')?.textContent).toBe('杭州市');
+  });
+
   it('selects a municipality as a province without selecting its city value', () => {
     const onChange = vi.fn();
     const onProvinceChange = vi.fn();

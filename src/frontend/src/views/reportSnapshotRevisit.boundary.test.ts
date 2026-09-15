@@ -19,7 +19,7 @@ it('falls back to real daily data when no saved report exists, retaining the cit
   const calls: string[] = [];
   const published: (ReportAnalyticsResult | null)[] = [];
   await loadStoredSnapshotHistory(async (_id, range, date, cities) => {
-    expect(cities).toEqual(['北京']);
+    expect(cities).toEqual(range === 'dates' ? [] : ['北京']);
     calls.push(range);
     if (range === 'saved') return { trend: [] } as unknown as ReportAnalyticsResult;
     if (range === 'dates') return { available_dates: ['2026-09-09'] } as ReportAnalyticsResult;
