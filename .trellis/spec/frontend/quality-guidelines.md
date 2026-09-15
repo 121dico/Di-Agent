@@ -39,6 +39,11 @@
 ### Required Tests
 - 配置保存类 store 需要覆盖 stale fetch 场景：先发起旧列表请求，再保存配置，最后旧请求返回时不得覆盖保存后的字段
 
+### Cohort percentage denominators
+- Keep within-cohort share separate from same-grade share: `selectedGradeCount / selectedTotal` versus `selectedGradeCount / allOrdersGradeCount`.
+- The latter denominator must come from `order-cohort?orders=all` for the same report, snapshot and cities, never the registered-population comparison chart. Hide/show of a legend must not change either denominator.
+- Unknown, failed or zero denominators render an unavailable marker, not a fabricated zero percentage. Scope changes must invalidate numerator and denominator together; cover delayed old responses and baseline-only retry through the public component seam.
+
 ### 内网 HTTP 剪贴板兼容
 
 - 局域网 IP 的 HTTP 页面不是安全上下文，复制功能不能只依赖 `navigator.clipboard.writeText`。

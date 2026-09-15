@@ -7,7 +7,7 @@ const colors: Record<string, string> = { 极高价敏: '#A63437', 高价敏: '#D
 const count = (value: number) => value.toLocaleString('zh-CN');
 const compactCount = (value: number) => value >= 100000000 ? `${Number((value / 100000000).toFixed(2))}亿` : value >= 10000 ? `${Number((value / 10000).toFixed(1))}万` : count(value);
 
-export function ReportCohortComparison({ all, orders, ordersLabel = '有订单人群', precision = 1 }: { all: Item[]; orders: Item[] | null; ordersLabel?: string; precision?: number }) {
+export function ReportCohortComparison({ all, orders, ordersLabel = '有订单人群', precision = 1, orderGradeTotals }: { all: Item[]; orders: Item[] | null; ordersLabel?: string; precision?: number; orderGradeTotals?: Item[] | null }) {
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
   const [active, setActive] = useState<string | null>(null);
   const groups = [{ key: 'all', title: '全量人群', items: all }, { key: 'orders', title: ordersLabel, items: orders }];
@@ -42,7 +42,7 @@ export function ReportCohortComparison({ all, orders, ordersLabel = '有订单�
       </section>;
     })}</div>
     <div className={styles.legend}>
-      <table><thead><tr><th scope="col">价敏等级</th><th scope="col">全量人群</th><th scope="col">{ordersLabel}</th></tr></thead><tbody>{labels.map((label) => <tr key={label}>
+      <table><thead><tr><th scope="col">价敏等级</th><th scope="col">全量人群</th><th scope="col">{ordersLabel}{orderGradeTotals !== undefined && <small>人数 · 组内占比</small>}</th>{orderGradeTotals !== undefined && <th scope="col">占同等级总人数</th>}</tr></thead><tbody>{labels.map((label) => <tr key={label}>
         <th scope="row"><svg width="10" height="10" aria-hidden="true"><circle cx="5" cy="5" r="5" fill={colors[label] ?? '#8B8E95'} /></svg>{label}</th>
         {groups.map((group, index) => {
           const value = group.items?.find((item) => item.label === label)?.value ?? 0;
@@ -53,6 +53,11 @@ export function ReportCohortComparison({ all, orders, ordersLabel = '有订单�
             <strong>{count(value)} 人</strong><span>{(total ? value / total * 100 : 0).toFixed(precision)}%</span>
           </button> : '—'}</td>;
         })}
+        {orderGradeTotals !== undefined && <td className={styles.gradeShare}>{(() => {
+          const denominator = orderGradeTotals?.find((item) => item.label === label)?.value;
+          const numerator = orders?.find((item) => item.label === label)?.value ?? 0;
+          return orders && denominator !== undefined && Number.isFinite(denominator) && denominator > 0 && Number.isFinite(numerator) && numerator >= 0 && numerator <= denominator ? `${(numerator / denominator * 100).toFixed(precision)}%` : '—';
+        })()}</td>}
       </tr>)}</tbody></table>
     </div>
   </div>;

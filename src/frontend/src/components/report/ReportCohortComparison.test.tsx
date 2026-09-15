@@ -5,6 +5,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it, vi } from 'vitest';
 import { ReportCohortComparison } from './ReportCohortComparison';
 
+it('marks inconsistent same-grade bases unavailable instead of showing more than 100 percent', () => {
+  const host = document.createElement('div');
+  host.innerHTML = renderToStaticMarkup(<ReportCohortComparison all={[]} orders={[{ label: '高价敏', value: 20 }]} orderGradeTotals={[{ label: '高价敏', value: 10 }]} precision={2} />);
+  expect(host.querySelector('tbody tr td:last-child')?.textContent).toBe('—');
+  expect(host.textContent).not.toContain('200.00%');
+});
+
 it('formats hundreds of millions as 亿 and shows exact sector counts on hover without changing the other ring', () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   const container = document.createElement('div');

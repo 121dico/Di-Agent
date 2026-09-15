@@ -9,7 +9,9 @@
 .chart .readout { min-height: 44px; margin: 8px 0 0; font-size: 13px; line-height: 22px; color: var(--wb-text-primary); font-variant-numeric: tabular-nums; }
 .sector { cursor: pointer; transition: stroke-width 160ms ease, stroke 160ms ease; }
 .sector:focus-visible { outline: none; stroke-width: 37px; }
-.legend { min-width: 0; }
+.legend { min-width: 0; overflow-x: auto; }
+.legend small { display: block; margin-top: 4px; font-weight: 400; }
+.gradeShare { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--wb-text-primary); }
 .legend table { border-collapse: collapse; width: 100%; font-size: 13px; }
 .legend th { text-align: left; font-weight: 600; white-space: nowrap; }
 .legend th svg { margin-right: 7px; }
