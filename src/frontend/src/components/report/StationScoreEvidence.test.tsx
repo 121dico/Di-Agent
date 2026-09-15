@@ -37,7 +37,8 @@ it('requires an administrator and single station, then opens real evidence with 
   expect(host.textContent).not.toContain('23.279999');
   expect(host.textContent).toContain('未提供');
   expect(host.textContent).toContain('价格加权贡献最大');
-  expect(host.textContent).toContain('用于对照，未核验线上版本');
+  expect(host.textContent).not.toContain('用于对照，未核验线上版本');
+  expect(host.textContent).not.toContain('查询于');
   expect(host.textContent).not.toContain('长期用户');
 });
 
