@@ -1,0 +1,26 @@
+.section { margin: 20px 0; padding: 20px; border: 1px solid var(--wb-border-subtle); border-radius: 12px; background: var(--wb-surface); color: var(--wb-text-primary); }
+.header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.header h3 { margin: 0; font-size: 16px; }
+.header span, .readout { color: var(--wb-text-secondary); font-size: 14px; }
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin: 18px 0; padding: 0; border: 0; font-size: 14px; }
+.filters legend { margin-bottom: 10px; color: var(--wb-text-secondary); }
+.filters label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.filters input { accent-color: var(--wb-text-primary); }
+.filters button { border: 1px solid var(--wb-border-subtle); background: var(--wb-surface); color: var(--wb-text-primary); border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+.filters input:focus-visible, .filters button:focus-visible { outline: 2px solid #326fda; outline-offset: 3px; }
+.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.chart { min-width: 0; border: 1px solid var(--wb-border-subtle); border-radius: 12px; padding: 16px 10px 4px; }
+.chart h4 { display: flex; justify-content: space-between; gap: 12px; margin: 0 8px 10px; font-size: 16px; }
+.chart h4 span { color: var(--wb-text-secondary); font-size: 14px; font-weight: 400; }
+.scroll { overflow-x: auto; }
+.plot { display: block; width: 100%; min-width: 490px; animation: appear 120ms ease-out; }
+.grid { stroke: var(--wb-border-subtle); stroke-dasharray: 3 5; }
+.axis, .number { fill: var(--wb-text-secondary); font-size: 14px; font-variant-numeric: tabular-nums; }
+.number { fill: var(--wb-text-primary); font-size: 12px; }
+.bar { cursor: pointer; }
+.bar:focus-visible { outline: 2px solid #326fda; outline-offset: 2px; }
+.readout { min-height: 22px; margin: 14px 0 0; font-variant-numeric: tabular-nums; }
+.empty { padding: 36px 0; text-align: center; color: var(--wb-text-secondary); }
+@keyframes appear { from { opacity: 0; } to { opacity: 1; } }
+@media (max-width: 900px) { .charts { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .plot { animation: none; } }
