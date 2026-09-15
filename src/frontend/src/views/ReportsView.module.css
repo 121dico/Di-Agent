@@ -176,7 +176,7 @@
 .regionDetails { grid-column: 1 / -1; min-width: 0; color: var(--text-2); font-size: 13px; }
 .regionDetails > summary { width: fit-content; cursor: pointer; padding: 4px 0; }
 .regionDetails > summary:focus-visible { outline: 2px solid var(--wb-focus); outline-offset: 3px; border-radius: var(--radius-2); }
-.regionDetails > .filterMap { max-width: 680px; margin-top: 12px; }
+.regionDetails > .filterMap { width: 100%; max-width: 900px; margin-top: 10px; }
 @media (max-width: 1100px) {
   .v12Dashboard .filterDock { grid-template-columns: minmax(0, 1fr); }
   .v12Dashboard .filterActions { grid-column: 1; grid-row: 3; display: flex; flex-wrap: wrap; align-items: center; }

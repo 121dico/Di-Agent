@@ -3,7 +3,7 @@
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ChinaRegionMapPanel } from './ChinaRegionPicker';
+import { ChinaRegionMapPanel, expandChinaRegionSelection } from './ChinaRegionPicker';
 
 describe('ChinaRegionMapPanel', () => {
   let container: HTMLDivElement;
@@ -18,6 +18,19 @@ describe('ChinaRegionMapPanel', () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+  });
+
+  it('narrows a selected province to the chosen city instead of retaining the whole province', () => {
+    const Harness = () => {
+      const [cities, setCities] = useState<string[]>([]);
+      const [provinces, setProvinces] = useState<string[]>([]);
+      return <><ChinaRegionMapPanel value={cities} onChange={setCities} provinceCodes={provinces} onProvinceChange={setProvinces} />
+        <output>{expandChinaRegionSelection(cities, provinces).join(',')}</output></>;
+    };
+    act(() => root.render(<Harness />));
+    act(() => container.querySelector('[aria-label="选择浙江省"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    act(() => container.querySelector('[aria-label="选择杭州市"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(container.querySelector('output')?.textContent).toBe('杭州市');
   });
 
   it('opens a province and returns the selected city through the public callback', () => {

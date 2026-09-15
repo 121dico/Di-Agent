@@ -592,11 +592,27 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
   };
 
   const applyDashboardFilters = () => {
+    if (expandChinaRegionSelection(draftCities, draftProvinceCodes).length > 50) {
+      message.warning('单次最多查询50个城市，请减少已选区域');
+      return;
+    }
     setAppliedCities(draftCities);
     setAppliedProvinceCodes(draftProvinceCodes);
     setAppliedDashboardRange(draftDashboardRange);
     message.success(draftCities.length > 0 || draftProvinceCodes.length > 0 ? '区域与时间筛选已应用' : '已切换为全部城市');
   };
+
+  // 地图多选合并为一次查询；旧请求由 analytics effect 的 active 标记隔离。
+  const draftFilterKey = JSON.stringify([selectedId, draftCities, draftProvinceCodes, draftDashboardRange]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (expandChinaRegionSelection(draftCities, draftProvinceCodes).length > 50) return;
+      setAppliedCities(draftCities);
+      setAppliedProvinceCodes(draftProvinceCodes);
+      setAppliedDashboardRange(draftDashboardRange);
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [draftFilterKey]);
 
   const resetDashboardFilters = () => {
     setDraftCities([]);
@@ -866,10 +882,10 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
                   </div>
                 </div>
               </div>
-              {isV12 ? <details className={styles.regionDetails}>
-                <summary>地图选择区域{draftProvinceCodes.length > 0 ? ` · 已选 ${draftProvinceCodes.length} 个区域` : ''}</summary>
+              {isV12 ? <section className={styles.regionDetails} aria-label="地图选择区域">
+                <strong>地图选择区域{draftProvinceCodes.length > 0 ? ` · 已选 ${draftProvinceCodes.length} 个区域` : ''}</strong>
                 <div className={styles.filterMap}><ChinaRegionPicker value={draftCities} onChange={setDraftCities} provinceCodes={draftProvinceCodes} onProvinceChange={setDraftProvinceCodes} /></div>
-              </details> : <div className={styles.filterMap}>
+              </section> : <div className={styles.filterMap}>
                 <ChinaRegionPicker
                   value={draftCities}
                   onChange={setDraftCities}
@@ -878,6 +894,8 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
                 />
               </div>}
               <div className={styles.filterActions}>
+                {expandChinaRegionSelection(draftCities, draftProvinceCodes).length > 50 && <small role="alert">最多50个城市，请减少已选区域</small>}
+                <small>选择区域或时间后自动应用</small>
                 <small>当前查看：{appliedCityLabel} · {selectedRangeLabel}</small>
                 <Button icon={<ReloadOutlined />} onClick={resetDashboardFilters}>重置</Button>
                 <Button type="primary" icon={<FilterOutlined />} onClick={applyDashboardFilters}>应用筛选</Button>

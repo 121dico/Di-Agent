@@ -107,6 +107,11 @@ export const ChinaRegionMapPanel: React.FC<ChinaRegionMapPanelProps> = ({ value,
       return;
     }
     setLimitReached(false);
+    // 选具体城市时退出该省的全选，避免省份展开后覆盖城市筛选。
+    const provinceCode = findProvinceCodeForCity(city);
+    if (selectedProvinceCodes.includes(provinceCode)) {
+      updateProvinceCodes(selectedProvinceCodes.filter((code) => code !== provinceCode));
+    }
     onChange(toggleValue(value, city));
   };
 
@@ -135,7 +140,7 @@ export const ChinaRegionMapPanel: React.FC<ChinaRegionMapPanelProps> = ({ value,
 
       <div className={`${styles.panelBody} ${activeProvince ? styles.panelBodyWithCities : ''}`}>
         <div className={styles.mapStage}>
-          <svg viewBox="60 8 420 320" role="img" aria-label="中国省级行政区域交互地图">
+          <svg viewBox="60 8 420 320" role="group" aria-label="中国省级行政区域交互地图" preserveAspectRatio="xMidYMid meet">
             {chinaRegions.map((region) => {
               const { code, name, cities: cityNames } = region;
               const selectedCount = cityNames.filter((city) => isCitySelected(value, city)).length;

@@ -26,10 +26,11 @@
 .selectionCount { display: inline-flex; align-items: baseline; gap: 3px; flex: 0 0 auto; color: var(--text-3); font-size: var(--report-font-micro, 10px); white-space: nowrap; }
 .selectionCount strong { color: var(--text-1); font-family: var(--pr-number-font); font-size: 18px; font-weight: 700; line-height: 1; }
 
-.panelBody { display: block; }
+.panelBody { display: grid; grid-template-columns: minmax(0, 1fr); }
+.panelBodyWithCities { grid-template-columns: minmax(0, 1.2fr) minmax(220px, 1fr); }
 .mapStage { position: relative; min-width: 0; height: 250px; display: grid; place-items: center; overflow: hidden; padding: 10px 8px; background: #fafafa; }
 .panelBodyWithCities .mapStage { border-bottom: 1px solid var(--wb-border-subtle); }
-.mapStage svg { width: 100%; height: 100%; overflow: visible; }
+.mapStage svg { display: block; width: 100%; height: 230px; min-width: 0; min-height: 0; overflow: hidden; }
 .province { fill: #e6e8e7; stroke: #fff; stroke-width: 1.2; vector-effect: non-scaling-stroke; cursor: pointer; outline: none; transition: fill 180ms var(--ease-standard), filter 180ms var(--ease-standard), stroke 180ms var(--ease-standard); }
 .province:hover, .province:focus-visible { fill: color-mix(in srgb, var(--map-accent) 15%, #f4f5f6); stroke: var(--map-accent); filter: drop-shadow(0 2px 3px rgba(47, 111, 219, .12)); }
 .province[data-active='true']:not([data-complete='true']) { fill: color-mix(in srgb, var(--map-accent) 11%, #f2f4f6); stroke: var(--map-accent); }
@@ -67,7 +68,9 @@
 .footerActions .doneButton:hover { color: #fff; background: var(--wb-action-hover); }
 
 @media (max-width: 760px) {
+  .panelBodyWithCities { grid-template-columns: minmax(0, 1fr); }
   .mapStage { height: min(280px, 72vw); min-height: 220px; }
+  .mapStage svg { height: 200px; }
 }
 
 @media (max-width: 460px) {
