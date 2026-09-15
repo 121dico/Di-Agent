@@ -88,3 +88,29 @@ func TestPreparedRunUsesBoundedParallelRequests(t *testing.T) {
 		t.Fatalf("peak = %d", connector.peak.Load())
 	}
 }
+
+func TestPreparedLargePageRequiresCompleteMetadata(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		pagination model.ReportPagination
+		wantErr    bool
+	}{
+		{"missing total", model.ReportPagination{}, true},
+		{"clamped size", model.ReportPagination{Total: 1, PageSize: 1000}, true},
+		{"complete", model.ReportPagination{Total: 1, PageSize: 10000}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			catalog := boundaryV12Catalog()
+			connector := &reportConnectorFake{result: model.ReportQueryResult{Rows: []map[string]any{{"dt": "2026-09-14", "city": "北京", "total_user_count": 100, "total_order_count": 200}}, Pagination: tc.pagination}}
+			runner := NewReportRunner(catalog, &reportRunnerStoreFake{}, connector)
+			queries, keys, err := buildV12AggregateQueries(catalog.report, &model.ReportAnalyticsResult{StartDate: "2026-09-14", EndDate: "2026-09-14"}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _, err = runner.preparedRows(context.Background(), catalog.report, catalog.source, v12Contract(), "2026-09-14", keys[0], preparedCityQuery(queries[0]))
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("error=%v", err)
+			}
+		})
+	}
+}
