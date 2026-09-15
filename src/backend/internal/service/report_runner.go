@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/121dico/Di-Agent/src/backend/internal/model"
@@ -49,6 +50,9 @@ type ReportAnalyticsOptions struct {
 
 // ReportRunner 将数据查询、快照和运行状态隐藏在一个稳定接口后。
 type ReportRunner struct {
+	preparedMu      sync.Mutex
+	preparedJobMu   sync.Mutex
+	preparedCache   map[string][]model.ReportPreparedDay
 	templateQueries singleflight.Group
 	catalog         ReportCatalog
 	runs            ReportRunStore

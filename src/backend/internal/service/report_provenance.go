@@ -269,7 +269,12 @@ func (s *ReportService) ReplayProvenance(ctx context.Context, reportID, userID, 
 		}
 	}
 	var expected map[string]any
-	if strings.HasPrefix(saved.QueryKey, "order_count_") {
+	if strings.HasPrefix(saved.QueryKey, "prepared_") {
+		expected, err = trustedPreparedReplay(report, saved, decoded)
+		if err != nil {
+			return nil, err
+		}
+	} else if strings.HasPrefix(saved.QueryKey, "order_count_") {
 		expected, err = trustedOrderCountReplay(report, source, saved, decoded)
 		if err != nil {
 			return nil, err

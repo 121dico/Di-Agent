@@ -9,6 +9,10 @@ import (
 )
 
 func reportChartBindingsForQuery(key string) []model.ReportChartBinding {
+	key = strings.TrimPrefix(key, "prepared_")
+	if strings.HasPrefix(key, "order_total_") {
+		key = "order_count_total"
+	}
 	if strings.HasPrefix(key, "order_count_") {
 		return []model.ReportChartBinding{{ChartKey: "order_count_distribution", Title: "按订单笔数的价敏分布", QueryKeys: []string{"order_count_distribution", "order_count_total", "order_count_snapshot"}, Formula: "所选dt及订单笔数，ps_conf>0且duid>0；各级COUNT_DISTINCT(duid)除以独立去重总人数。", FieldMapping: map[string]string{"level": "ps_level", "count": "user_count", "orders": "order_cnt_180d"}}}
 	}

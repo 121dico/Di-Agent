@@ -82,6 +82,7 @@ func (r *ReportRunner) QueryOrderCohort(ctx context.Context, reportID, date, ord
 			return nil, fmt.Errorf("%w: 该日期正在后台初始化", ErrReportInvalid)
 		}
 		result.OrderCohort = result.OrderGroups[orders]
+		result.CountingBasis = "ps_conf > 0、duid > 0；单日 COUNT_DISTINCT(duid)，城市分级人数与独立总人数核对"
 		return result, nil
 	}
 	// 撤销字段权限先于缓存；配置变化自动隔离旧结果。

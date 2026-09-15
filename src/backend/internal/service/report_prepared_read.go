@@ -61,6 +61,16 @@ func assemblePreparedHistory(base *model.ReportAnalyticsResult, days []model.Rep
 		if day.Date < base.StartDate || day.Date > base.EndDate {
 			continue
 		}
+		matched := false
+		for _, row := range day.Totals {
+			if preparedCityMatch(row, selected) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
 		dates = append(dates, day.Date)
 		if latest == nil || day.Date > latest.Date {
 			latest = day
@@ -87,13 +97,18 @@ func assemblePreparedHistory(base *model.ReportAnalyticsResult, days []model.Rep
 	}
 	result := assembleV12Analytics(base, responses, time.Now())
 	result.Prepared, result.Cached = true, true
+	result.CountingBasis = "按源表每个 dt + duid 一行的契约计数；不跨日期累加用户"
 	sort.Strings(dates)
 	result.AvailableDates = dates
 	if latest == nil {
 		return result
 	}
 	result.FetchedAt = latest.FetchedAt
-	result.ExecutionIDs = latest.ExecutionIDs
+	for _, day := range days {
+		if day.Date >= base.StartDate && day.Date <= base.EndDate {
+			result.ExecutionIDs = append(result.ExecutionIDs, day.ExecutionIDs...)
+		}
+	}
 	result.OrderGroups = map[string]*model.ReportAnalyticsCohort{}
 	for group, rows := range latest.Groups {
 		result.OrderGroups[group] = preparedCohort(rows, selected)
@@ -118,7 +133,24 @@ func assemblePreparedHistory(base *model.ReportAnalyticsResult, days []model.Rep
 
 func (r *ReportRunner) readPreparedAnalytics(ctx context.Context, report *model.ReportDefinition, source *model.ReportDataSource, contract *model.ReportDataSourceContract, base *model.ReportAnalyticsResult, cities []string) (*model.ReportAnalyticsResult, error) {
 	store := r.catalog.(reportPreparedStore)
-	days, err := store.ListPreparedReportDays(ctx, preparedPrefix(report, source, contract))
+	prefix := preparedPrefix(report, source, contract)
+	// 首次从数据库装载；后台发布新日期时失效，浏览查询不重复解析全历史 JSON。
+	r.preparedMu.Lock()
+	if r.preparedCache == nil {
+		r.preparedCache = map[string][]model.ReportPreparedDay{}
+	}
+	days, known := r.preparedCache[prefix]
+	var err error
+	if !known {
+		days, err = store.ListPreparedReportDays(ctx, prefix)
+		if err == nil && len(days) > 0 {
+			if len(r.preparedCache) >= 8 {
+				r.preparedCache = map[string][]model.ReportPreparedDay{}
+			}
+			r.preparedCache[prefix] = days
+		}
+	}
+	r.preparedMu.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +158,16 @@ func (r *ReportRunner) readPreparedAnalytics(ctx context.Context, report *model.
 		return nil, fmt.Errorf("%w: 快照历史超过1000天", ErrReportInvalid)
 	}
 	if len(days) == 0 {
+		previous, oldErr := r.savedV12History(ctx, report, source, base, cities)
+		if oldErr == nil && previous.DataDate != "" {
+			previous.Prepared = true
+			return previous, nil
+		}
 		return nil, fmt.Errorf("%w: 报表正在后台初始化，请稍后查看", ErrReportInvalid)
 	}
-	return assemblePreparedHistory(base, days, cities), nil
+	result := assemblePreparedHistory(base, days, cities)
+	if len(result.AvailableDates) == 0 {
+		return nil, fmt.Errorf("%w: 所选日期或城市暂无已生成快照", ErrReportInvalid)
+	}
+	return result, nil
 }

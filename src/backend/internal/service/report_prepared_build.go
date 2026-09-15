@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/121dico/Di-Agent/src/backend/internal/model"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -56,6 +57,15 @@ func (r *ReportRunner) preparedRows(ctx context.Context, report *model.ReportDef
 			return nil, nil, fmt.Errorf("%w: 聚合分页总量变化", ErrReportInvalid)
 		}
 		for _, row := range result.Rows {
+			for _, field := range query["fieldList"].([]map[string]any) {
+				alias, _ := field["alias"].(string)
+				if alias == "" {
+					alias, _ = field["name"].(string)
+				}
+				if _, ok := row[alias]; !ok {
+					return nil, nil, fmt.Errorf("%w: 聚合缺少字段 %s", ErrReportInvalid, alias)
+				}
+			}
 			if fmt.Sprint(row["dt"]) != date {
 				return nil, nil, fmt.Errorf("%w: 聚合日期不一致", ErrReportInvalid)
 			}
@@ -74,8 +84,8 @@ func (r *ReportRunner) preparedRows(ctx context.Context, report *model.ReportDef
 					}
 					return nil, nil, fmt.Errorf("%w: 聚合计数为空", ErrReportInvalid)
 				}
-				n := analyticsNumber(row, k)
-				if math.IsNaN(n) || math.IsInf(n, 0) || n < 0 || n > 9007199254740991 || (!strings.HasSuffix(k, "_avg") && n != math.Trunc(n)) {
+				n, parseErr := strconv.ParseFloat(fmt.Sprint(v), 64)
+				if parseErr != nil || math.IsNaN(n) || math.IsInf(n, 0) || n < 0 || n > 9007199254740991 || (!strings.HasSuffix(k, "_avg") && n != math.Trunc(n)) {
 					return nil, nil, fmt.Errorf("%w: 聚合数值无效", ErrReportInvalid)
 				}
 			}
