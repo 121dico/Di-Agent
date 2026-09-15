@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"github.com/121dico/Di-Agent/src/backend/internal/model"
 	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
 	"log/slog"
 	"sort"
+	"sync/atomic"
 	"time"
 )
 
@@ -40,7 +42,10 @@ func (r *ReportRunner) prepareReportHistory(ctx context.Context, report *model.R
 			return nil, err
 		}
 		sort.Sort(sort.Reverse(sort.StringSlice(directory.AvailableDates)))
-		var failed int
+		var failed atomic.Int32
+		workers, workCtx := errgroup.WithContext(ctx)
+		// 每个日期内部串行，跨日期最多4个请求，避免无界并发压垮上游。
+		workers.SetLimit(4)
 		cutoff := "9999-12-31"
 		if refreshDays > 0 && len(directory.AvailableDates) > 0 {
 			latest, _ := time.Parse("2006-01-02", directory.AvailableDates[0])
@@ -53,31 +58,45 @@ func (r *ReportRunner) prepareReportHistory(ctx context.Context, report *model.R
 			if exists[date] && date < cutoff {
 				continue
 			}
-			if err := ctx.Err(); err != nil {
-				return nil, err
+			if workCtx.Err() != nil {
+				break
 			}
-			slog.Info("report.prepare.begin", "report_id", report.ID, "date", date)
-			day, err := r.buildPreparedDay(ctx, report, source, contract, date)
-			if err == nil {
-				err = store.SavePreparedReportDay(ctx, prefix, report.ID, day)
+			date := date
+			workers.Go(func() error {
+				if err := workCtx.Err(); err != nil {
+					return err
+				}
+				started := time.Now()
+				slog.Info("report.prepare.begin", "report_id", report.ID, "date", date)
+				day, err := r.buildPreparedDay(workCtx, report, source, contract, date)
 				if err == nil {
-					r.preparedMu.Lock()
-					delete(r.preparedCache, prefix)
-					r.preparedMu.Unlock()
+					err = store.SavePreparedReportDay(workCtx, prefix, report.ID, day)
+					if err == nil {
+						r.preparedMu.Lock()
+						delete(r.preparedCache, prefix)
+						r.preparedMu.Unlock()
+					}
 				}
-			}
-			if err != nil {
-				failed++
-				slog.Error("report.prepare.failed", "report_id", report.ID, "date", date, "error", redactReportTrace(err.Error(), source))
-				if failed >= 3 {
-					return nil, fmt.Errorf("%w: 三次预计算失败，保留既有快照", ErrReportInvalid)
+				if err != nil {
+					failures := failed.Add(1)
+					slog.Error("report.prepare.failed", "report_id", report.ID, "date", date, "error", redactReportTrace(err.Error(), source))
+					if failures >= 3 {
+						return fmt.Errorf("%w: 三次预计算失败，保留既有快照", ErrReportInvalid)
+					}
+					return nil
 				}
-				continue
-			}
-			slog.Info("report.prepare.published", "report_id", report.ID, "date", date)
+				slog.Info("report.prepare.published", "report_id", report.ID, "date", date, "duration_ms", time.Since(started).Milliseconds())
+				return nil
+			})
 		}
-		if failed > 0 {
-			return nil, fmt.Errorf("%w: %d 个日期预计算失败，已保留成功快照", ErrReportInvalid, failed)
+		if err := workers.Wait(); err != nil {
+			return nil, err
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if failed.Load() > 0 {
+			return nil, fmt.Errorf("%w: %d 个日期预计算失败，已保留成功快照", ErrReportInvalid, failed.Load())
 		}
 		return nil, nil
 	})
