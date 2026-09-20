@@ -41,6 +41,7 @@ const AppLayout: React.FC = () => {
   const showDisconnectAlert = status === 'disconnected' && wasConnectedRef.current;
   const { user, logout: handleLogout } = useAuth();
   const isAdmin = user?.is_admin ?? false;
+  const showTaskProgress = isAdmin && location.pathname === '/';
 
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [newConvModalOpen, setNewConvModalOpen] = useState(false);
@@ -123,14 +124,14 @@ const AppLayout: React.FC = () => {
           onLogout={handleLogout}
         />
 
-        <div className={`${styles.outletFrame} ${taskInspectorOpen ? styles.outletFrameInspectorOpen : ''}`}>
+        <div className={`${styles.outletFrame} ${showTaskProgress && taskInspectorOpen ? styles.outletFrameInspectorOpen : ''}`}>
           <div className={styles.routeSurface} key={location.pathname}>
             <Outlet context={{ openNewConversation: () => setNewConvModalOpen(true) }} />
           </div>
         </div>
       </div>
 
-      {isAdmin && <TaskProgressWidget onInspectorOpenChange={setTaskInspectorOpen} />}
+      {showTaskProgress && <TaskProgressWidget onInspectorOpenChange={setTaskInspectorOpen} />}
       <CommandPalette
         open={commandOpen}
         onClose={() => setCommandOpen(false)}
