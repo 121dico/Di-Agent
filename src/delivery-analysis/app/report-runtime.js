@@ -288,8 +288,8 @@
 
   function initGenericActions() {
     var messages = {
-      
-      
+
+
       configureReportModules: "模块配置入口已保留。",
       createTask: "新建任务入口已保留。",
       changeTask: "可在左侧任务树切换任务。",

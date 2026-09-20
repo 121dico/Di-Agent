@@ -35,6 +35,8 @@
     for (const id of ['profileBars','breakdownVisual','breakdownTable','dailyBreakdownVisual','dailyBreakdownTable','dailyFunnelVisual','funnelVisual','balanceDimensions','dailyInvalidList']) $(id).textContent = message;
     for (const selector of ['.movement-line-chart','.realtime-chart','#subview-effect > .root-cause-panel .cause-list']) text(selector,message);
     text('.audience-summary > strong','—'); text('.audience-summary .soft-tag','等待数据');
+    text('#breakdownVisualDefinition','累计标签拆解暂未接入');
+    text('.realtime-trend-panel .data-note','小时级数据暂未接入');
     text('#profileInsight',message); text('#profileVisualCaption','等待数据');
     text('#experimentBalance .status-pill','尚未接入');
     text('#experimentBalance .balance-insight p','缺少投放前快照和已核验分流配置，暂不输出均衡结论。');
