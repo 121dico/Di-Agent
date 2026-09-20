@@ -33,18 +33,17 @@ test('原页面保留任务树、双列画像和分日模块，并绑定真实�
 test('数据读取失败也保留原模块，且不展示导出页面的示例数值',async()=>{
  const dom=await page({error:'请先登录 DiAgent'},401),d=dom.window.document;
  assert.match(d.querySelector('#phaseAvailabilityNote').textContent,/请先登录/);
- for(const id of ['preMetrics','effectMetrics','dailyMetrics','realtimeMetrics','profileBars']) assert.doesNotMatch(d.querySelector('#'+id).textContent,/214,084|7.62%|107,042/);
+ for(const id of ['preMetrics','effectMetrics','dailyMetrics','profileBars']) assert.doesNotMatch(d.querySelector('#'+id).textContent,/214,084|7.62%|107,042/);
  assert.ok(d.querySelector('#experimentBalance'));
  assert.doesNotMatch(d.querySelector('#experimentBalance').textContent,/0.29|均衡检查通过/);
  dom.window.close();
 });
 
-test('切换未接入人群时清除旧漏斗数据说明',async()=>{
+test('尚未接入的人群入口置灰，点击不套用任务全量数据',async()=>{
  const dom=await page(data),d=dom.window.document;
- assert.match(d.querySelector('#dailyFunnelPanel .funnel-footnote').textContent,/30/);
- d.querySelector('[data-task-group="recall"] .audience-option').click();
- assert.doesNotMatch(d.querySelector('#dailyFunnelPanel').textContent,/完整发券 30/);
- assert.match(d.querySelector('#phaseAvailabilityNote').textContent,/组合筛选尚未接入/);
+ const button=d.querySelector('[data-task-group="recall"] .audience-option');
+ assert.equal(button.disabled,true);assert.match(button.title,/组合筛选尚未接入/);
+ button.click();assert.equal(dom.window.state.data.task.id,'coupon');
  dom.window.close();
 });
 
@@ -60,13 +59,11 @@ test('成功读取后缺口明确为空，保留本地人群包字段布局',asy
  assert.doesNotMatch(d.body.textContent,/DEMO-AUD|214,084|7\.62%|94\.2%|286,400/);
  dom.window.close();
 });
-test('未接入人群点击刷新后仍为空，不回退到上一任务数据',async()=>{
- const dom=await page(data),d=dom.window.document;
- const option=d.querySelector('[data-task-group="recall"] .audience-option');option.click();
- d.getElementById('refreshAnalysis').click();
- await new Promise(resolve=>setTimeout(resolve,30));
+test('旧版保存的未接入选择刷新后保持空态，不回退到其他任务',async()=>{
+ const saved=JSON.stringify({unsupported:'该人群未接入',unknownTask:'recall',unknownAudience:'私家车流失 30～60 天'});
+ const dom=await page(data,200,saved),d=dom.window.document;
+ d.getElementById('refreshAnalysis').click();await new Promise(resolve=>setTimeout(resolve,30));
  assert.equal(dom.window.state.data,null);
- assert.ok(option.classList.contains('active'));
  assert.doesNotMatch(d.getElementById('dailyMetrics').textContent,/25.00%/);
  dom.window.close();
 });
@@ -75,8 +72,7 @@ test('未接入人群点击刷新后仍为空，不回退到上一任务数据',
  const empty=structuredClone(data);empty.task.portrait=[];
  const dom=await page(empty),d=dom.window.document;
  assert.match(d.getElementById('preOverview').textContent,/人群暂无数据/);
- d.querySelector('[data-task-group="recall"] .audience-option').click();
- const saved=dom.window.sessionStorage.getItem('deliveryOriginalSelection');dom.window.close();
+ const saved=JSON.stringify({unsupported:'该人群未接入',unknownTask:'recall',unknownAudience:'私家车流失 30～60 天'});dom.window.close();
  const reloaded=await page(data,200,saved);
  assert.equal(reloaded.window.state.data,null);
  assert.ok(reloaded.window.document.querySelector('[data-task-group="recall"] .audience-option.active'));
@@ -90,7 +86,7 @@ test('无数据仍保留原漏斗、均衡条形、趋势图和表格骨架',asy
  assert.equal(d.querySelectorAll('#balanceDimensions .balance-dimension').length,4);
  assert.ok(d.querySelector('#profileBars svg'));
  assert.ok(d.querySelector('.movement-line-chart svg'));
- assert.ok(d.querySelector('.realtime-chart svg'));
+ assert.equal(d.querySelector('.realtime-chart'),null);
  assert.ok(d.querySelector('#breakdownTable table'));
  assert.doesNotMatch(d.querySelector('#funnelVisual').textContent,/214,084|176,470|82.4%/);
  dom.window.close();
@@ -168,5 +164,29 @@ test('画像快捷按钮不覆盖分日效果维度',async()=>{
  await new Promise(r=>setTimeout(r,30));
  assert.equal(requested.searchParams.get('dimension'),'member_status');
  assert.equal(requested.searchParams.get('portraitDimension'),'city_name');
+ dom.window.close();
+});
+
+test('累计原卡片与漏斗展示独立去重统计，移除实时页签',async()=>{
+ const value=structuredClone(data);
+ value.task.cumulative={startDate:'2026-08-12',endDate:'2026-08-24',observedThrough:'2026-09-16',metric:'累计领券后7日复购率',note:'跨日按DUID去重',selectedGroup:'all',dimension:'charge_life_cycle',groupOverlap:1,exclusiveDimension:true,summary:{users:150,coupon:80,full:70,full_repurchase:15,coupon_repurchase:20,success:20,eligible:80,unmet:60,rate:.25},groupSummary:[{group:'treatment_group',users:80,rate:.3},{group:'control_group',users:71,rate:.2}],distribution:[{value:'老用户',users:150,unmet:60,rate:.25}]};
+ const dom=await page(value),d=dom.window.document;
+ assert.equal(d.querySelector('[data-effect-view="realtime"]'),null);
+ assert.equal(d.getElementById('subview-realtime'),null);
+ assert.match(d.getElementById('effectMetrics').textContent,/150/);
+ assert.match(d.getElementById('funnelVisual').textContent,/150/);
+ assert.doesNotMatch(d.getElementById('funnelVisual').textContent,/曝光|点击/);
+ assert.match(d.getElementById('breakdownTable').textContent,/老用户/);
+ d.querySelector('[data-funnel-view="table"]').click();
+ assert.match(d.getElementById('funnelVisual').textContent,/150/);
+ dom.window.close();
+});
+
+test('自定义空日期范围清空全部分日结果，累计数据不受影响',async()=>{
+ const dom=await page(data),d=dom.window.document;
+ const period=d.getElementById('dailyPeriodSelect');period.value='custom';period.dispatchEvent(new dom.window.Event('change'));
+ const inputs=[...d.querySelectorAll('#customDateRange input')];inputs[0].value='2025-01-01';inputs[1].value='2025-01-02';inputs[1].dispatchEvent(new dom.window.Event('change'));
+ for(const id of ['dailyMetrics','dailyFunnelVisual','dailyBreakdownVisual','dailyInvalidList'])assert.doesNotMatch(d.getElementById(id).textContent,/25.00%|老用户|100/);
+ assert.match(d.getElementById('dailyFunnelNote').textContent,/范围暂无数据/);
  dom.window.close();
 });

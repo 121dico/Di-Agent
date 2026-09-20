@@ -138,3 +138,6 @@ body.ai-memory-drawer-open { overflow: hidden; }
 [data-empty-visual] .dimension-pass { background: #f1f5f9; color: #64748b; }
 
 .funnel-visual.view-funnel .funnel-stage.is-final::after { display: none; }
+
+/* 未接入入口保留位置并明确不可用，避免点击只有占位反馈。 */
+button[data-unavailable], input[data-unavailable], #baselineButtons button:disabled { opacity: .48; cursor: not-allowed; }

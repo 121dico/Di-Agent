@@ -178,12 +178,8 @@
   function initEffectViewTabs() {
     var tabs = all("#effectViewTabs button");
     if (tabs.length === 0) return;
-    var map = {
-      cumulative: "subview-effect",
-      daily: "subview-movement",
-      realtime: "subview-realtime",
-    };
     function activate(name) {
+      name = name === "daily" ? "daily" : "cumulative";
       tabs.forEach(function (button) {
         var active = button.dataset.effectView === name;
         button.classList.toggle("active", active);
@@ -192,16 +188,14 @@
       // 原导出 HTML 的分日模块嵌套在累计容器中，切换时保留父容器才能显示分日模块。
       var effect = document.getElementById("subview-effect");
       effect.classList.remove("effect-view-realtime", "effect-view-daily");
-      effect.style.display = name === "realtime" ? "none" : "";
+      effect.style.display = "";
       effect.classList.add("active");
       Array.from(effect.children).forEach(function (child) {
         child.style.display = child.id === "subview-movement" ? (name === "daily" ? "" : "none") : (name === "cumulative" ? "" : "none");
       });
       var daily = document.getElementById("subview-movement");
       daily.classList.toggle("active", name === "daily");
-      var realtime = document.getElementById("subview-realtime");
-      realtime.style.display = name === "realtime" ? "" : "none";
-      realtime.classList.toggle("active", name === "realtime");
+
     }
     tabs.forEach(function (button) {
       button.addEventListener("click", function () { activate(button.dataset.effectView || "cumulative"); });

@@ -32,7 +32,7 @@ export function createServer({gateway,store,appDirectory=join(ROOT,'app')}) {
         if(url.pathname==='/api/tasks')return json(res,200,{items:tasks});
         const id=url.searchParams.get('taskId') || tasks[0].id;
         let task;
-        try {task=selectTask(snapshot,id,{date:url.searchParams.get('date'),group:url.searchParams.get('group')||'all',dimension:url.searchParams.get('dimension')||'charge_life_cycle',portraitDimension:url.searchParams.get('portraitDimension')||undefined});} catch {
+        try {task=selectTask(snapshot,id,{date:url.searchParams.get('date'),group:url.searchParams.get('group')||'all',dimension:url.searchParams.get('dimension')||'charge_life_cycle',portraitDimension:url.searchParams.get('portraitDimension')||undefined,cumulativeGroup:url.searchParams.get('cumulativeGroup')||'all',cumulativeDimension:url.searchParams.get('cumulativeDimension')||'charge_life_cycle'});} catch {
           return json(res,400,{error:'日期、分组或维度不在当前数据范围内'});
         }
         if(!task)return json(res,404,{error:'该任务尚未接入真实数据'});
