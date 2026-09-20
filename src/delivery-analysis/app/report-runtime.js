@@ -112,18 +112,8 @@
   window.askAi = fallbackAskAi;
 
   function moveUnifiedEntry() {
-    var unified = document.querySelector(".unified-ai-entry");
-    var answerCard = document.getElementById("unifiedAiAnswer");
-    var anchor = document.querySelector(".context-bar") || document.querySelector(".page-heading");
-    if (unified === null || unified === undefined) return;
-    if (anchor === null || anchor === undefined || anchor.parentNode === null) return;
-    unified.classList.add("ask-bar");
-    if (unified.parentNode) unified.parentNode.removeChild(unified);
-    anchor.parentNode.insertBefore(unified, anchor.nextSibling);
-    if (answerCard) {
-      if (answerCard.parentNode) answerCard.parentNode.removeChild(answerCard);
-      anchor.parentNode.insertBefore(answerCard, unified.nextSibling);
-    }
+    var unified = document.querySelector('.unified-ai-entry');
+    if (unified) unified.classList.add('ask-bar');
   }
 
   function wireAIEntry() {

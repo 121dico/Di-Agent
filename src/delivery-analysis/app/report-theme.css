@@ -1,84 +1,4 @@
-/* DiAgent integration theme for the exported delivery-analysis report. */
-:root {
-  --ink: #1d1d1f;
-  --ink-strong: #111111;
-  --muted: #5f6368;
-  --subtle: #686b70;
-  --line: #e5e5e2;
-  --line-strong: #d8d8d4;
-  --canvas: #f7f7f5;
-  --paper: #ffffff;
-  --blue: #2f6fdb;
-  --blue-deep: #1d4ed8;
-  --blue-soft: #eef5ff;
-  --teal: #15857a;
-  --teal-soft: #e8f5ee;
-  --amber: #9a5700;
-  --amber-soft: #fff7e6;
-  --coral: #c2352a;
-  --coral-soft: #fdecea;
-  --radius: 10px;
-  --shadow: 0 1px 2px rgba(29,29,31,.04), 0 4px 14px rgba(29,29,31,.055);
-  --card: #ffffff;
-  --bg: #f7f7f5;
-  --primary: #1d1d1f;
-  --primary-soft: #eef5ff;
-  --green: #167c46;
-  --green-soft: #e8f5ee;
-  --orange: #9a5700;
-  --orange-soft: #fff7e6;
-  --red: #c2352a;
-  --red-soft: #fdecea;
-}
-html, body { background: var(--canvas); min-width: 0; }
-body {
-  min-width: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
-  color: var(--ink);
-}
-.shell { grid-template-columns: 220px minmax(0, 1fr); }
-.topbar {
-  height: 56px;
-  padding: 0 18px;
-  background: rgba(255, 255, 255, .94);
-  backdrop-filter: blur(16px) saturate(1.05);
-  border-bottom-color: var(--line);
-}
-.main-content { padding: 16px 18px 36px; }
-.sidebar { padding: 16px 12px 14px; background: var(--canvas); border-right-color: var(--line); }
-.workspace-panel, .unified-ai-entry, .ai-answer-card, .conclusion-banner { border-radius: 10px; box-shadow: var(--shadow); }
-.primary-button {
-  color: #fff;
-  background: #1d1d1f;
-  border-color: #1d1d1f;
-  border-radius: 7px;
-  font-weight: 650;
-}
-.primary-button:hover { background: #343437; border-color: #343437; }
-.secondary-button, .compact-button, .icon-button { border-radius: 7px; font-weight: 600; }
-.secondary-button { color: var(--ink); border-color: var(--line); background: #fff; }
-.secondary-button:hover { color: var(--ink); border-color: var(--line-strong); background: #f1f1ef; }
-.stage-tabs { gap: 22px; margin-top: 8px; border-bottom-color: var(--line); }
-.stage-tabs button.active,
-.stage-tabs button.active strong { color: var(--ink); }
-.stage-tabs button.active::after { background: var(--ink); }
-.effect-view-tabs button.active,
-.breakdown-dimension-buttons button.active,
-.group-filter button.active,
-.baseline-buttons button.active,
-.profile-view-switch button.active,
-.dimension-tabs button.active,
-.daily-funnel-switch button.active,
-.daily-breakdown-tabs button.active { color: var(--ink) !important; }
-.unified-ai-entry {
-  margin: 14px 0;
-  padding: 8px 10px;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: var(--shadow);
-}
-.unified-ai-entry svg { color: var(--blue); }
+/* 只补齐 Agent 集成控件，不覆盖本地原页的视觉样式。 */
 .agent-bridge-select {
   height: 30px;
   max-width: 180px;
@@ -204,3 +124,17 @@ body.ai-memory-drawer-open { overflow: hidden; }
   .ai-memory-drawer { width: 100vw; }
   .ai-memory-drawer-sub { max-width: none; }
 }
+
+.ai-memory-drawer { display: none; }
+.ai-memory-drawer.open { display: flex; }
+.ai-memory-drawer, .ask-detail-btn { --card: #fff; --bg: #f8fafc; --primary: #2563eb; --primary-soft: #eff6ff; }
+.ai-memory-compose .btn { border: 0; border-radius: 6px; padding: 9px 14px; background: #2563eb; color: #fff; cursor: pointer; }
+[data-empty-visual] { position: relative; }
+.visual-empty-caption { color: var(--muted); font-size: 11px; line-height: 1.6; padding: 8px 0; }
+
+[data-empty-visual] .breakdown-rate-track b { width: 0 !important; }
+[data-empty-visual] .breakdown-baseline-marker { display: none; }
+[data-empty-visual] .profile-pie-segment { stroke-dasharray: 0 100; }
+[data-empty-visual] .dimension-pass { background: #f1f5f9; color: #64748b; }
+
+.funnel-visual.view-funnel .funnel-stage.is-final::after { display: none; }

@@ -5,8 +5,8 @@ import { once } from 'node:events';
 
 const rows=[{date:'2026-08-12',group_type:'treatment_group',users:10,records:10,coupon:6,coupon_repurchase:3,repurchase:4}];
 const snapshot={builtAt:'2026-09-20T00:00:00Z',queries:[],tasks:[{id:'coupon',kind:'coupon',dates:['2026-08-12'],rows,dimensions:{charge_life_cycle:rows.map(r=>({...r,value:'老用户'}))}}]};
-async function withServer(run,ready=true) {
-  const server=createServer({gateway:{authenticate:async(token)=>{if(token!=='Bearer valid'){const e=new Error();e.code=401;throw e;}return {id:'user'};}},store:{snapshot:ready?snapshot:null,status:{refreshing:!ready}}});
+async function withServer(run,ready=true,selectedSnapshot=snapshot) {
+  const server=createServer({gateway:{authenticate:async(token)=>{if(token!=='Bearer valid'){const e=new Error();e.code=401;throw e;}return {id:'user'};}},store:{snapshot:ready?selectedSnapshot:null,status:{refreshing:!ready}}});
   server.listen(0,'127.0.0.1');await once(server,'listening');
   try {await run('http://127.0.0.1:'+server.address().port);}finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
 }
@@ -25,3 +25,20 @@ test('不允许无效日期或分组混入其他样本',()=>withServer(async(bas
     assert.equal((await fetch(base+'/api/bootstrap?'+suffix,{headers:{Authorization:'Bearer valid'}})).status,400);
   }
 }));
+test('分日成对视图的组别数值来自同日同维度真实聚合',()=>withServer(async(base)=>{
+ const {task}=await (await fetch(base+'/api/bootstrap?taskId=coupon',{headers:{Authorization:'Bearer valid'}})).json();
+ assert.equal(task.groupDistribution[0].group,'treatment_group');
+ assert.equal(task.groupDistribution[0].rows[0].value,'老用户');
+ assert.equal(task.groupDistribution[0].rows[0].rate,.5);
+}));
+
+test('单组筛选保留原成对视图另一来源组的真实读数',()=>{
+ const both=structuredClone(snapshot),task=both.tasks[0];
+ task.rows.push({...rows[0],group_type:'control_group',coupon_repurchase:1});
+ task.dimensions.charge_life_cycle.push({...task.rows[1],value:'老用户'});
+ return withServer(async(base)=>{
+  const {task}=await (await fetch(base+'/api/bootstrap?taskId=coupon&group=treatment_group',{headers:{Authorization:'Bearer valid'}})).json();
+  const control=task.groupDistribution.find(g=>g.group==='control_group').rows[0];
+  assert.equal(control.users,10);assert.equal(control.rate,1/6);
+ },true,both);
+});

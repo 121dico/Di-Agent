@@ -130,11 +130,14 @@ export function selectTask(snapshot,id,{date,group='all',dimension='charge_life_
   const scoped=rows=>rows.filter(r=>r.date===selectedDate && (group==='all'||r.group_type===group));
   const summary=summarize(task.kind,scoped(task.rows));
   const dimensionRows=scoped(task.dimensions[dimension]);
+  const comparisonRows=task.dimensions[dimension].filter(r=>r.date===selectedDate);
+  const comparisonValues=[...new Set(comparisonRows.map(r=>r.value))];
   const distribution=[...new Set(dimensionRows.map(r=>r.value))].map(value=>({value,...summarize(task.kind,dimensionRows.filter(r=>r.value===value))})).sort((a,b)=>b.users-a.users);
   const audienceRows=task.audience?.dimensions[dimension]?.filter(r=>group==='all'||r.group_type===group);
   const portrait=audienceRows?[...new Set(audienceRows.map(r=>r.value))].map(value=>({value,...summarize('audience',audienceRows.filter(r=>r.value===value))})).sort((a,b)=>b.users-a.users):distribution;
   const {rows,dimensions,audience,...metadata}=task;
   return {...metadata,selectedDate,selectedGroup:group,dimension,dimensionOptions:{...DIMENSIONS,...(task.kind==='coupon'?{activity_cycle:'流失周期'}:{})},groups,
+    groupDistribution:groups.map(g=>({group:g,rows:comparisonValues.map(value=>({value,...summarize(task.kind,comparisonRows.filter(r=>r.value===value && r.group_type===g))}))})),
     summary,distribution,portrait,portraitPartition:audience?.partition || task.partition,
     portraitGroups:groups.map(g=>({group:g,...summarize('audience',audience?audience.rows.filter(r=>r.group_type===g):task.rows.filter(r=>r.date===selectedDate && r.group_type===g))})),
     groupSummary:groups.map(g=>({group:g,...summarize(task.kind,task.rows.filter(r=>r.date===selectedDate && r.group_type===g))})),

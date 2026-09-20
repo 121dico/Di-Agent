@@ -82,3 +82,61 @@ test('未接入人群点击刷新后仍为空，不回退到上一任务数据',
  assert.ok(reloaded.window.document.querySelector('[data-task-group="recall"] .audience-option.active'));
  reloaded.window.close();
  });
+
+test('无数据仍保留原漏斗、均衡条形、趋势图和表格骨架',async()=>{
+ const dom=await page({error:'数据不可用'},503),d=dom.window.document;
+ assert.equal(d.querySelectorAll('#funnelVisual .funnel-stage').length,4);
+ assert.equal(d.querySelectorAll('#dailyFunnelVisual .funnel-stage').length,4);
+ assert.equal(d.querySelectorAll('#balanceDimensions .balance-dimension').length,4);
+ assert.ok(d.querySelector('#profileBars svg'));
+ assert.ok(d.querySelector('.movement-line-chart svg'));
+ assert.ok(d.querySelector('.realtime-chart svg'));
+ assert.ok(d.querySelector('#breakdownTable table'));
+ assert.doesNotMatch(d.querySelector('#funnelVisual').textContent,/214,084|176,470|82.4%/);
+ dom.window.close();
+});
+test('真实 Agent 桥接的历史抽屉关闭时隐藏，不散落在页尾',async(t)=>{
+ const dom=await page(data),d=dom.window.document;
+ const observers=[],Observer=dom.window.MutationObserver;
+ dom.window.MutationObserver=class extends Observer{constructor(callback){super(callback);observers.push(this);}};
+ t.after(()=>{observers.forEach(o=>o.disconnect());dom.window.close();});
+ for(const link of d.querySelectorAll('link[rel="stylesheet"]')){
+  const style=d.createElement('style');style.textContent=await readFile(new URL(link.getAttribute('href'),root),'utf8');d.head.appendChild(style);
+ }
+ dom.window.fetch=async()=>({ok:true,json:async()=>({data:[]})});
+ dom.window.eval(await readFile(new URL('agent-bridge.js',root),'utf8'));
+ const drawer=d.querySelector('.ai-memory-drawer');
+ assert.ok(drawer);
+ assert.equal(dom.window.getComputedStyle(drawer).position,'fixed');
+ assert.equal(dom.window.getComputedStyle(drawer).display,'none');
+ d.querySelector('.ask-detail-btn').click();
+ assert.notEqual(dom.window.getComputedStyle(drawer).display,'none');
+ d.querySelector('.ai-memory-drawer-close').click();
+ assert.equal(dom.window.getComputedStyle(drawer).display,'none');
+});
+
+ test('缺数据的漏斗保持三种原有视图切换，不生成假数值',async()=>{
+ const dom=await page(data),d=dom.window.document;
+ d.querySelector('[data-funnel-view="bar"]').click();
+ assert.equal(d.querySelectorAll('#funnelVisual .funnel-bar-track').length,4);
+ d.querySelector('[data-funnel-view="table"]').click();
+ assert.equal(d.querySelectorAll('#funnelVisual tbody tr').length,4);
+ d.querySelector('[data-funnel-view="funnel"]').click();
+ assert.equal(d.querySelectorAll('#funnelVisual .funnel-stage').length,4);
+ assert.doesNotMatch(d.querySelector('#funnelVisual').textContent,/0%|100%|NaN/);
+ dom.window.close();
+ });
+
+test('空画像的条形和表格模式在刷新后继续保持，真实漏斗条有颜色',async()=>{
+ const empty=structuredClone(data);empty.task.portrait=[];
+ const dom=await page(empty),d=dom.window.document;
+ d.querySelector('[data-profile-view="table"]').click();
+ assert.ok(d.querySelector('#profileBars table'));assert.equal(d.querySelector('#profileBars svg'),null);
+ d.querySelector('#refreshAnalysis').click();await new Promise(r=>setTimeout(r,30));
+ assert.ok(d.querySelector('#profileBars table'));
+ d.querySelector('[data-profile-view="bar"]').click();assert.ok(d.querySelector('#profileBars .profile-bar-track'));
+ d.querySelector('[data-daily-funnel-view="bar"]').click();
+ const bar=d.querySelector('#dailyFunnelVisual .funnel-bar-track b');
+ assert.equal(bar.style.background,'rgb(37, 99, 235)');assert.equal(bar.style.width,'100%');
+ dom.window.close();
+});

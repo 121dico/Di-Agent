@@ -9,7 +9,7 @@
   const pct = value => Number.isFinite(value) ? (100 * value).toFixed(2) + '%' : '—';
   const state = window.state;
   state.request = 0;
-  let selection = {taskId:'effect'}, chart = 'pie', funnel = 'funnel', initialized = false;
+  let selection = {taskId:'effect'}, chart = 'pie', funnel = 'funnel', resourceFunnel = 'funnel', initialized = false;
   const dimensions = {lifecycle:'charge_life_cycle',orders:'charge_freq_type',frequency:'charge_freq_type',identity:'charge_duid_role_name_v2_type',membership:'member_status',member:'member_status',cityFrame:'city_fenkuang',warZone:'charge_region',city:'city_name'};
   const colors = ['#2563eb','#14b8a6','#f59e0b','#8b5cf6','#f97316','#64748b'];
   const groupName = (group, kind) => kind === 'coupon' ? (group === 'treatment_group' ? '实验组' : '对照组') : '来源 ' + group + ' 组';
@@ -29,6 +29,32 @@
   function banner(id, title, description) {
     text('#'+id+' .conclusion-copy h2',title); text('#'+id+' .conclusion-copy p',description);
   }
+  // 保存已清空数字的原组件骨架。加载失败或切换未接入人群时恢复骨架，而非删掉图形。
+  const emptyMarkup = new Map(all('[data-empty-visual]').map(node => [node.id,node.innerHTML]));
+  function setVisual(id,html) {const node=$(id);node.removeAttribute('data-empty-visual');node.innerHTML=html;}
+  function emptyVisual(id,message='暂无数据') {
+    const node=$(id);node.innerHTML=emptyMarkup.get(id);node.dataset.emptyVisual='true';
+    const caption=node.querySelector('.visual-empty-caption');if(caption)caption.textContent=message;
+  }
+  function emptyProfile() {
+    emptyVisual('profileBars');
+    if(chart==='table')setVisual('profileBars',table(['标签枚举','人数','占比'],Array.from({length:3},()=>['—','—','—'])));
+    if(chart==='bar')setVisual('profileBars','<div class="profile-bars">'+Array.from({length:3},()=>'<div class="profile-bar-row"><span>—</span><div class="profile-bar-track"></div><strong>—</strong><em>—</em></div>').join('')+'</div>');
+    $('profileBars').dataset.emptyVisual='true';
+  }
+  function renderFunnel(id,stages,mode) {
+    const empty=stages.every(r=>r[1]===null),total=stages[0]?.[1];
+    const ratio=value=>Number.isFinite(value)&&total>0?value/total:null;
+    const node=$(id);node.className='funnel-visual view-'+mode;
+    const stageColor=index=>id==='funnelVisual'?['#2563eb','#3b82f6','#14b8a6','#f97316'][index]:'#2563eb';
+    let html;
+    if(mode==='table')html=table(['阶段','人数','占进组比例'],stages.map(r=>[r[0],num(r[1]),pct(ratio(r[1]))]));
+    else if(mode==='bar')html='<div class="funnel-bar-list">'+stages.map((r,i)=>'<div class="funnel-bar-row"><div class="funnel-bar-label"><strong>'+esc(r[0])+'</strong><small>'+pct(ratio(r[1]))+'</small></div><div class="funnel-bar-track"><b style="width:'+100*(ratio(r[1])||0)+'%;background:'+stageColor(i)+'"></b></div><div class="funnel-bar-value"><strong>'+num(r[1])+'</strong></div></div>').join('')+'</div>';
+    else html=stages.map((r,i)=>'<button type="button" class="funnel-stage '+(i===stages.length-1?'is-final':'')+'" style="--stage-width:'+(empty?100-i*20:Math.max(12,100*(ratio(r[1])||0)))+'%;--stage-color:'+stageColor(i)+'"><span>'+esc(r[0])+'</span><strong>'+num(r[1])+'</strong><em>'+pct(ratio(r[1]))+'</em></button>').join('');
+    setVisual(id,html);
+    if(empty){node.dataset.emptyVisual='true';node.insertAdjacentHTML('beforeend','<div class="visual-empty-caption">暂无数据 · 保留图形结构，宽度不代表真实转化率</div>');}
+  }
+  const emptyStages = [['进组',null],['曝光',null],['点击',null],['达成效果',null]];
   function packageMeta(task) {
     text('#audiencePackageMeta .package-heading strong', task ? (task.kind === 'coupon' ? '任务全量 · '+task.sourceTaskId : '近30天安心充低频购买用户') : '暂无数据');
     const values = task ? {'分析类型':'来源分组统计','分析实体':'DUID','快照日期':task.portraitPartition,'人群时效性':'来源日快照'} : {};
@@ -43,9 +69,10 @@
       breakdownVisual:'暂无数据 · 缺少跨日去重累计口径',
       breakdownTable:'暂无数据',
     };
-    Object.entries(gaps).forEach(([id,message]) => {$(id).textContent=message;$(id).dataset.availability='empty';});
-    text('.realtime-chart','暂无数据 · 缺少小时级效果数据');
-    text('#subview-effect > .root-cause-panel .cause-list','暂无数据 · 缺少累计未达成人群');
+    Object.entries(gaps).forEach(([id,message]) => emptyVisual(id,message));
+    renderFunnel('funnelVisual',emptyStages,resourceFunnel);
+    emptyVisual('realtimeTrendVisual','暂无数据 · 缺少小时级效果数据');
+    emptyVisual('cumulativeInvalidList','暂无数据 · 缺少累计未达成人群');
     text('#funnelDefinitionNote','暂无数据 · 资源位口径待接入');
     text('#resourceFunnelPanel .funnel-footnote','阶段数据接入后展示转化漏斗。');
     text('.realtime-trend-panel .data-note','暂无数据 · 小时级数据尚未接入');
@@ -54,8 +81,8 @@
   function clearData(message) {
     for (const id of ['preMetrics','effectMetrics','dailyMetrics','realtimeMetrics']) metric(id,[]);
     for (const id of ['preOverview','effectOverview','movementOverview']) banner(id,'数据尚未就绪',message);
-    for (const id of ['profileBars','breakdownVisual','breakdownTable','dailyBreakdownVisual','dailyBreakdownTable','dailyFunnelVisual','funnelVisual','balanceDimensions','dailyInvalidList']) $(id).textContent = message;
-    for (const selector of ['.movement-line-chart','.realtime-chart','#subview-effect > .root-cause-panel .cause-list']) text(selector,message);
+    for (const id of emptyMarkup.keys()) emptyVisual(id,'暂无数据');
+    renderFunnel('dailyFunnelVisual',emptyStages,funnel);emptyProfile();
     text('.audience-summary > strong','—'); text('.audience-summary .soft-tag','等待数据');
     text('#breakdownVisualDefinition','累计标签拆解暂未接入');
     text('.realtime-trend-panel .data-note','小时级数据暂未接入');
@@ -81,7 +108,8 @@
     text('#profileDimensionDefinition','来源快照标签；不代表投放前状态');
     text('#profileVisualCaption',chart === 'table' ? '人数与占比' : '占比结构');
     text('#profileInsight',rows.length ? rows[0].value+'占比 '+pct(total ? rows[0].users/total : null)+'，共 '+num(rows[0].users)+' 人。' : '所选范围暂无画像数据');
-    if (!rows.length) {$('profileBars').textContent='暂无数据';return;}
+    if (!rows.length) {emptyProfile();return;}
+    $('profileBars').removeAttribute('data-empty-visual');
     if (chart === 'table') $('profileBars').innerHTML = table(['标签枚举','人数','占比'],rows.map(r=>[r.value,num(r.users),pct(total?r.users/total:null)]));
     else if (chart === 'bar') $('profileBars').innerHTML = '<div class="profile-bars">'+rows.map(r=>'<div class="profile-bar-row"><span>'+esc(r.value)+'</span><div class="profile-bar-track"><b style="width:'+(total?100*r.users/total:0)+'%"></b></div><strong>'+num(r.users)+'</strong><em>'+pct(total?r.users/total:null)+'</em></div>').join('')+'</div>';
     else {
@@ -89,7 +117,7 @@
       if (rows.length > 5) pie.push({value:'其他',users:rows.slice(5).reduce((s,r)=>s+r.users,0)});
       let offset = 0;
       const segments = pie.map((r,i)=>{const ratio = total ? 100*r.users/total : 0, start=offset; offset+=ratio;return '<circle class="profile-pie-segment" cx="80" cy="80" r="54" pathLength="100" stroke="'+colors[i]+'" stroke-dasharray="'+ratio+' '+(100-ratio)+'" stroke-dashoffset="'+(-start)+'"><title>'+esc(r.value)+' '+num(r.users)+' 人</title></circle>';}).join('');
-      $('profileBars').innerHTML = '<div class="profile-pie-grid"><div class="profile-pie-chart"><svg class="profile-pie-ring" viewBox="0 0 160 160" aria-label="'+esc(label)+'占比结构"><circle class="profile-pie-track" cx="80" cy="80" r="54"></circle>'+segments+'</svg></div><div class="profile-pie-legend">'+pie.map((r,i)=>'<div class="profile-pie-item" tabindex="0"><i class="profile-pie-swatch" style="background:'+colors[i]+'"></i><strong>'+esc(r.value)+'</strong><small>'+num(r.users)+' · '+pct(total?r.users/total:null)+'</small></div>').join('')+'</div></div>';
+      $('profileBars').innerHTML = '<div class="profile-pie-grid"><div class="profile-pie-chart"><svg class="profile-pie-ring" viewBox="0 0 160 160" aria-label="'+esc(label)+'占比结构"><circle class="profile-pie-track" cx="80" cy="80" r="54"></circle>'+segments+'</svg><div class="profile-pie-detail" aria-live="polite"></div></div><div class="profile-pie-legend">'+pie.map((r,i)=>'<div class="profile-pie-item" tabindex="0"><i class="profile-pie-swatch" style="background:'+colors[i]+'"></i><strong>'+esc(r.value)+'</strong><small>'+num(r.users)+' · '+pct(total?r.users/total:null)+'</small></div>').join('')+'</div></div>';
     }
   }
   function selectedRows(task) {
@@ -108,33 +136,41 @@
     const series = task.groupDaily?.length ? task.groupDaily : [{group:'整体',rows:task.daily}];
     const values = series.flatMap(g=>g.rows.filter(r=>rows.some(d=>d.date===r.date)).map(r=>reach?r.users:r.rate)).filter(Number.isFinite);
     const max = Math.max(reach?1:.01,...values)*1.1;
-    let svg = '<svg viewBox="0 0 760 238" role="img" aria-label="分日效果趋势"><line x1="50" y1="190" x2="715" y2="190" stroke="#cbd5e1"/>';
+    let svg='<svg viewBox="0 0 620 240" role="img" aria-label="分日效果趋势"><g class="movement-svg-grid">'+[28,86,144,202].map(y=>'<line x1="70" x2="590" y1="'+y+'" y2="'+y+'"></line>').join('')+'</g><g class="movement-svg-axis">'+[0,1,2,3].map(i=>'<text x="58" y="'+(32+i*58)+'" text-anchor="end">'+(reach?num(Math.round(max*(3-i)/3)):pct(max*(3-i)/3))+'</text>').join('')+'</g>';
+    const legends=[];
     series.forEach((g,index)=>{
-      const data=rows.map((r,i)=>{const value=g.rows.find(d=>d.date===r.date);return {date:r.date,x:50+i*650/Math.max(rows.length-1,1),value:value?(reach?value.users:value.rate):null};});
-      svg+='<text x="'+(50+index*250)+'" y="18" fill="'+colors[index]+'" font-size="12">'+esc(g.group==='整体'?'整体':groupName(g.group,task.kind))+'</text>';
-      svg+='<polyline fill="none" stroke="'+colors[index]+'" stroke-width="2" points="'+data.filter(p=>p.value!==null).map(p=>p.x+','+(185-150*p.value/max)).join(' ')+'"/>';
-      svg+=data.filter(p=>p.value!==null).map(p=>'<circle cx="'+p.x+'" cy="'+(185-150*p.value/max)+'" r="5" fill="'+colors[index]+'" tabindex="0" role="button" data-live-date="'+esc(p.date)+'" aria-label="选择 '+esc(p.date)+'"><title>'+esc(p.date)+' · '+(reach?num(p.value):pct(p.value))+'</title></circle>').join('');
+      const name=g.group==='整体'?'整体':groupName(g.group,task.kind);
+      legends.push('<span><i style="background:'+colors[index]+'"></i>'+esc(name)+'</span>');
+      const data=rows.map((r,i)=>{const item=g.rows.find(d=>d.date===r.date);return {date:r.date,x:70+i*520/Math.max(rows.length-1,1),value:item?(reach?item.users:item.rate):null};});
+      // 缺测点必须断开，不能用直线补成已观测值。
+      let points=[];
+      const flush=()=>{if(points.length)svg+='<polyline class="movement-line-path '+(index?'movement-line-control':'')+'" style="stroke:'+colors[index]+'" points="'+points.join(' ')+'"></polyline>';points=[];};
+      data.forEach(p=>{if(Number.isFinite(p.value))points.push(p.x+','+(202-174*p.value/max));else flush();});flush();
+      svg+='<g class="'+(index?'movement-control-points':'movement-line-points')+'">'+data.filter(p=>Number.isFinite(p.value)).map(p=>'<circle cx="'+p.x+'" cy="'+(202-174*p.value/max)+'" r="'+(index?4:6)+'" style="fill:'+colors[index]+'" tabindex="0" role="button" data-live-date="'+esc(p.date)+'" aria-label="选择 '+esc(p.date)+'"><title>'+esc(p.date)+' · '+esc(name)+' '+(reach?num(p.value):pct(p.value))+'</title></circle>').join('')+'</g>';
     });
-    svg+=rows.map((r,i)=>'<text x="'+(50+i*650/Math.max(rows.length-1,1))+'" y="220" text-anchor="middle" font-size="10">'+r.date.slice(5)+'</text>').join('')+'</svg>';
-    one('.movement-line-chart').innerHTML=rows.length?svg:'所选日期范围暂无数据';
+    one('#movementTrend .movement-line-legend').innerHTML=legends.join('');
+    svg+='<g class="movement-svg-axis">'+rows.map((r,i)=>'<text x="'+(70+i*520/Math.max(rows.length-1,1))+'" y="226" text-anchor="middle">'+r.date.slice(5)+'</text>').join('')+'</g></svg>';
+    if(rows.length)setVisual('dailyTrendVisual',svg);else emptyVisual('dailyTrendVisual','所选日期范围暂无数据');
     one('.movement-line-chart').setAttribute('aria-label',metricName+'趋势');
     const label=task.dimensionOptions[task.dimension];
     const breakdown=task.distribution;
-    const maxRate=Math.max(.01,...breakdown.map(r=>r.rate||0));
-    $('dailyBreakdownVisual').innerHTML=breakdown.map(r=>'<div class="breakdown-visual-row"><div class="breakdown-visual-label"><strong>'+esc(r.value)+'</strong><small>'+num(r.users)+' 人</small></div><div class="breakdown-rate"><div class="breakdown-rate-track"><b class="positive" style="width:'+100*(r.rate||0)/maxRate+'%"></b></div><strong>'+pct(r.rate)+'</strong></div></div>').join('');
-    $('dailyBreakdownTable').innerHTML=table([label,'人数',task.metric,'未达成人数'],breakdown.map(r=>[r.value,num(r.users),pct(r.rate),num(r.unmet)]));
+    // 原版并排展示两个来源组；保留该布局，不改成另一种条形图。
+    const pairs=(task.groupDistribution||[]).slice(0,2);
+    const pairRate=(index,value)=>pairs[index]?.rows.find(row=>row.value===value)?.rate;
+    const pairLabel=index=>pairs[index]?groupName(pairs[index].group,task.kind):'来源组 '+(index+1);
+    const difference=value=>{const a=pairRate(0,value),b=pairRate(1,value);return Number.isFinite(a)&&Number.isFinite(b)?((a-b)*100).toFixed(2)+'pp':'—';};
+    setVisual('dailyBreakdownVisual',breakdown.map(r=>'<div class="breakdown-visual-row"><div class="breakdown-visual-label"><strong>'+esc(r.value)+'</strong><small>'+num(r.users)+' 人 · '+pct(s.users?r.users/s.users:null)+' 占该日</small></div><div class="daily-pair-rates"><span>'+esc(pairLabel(0))+' <b>'+pct(pairRate(0,r.value))+'</b></span><span>'+esc(pairLabel(1))+' <b>'+pct(pairRate(1,r.value))+'</b></span></div><em>'+difference(r.value)+'</em></div>').join(''));
+    setVisual('dailyBreakdownTable',table([label,'人数','占该日',pairLabel(0),pairLabel(1),'组间差异','整体 '+task.metric],breakdown.map(r=>[r.value,num(r.users),pct(s.users?r.users/s.users:null),pct(pairRate(0,r.value)),pct(pairRate(1,r.value)),difference(r.value),pct(r.rate)])));
+    if(!breakdown.length){emptyVisual('dailyBreakdownVisual');emptyVisual('dailyBreakdownTable');}
     text('#dailyBreakdownPanel .data-note',task.selectedDate+' · '+(task.selectedGroup==='all'?'整体':groupName(task.selectedGroup,task.kind)));
     text('#dailyInvalidTitle',coupon?'所选日领券未复购画像':'所选日未达标画像'); text('#dailyInvalidDate',task.selectedDate);
+    $('dailyInvalidList').removeAttribute('data-empty-visual');
     $('dailyInvalidList').innerHTML=breakdown.filter(r=>r.unmet>0).sort((a,b)=>b.unmet-a.unmet).map((r,i)=>'<div class="cause-row"><span class="cause-index">'+String(i+1).padStart(2,'0')+'</span><span><strong>'+esc(r.value)+'</strong><small>'+num(r.unmet)+' 人 · '+pct(s.unmet?r.unmet/s.unmet:null)+'</small></span></div>').join('') || '所选范围暂无未达成人群';
     text('#dailyFunnelPanel .section-kicker',coupon?'发券复购漏斗':'阶段转化');
     text('#dailyFunnelNote',task.selectedDate+' · '+(coupon?'进组 → 领券 → 领券且复购；观察入组后第 1–7 天':'未提供曝光、点击或发券阶段数据'));
     text('#dailyFunnelPanel .funnel-footnote',coupon?'完整发券 '+num(s.full)+' 人，其中复购 '+num(s.full_repurchase)+' 人；独立子集，不拼入主漏斗。':'阶段漏斗待对应数据接入。');
     const stages=coupon?[['进组',s.users],['领券',s.coupon],['领券且 7 日复购',s.coupon_repurchase]]:[];
-    const target=$('dailyFunnelVisual');target.className='funnel-visual view-'+funnel;
-    if(!stages.length)target.textContent='该数据源暂无阶段漏斗';
-    else if(funnel==='table')target.innerHTML=table(['阶段','人数','占进组比例'],stages.map(r=>[r[0],num(r[1]),pct(s.users?r[1]/s.users:null)]));
-    else if(funnel==='bar')target.innerHTML='<div class="funnel-bar-list">'+stages.map((r,i)=>'<div class="funnel-bar-row"><div class="funnel-bar-label"><strong>'+esc(r[0])+'</strong><small>'+pct(s.users?r[1]/s.users:null)+'</small></div><div class="funnel-bar-track"><b style="width:'+100*r[1]/Math.max(s.users,1)+'%;background:'+colors[i]+'"></b></div><div class="funnel-bar-value"><strong>'+num(r[1])+'</strong></div></div>').join('')+'</div>';
-    else target.innerHTML=stages.map((r,i)=>'<div class="funnel-stage '+(i===stages.length-1?'is-final':'')+'" style="--stage-width:'+Math.max(12,100*r[1]/Math.max(s.users,1))+'%;--stage-color:'+colors[i]+'"><span>'+esc(r[0])+'</span><strong>'+num(r[1])+'</strong><em>'+pct(s.users?r[1]/s.users:null)+'</em></div>').join('');
+    renderFunnel('dailyFunnelVisual',stages.length?stages:emptyStages,funnel);
   }
   function renderData() {
     const d=state.data;if(!d)return;const t=d.task;
@@ -199,14 +235,15 @@
     text('.mock-badge','服务器真实数据');text('#toast','');
     text('[data-task="summer"] small','安心充权益 / 来源分组');
     all('[data-task-type]').forEach(n=>n.dataset.taskType=n.dataset.task==='summer'?'来源分组 / 真实数据':n.dataset.taskType);
-    all('#dailyMetricSelect option').forEach(n=>{if(['exposureRate','clickRate'].includes(n.value)){n.disabled=true;n.textContent+='（未接入）';}});
+    all('#dailyMetricSelect option').forEach(n=>{if(['exposureRate','clickRate'].includes(n.value)){n.disabled=true;if(!n.textContent.includes('（未接入）'))n.textContent+='（未接入）';}});
     document.addEventListener('click',event=>{
       const n=event.target.closest('button,[data-live-date]');if(!n)return;
       if(n.dataset.task){event.stopImmediatePropagation();selectTree(n);const id={summer:'effect',recall:'coupon'}[n.dataset.task];if(id)load({taskId:id});else{unsupported('该任务尚未接入真实数据');text('#contextTaskName',n.dataset.taskName);}return;}
       if(n.classList.contains('audience-option')){event.stopImmediatePropagation();selectTree(n);if(n.closest('.task-group').dataset.taskGroup==='summer')load({taskId:'effect'});else{unsupported('该人群的组合筛选尚未接入，点击召回任务名称可查看任务全量数据。');text('#contextInputName',n.dataset.audience);}return;}
       if(n.dataset.profileDimension||n.dataset.dailyBreakdown){if(state.data)load({...selection,dimension:dimensions[n.dataset.profileDimension||n.dataset.dailyBreakdown]});}
-      if(n.dataset.profileView){chart=n.dataset.profileView;renderData();}
-      if(n.dataset.dailyFunnelView){funnel=n.dataset.dailyFunnelView;all('#dailyFunnelSwitch button').forEach(b=>b.classList.toggle('active',b===n));renderData();}
+      if(n.dataset.profileView){chart=n.dataset.profileView;if(state.data)renderData();else emptyProfile();}
+      if(n.dataset.dailyFunnelView){funnel=n.dataset.dailyFunnelView;all('#dailyFunnelSwitch button').forEach(b=>b.classList.toggle('active',b===n));if(state.data)renderData();else renderFunnel('dailyFunnelVisual',emptyStages,funnel);}
+      if(n.dataset.funnelView){resourceFunnel=n.dataset.funnelView;all('#funnelViewSwitch button').forEach(b=>b.classList.toggle('active',b===n));renderFunnel('funnelVisual',emptyStages,resourceFunnel);}
       if(n.dataset.liveDate&&state.data)load({...selection,date:n.dataset.liveDate});
       if(n.id==='refreshAnalysis'){event.stopImmediatePropagation();load();}
       if(n.id==='exportReport'){event.stopImmediatePropagation();exportData();}
