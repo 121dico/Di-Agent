@@ -136,7 +136,9 @@ export function selectTask(snapshot,id,{date,group='all',dimension='charge_life_
   const {rows,dimensions,audience,...metadata}=task;
   return {...metadata,selectedDate,selectedGroup:group,dimension,dimensionOptions:{...DIMENSIONS,...(task.kind==='coupon'?{activity_cycle:'流失周期'}:{})},groups,
     summary,distribution,portrait,portraitPartition:audience?.partition || task.partition,
+    portraitGroups:groups.map(g=>({group:g,...summarize('audience',audience?audience.rows.filter(r=>r.group_type===g):task.rows.filter(r=>r.date===selectedDate && r.group_type===g))})),
     groupSummary:groups.map(g=>({group:g,...summarize(task.kind,task.rows.filter(r=>r.date===selectedDate && r.group_type===g))})),
+    groupDaily:groups.map(g=>({group:g,rows:task.dates.map(d=>({date:d,...summarize(task.kind,task.rows.filter(r=>r.date===d && r.group_type===g))}))})),
     daily:task.dates.map(d=>({date:d,...summarize(task.kind,task.rows.filter(r=>r.date===d && (group==='all'||r.group_type===group)))})),
     evidence:snapshot.queries.filter(q=>q.sourceId===task.sourceId || q.sourceId===audience?.sourceId),
   };

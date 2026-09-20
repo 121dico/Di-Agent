@@ -7,7 +7,7 @@ import { SnapshotStore } from './store.mjs';
 import { buildSnapshot, selectTask } from './snapshot.mjs';
 
 const ROOT=dirname(dirname(fileURLToPath(import.meta.url)));
-const files=new Map(['index.html','live.js','live.css','agent-theme.css','report-theme.css','agent-bridge.js'].map(name=>['/'+name,name]));
+const files=new Map(['index.html','original-live.js','report-runtime.js','agent-theme.css','report-theme.css','agent-bridge.js'].map(name=>['/'+name,name]));
 const mime={html:'text/html; charset=utf-8',js:'application/javascript; charset=utf-8',css:'text/css; charset=utf-8'};
 function json(res,status,data) {
   res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});
