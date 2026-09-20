@@ -1,0 +1,1 @@
+{"name":"di-agent-delivery-analysis","version":"0.2.0","private":true,"type":"module","scripts":{"start":"node server/index.mjs","test":"node --test test/*.test.mjs","check":"node --check server/index.mjs && node --check server/snapshot.mjs && node --check app/live.js"},"engines":{"node":">=22"}}
