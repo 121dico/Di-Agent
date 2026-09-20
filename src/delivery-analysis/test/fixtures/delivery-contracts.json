@@ -1,0 +1,668 @@
+[
+  {
+    "source_id": "3b071893-2a56-4553-a4dd-6cc5d402081d",
+    "name": "epower_platform.ads_delivery_audience_snapshot_di",
+    "description": "投放分析人群画像快照：提供 DUID 人群包、组别、生命周期、充电频次、用户身份、会员、城市、战区、安心充与充电订单等画像字段。",
+    "fields": [
+      {
+        "name": "axc_buy_status",
+        "data_type": "STRING",
+        "description": "安心充状态",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "axc_ord_cnt_30d",
+        "data_type": "BIGINT",
+        "description": "安心充订单数30d",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "aggregate",
+          "sort"
+        ]
+      },
+      {
+        "name": "charge_duid_role_name_v2_type",
+        "data_type": "STRING",
+        "description": "用户身份",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "charge_freq_type",
+        "data_type": "STRING",
+        "description": "充电频次",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "charge_is_member_active",
+        "data_type": "BIGINT",
+        "description": "是否会员",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "aggregate",
+          "sort"
+        ]
+      },
+      {
+        "name": "charge_life_cycle",
+        "data_type": "STRING",
+        "description": "生命周期",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "charge_most_order_city_id",
+        "data_type": "BIGINT",
+        "description": "城市ID",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "aggregate",
+          "sort"
+        ]
+      },
+      {
+        "name": "charge_region",
+        "data_type": "STRING",
+        "description": "战区",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "chg_ord_cnt_30d",
+        "data_type": "BIGINT",
+        "description": "充电订单数30d",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "aggregate",
+          "sort"
+        ]
+      },
+      {
+        "name": "city_fenkuang",
+        "data_type": "STRING",
+        "description": "城市分框",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "city_name",
+        "data_type": "STRING",
+        "description": "城市",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "crowd_id",
+        "data_type": "STRING",
+        "description": "人群包ID",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "ds_freq_type",
+        "data_type": "STRING",
+        "description": "安心充频次分层",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "dt",
+        "data_type": "STRING",
+        "description": "快照日",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "duid",
+        "data_type": "BIGINT",
+        "description": "DUID",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "aggregate",
+          "sort"
+        ]
+      },
+      {
+        "name": "first_axc_date",
+        "data_type": "STRING",
+        "description": "安心充首单日",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "first_axc_order_id",
+        "data_type": "STRING",
+        "description": "安心充首单ID",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "group_type",
+        "data_type": "STRING",
+        "description": "组别",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "last_axc_date",
+        "data_type": "STRING",
+        "description": "安心充最近单日",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "last_axc_order_id",
+        "data_type": "STRING",
+        "description": "安心充最近单ID",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "member_status",
+        "data_type": "STRING",
+        "description": "会员状态",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      }
+    ]
+  },
+  {
+    "source_id": "be8cd244-f2c6-4b45-b9ca-69a0d16ef3c8",
+    "name": "epower_platform.ads_delivery_coupon_funnel_di",
+    "description": "投放分析召回复购发券漏斗事实：提供 DUID、来源任务、组别、流失周期、生命周期、用户身份、会员、城市、战区及各漏斗转化标记字段。",
+    "fields": [
+      {
+        "name": "activity_cycle",
+        "data_type": "STRING",
+        "description": "流失周期",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "charge_duid_role_name_v2_type",
+        "data_type": "STRING",
+        "description": "用户身份",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "charge_freq_type",
+        "data_type": "STRING",
+        "description": "充电频次",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "charge_life_cycle",
+        "data_type": "STRING",
+        "description": "生命周期",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "charge_region",
+        "data_type": "STRING",
+        "description": "战区",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "city_fenkuang",
+        "data_type": "STRING",
+        "description": "城市分框",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "city_name",
+        "data_type": "STRING",
+        "description": "城市",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "dt",
+        "data_type": "STRING",
+        "description": "快照日",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "duid",
+        "data_type": "BIGINT",
+        "description": "DUID",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "aggregate",
+          "sort"
+        ]
+      },
+      {
+        "name": "entry_dt",
+        "data_type": "STRING",
+        "description": "进组日",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "group_type",
+        "data_type": "STRING",
+        "description": "组别",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "is_coupon",
+        "data_type": "INT",
+        "description": "是否发券",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "aggregate",
+          "sort"
+        ]
+      },
+      {
+        "name": "is_entry",
+        "data_type": "INT",
+        "description": "是否进组",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "aggregate",
+          "sort"
+        ]
+      },
+      {
+        "name": "is_full_coupon",
+        "data_type": "INT",
+        "description": "是否完整发券",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "aggregate",
+          "sort"
+        ]
+      },
+      {
+        "name": "is_full_coupon_repurchase_7d",
+        "data_type": "INT",
+        "description": "完整发券后7日复购",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "aggregate",
+          "sort"
+        ]
+      },
+      {
+        "name": "is_repurchase_7d",
+        "data_type": "INT",
+        "description": "是否7日复购",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "aggregate",
+          "sort"
+        ]
+      },
+      {
+        "name": "member_status",
+        "data_type": "STRING",
+        "description": "会员状态",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "source_task_id",
+        "data_type": "STRING",
+        "description": "来源任务",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      }
+    ]
+  },
+  {
+    "source_id": "4ec40ad6-c7d2-456a-b4b5-9797e4b0a49d",
+    "name": "epower_platform.ads_delivery_user_effect_di",
+    "description": "投放分析用户每日效果事实：提供 DUID、人群包、组别、生命周期、充电频次、用户身份、会员、城市、战区、订单数、渗透率、目标值及达成情况等字段。",
+    "fields": [
+      {
+        "name": "achieved_flag",
+        "data_type": "INT",
+        "description": "是否达成",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "aggregate",
+          "sort"
+        ]
+      },
+      {
+        "name": "axc_ord_cnt_30d",
+        "data_type": "BIGINT",
+        "description": "安心充订单数30d",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "aggregate",
+          "sort"
+        ]
+      },
+      {
+        "name": "charge_duid_role_name_v2_type",
+        "data_type": "STRING",
+        "description": "用户身份",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "charge_freq_type",
+        "data_type": "STRING",
+        "description": "充电频次",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "charge_life_cycle",
+        "data_type": "STRING",
+        "description": "生命周期",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "charge_region",
+        "data_type": "STRING",
+        "description": "战区",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "chg_ord_cnt_30d",
+        "data_type": "BIGINT",
+        "description": "充电订单数30d",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "aggregate",
+          "sort"
+        ]
+      },
+      {
+        "name": "city_fenkuang",
+        "data_type": "STRING",
+        "description": "城市分框",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "city_name",
+        "data_type": "STRING",
+        "description": "城市",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "crowd_id",
+        "data_type": "STRING",
+        "description": "人群包ID",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "dt",
+        "data_type": "STRING",
+        "description": "快照日",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "duid",
+        "data_type": "BIGINT",
+        "description": "DUID",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "aggregate",
+          "sort"
+        ]
+      },
+      {
+        "name": "effect_rate",
+        "data_type": "DOUBLE",
+        "description": "渗透率",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "aggregate",
+          "sort"
+        ]
+      },
+      {
+        "name": "group_type",
+        "data_type": "STRING",
+        "description": "组别",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "member_status",
+        "data_type": "STRING",
+        "description": "会员状态",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "stat_dt",
+        "data_type": "STRING",
+        "description": "统计日",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "sort"
+        ]
+      },
+      {
+        "name": "target_rate",
+        "data_type": "DOUBLE",
+        "description": "目标值",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "aggregate",
+          "sort"
+        ]
+      },
+      {
+        "name": "unmet_flag",
+        "data_type": "INT",
+        "description": "是否未达成",
+        "capabilities": [
+          "select",
+          "filter",
+          "group",
+          "aggregate",
+          "sort"
+        ]
+      }
+    ]
+  }
+]

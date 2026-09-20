@@ -101,7 +101,7 @@
     document.documentElement.dataset.liveReady = 'true';
   }
   function profile(task) {
-    const rows = task.portrait, total = rows.reduce((s,r)=>s+r.users,0), label = task.dimensionOptions[task.dimension];
+    const rows = task.portrait, total = rows.reduce((s,r)=>s+r.users,0), label = (task.portraitDimensionOptions||task.dimensionOptions)[task.portraitDimension||task.dimension];
     text('.audience-summary > strong',num(rows.length?total:null)); text('.audience-summary > span','DUID · 当前来源快照');
     text('.audience-summary .soft-tag','分区 '+task.portraitPartition);
     text('#profileDimensionTitle',label); text('#profileDrillPath',label);
@@ -130,7 +130,7 @@
     const rows = selectedRows(task), s=task.summary, coupon=task.kind==='coupon', reach=$('dailyMetricSelect').value==='dailyReach';
     const metricName = reach ? '样本人数' : task.metric;
     banner('movementOverview',rows.length+' 个数据日 · '+metricName,task.notes.join(' '));
-    metric('dailyMetrics',[[coupon?'所选进组日人数':'所选统计日人数',num(s.users),task.selectedDate],[task.metric,pct(s.rate),coupon?num(s.coupon_repurchase)+' / '+num(s.coupon):num(s.axc)+' / '+num(s.charge)],[coupon?'领券人数':'个人达标人数',num(coupon?s.coupon:s.achieved),'同一日期口径'],[coupon?'领券未复购人数':'个人未达标人数',num(s.unmet),'来源真实统计']]);
+    metric('dailyMetrics',[[coupon?'所选进组日人数':'所选统计日人数',num(s.users),task.selectedDate],[task.metric,pct(s.rate),coupon?num(s.coupon_repurchase)+' / '+num(s.coupon):num(s.axc)+' / '+num(s.charge)],[coupon?'领券人数':'个人达标人数',num(coupon?s.coupon:s.achieved),coupon?'同一日期口径':'个人目标 '+pct(s.personalTarget)],[coupon?'领券未复购人数':'个人未达标人数',num(s.unmet),coupon?'来源真实统计':'个人渗透率均值 '+pct(s.personalRateMean)]]);
     text('#dailyChartTitle',metricName+'趋势');
     text('#movementTrend .movement-line-legend','各来源组独立统计 · 点击日期联动下方模块');
     const series = task.groupDaily?.length ? task.groupDaily : [{group:'整体',rows:task.daily}];
@@ -194,7 +194,7 @@
     banner('effectOverview','跨日累计暂未接入','各日人数及滚动订单不可直接累加；请在原“分日效果”页签查看真实数据。');
     text('#effectSettings .baseline-label','累计口径');text('#baselineSelection','累计基准暂未接入');
     profile(t);daily(t);$('exportReport').disabled=false;
-    for(const attr of ['profile-dimension','daily-breakdown'])all('[data-'+attr+']').forEach(n=>n.classList.toggle('active',dimensions[n.getAttribute('data-'+attr)]===t.dimension));
+    for(const attr of ['profile-dimension','daily-breakdown'])all('[data-'+attr+']').forEach(n=>n.classList.toggle('active',dimensions[n.getAttribute('data-'+attr)]===(attr==='profile-dimension'?(t.portraitDimension||t.dimension):t.dimension)));
   }
   async function load(next=selection) {
     if(next.unsupported){unsupported(next.unsupported);return;}
@@ -205,7 +205,7 @@
       const response=await fetch('/api/bootstrap?'+new URLSearchParams(next),{headers:{Authorization:'Bearer '+(localStorage.getItem('di_agent_token')||'')}});
       const data=await response.json();if(!response.ok)throw new Error(data.error||'读取失败');
       if(version!==state.request)return;if(data.env!=='live')throw new Error('接口未返回真实数据');
-      state.data=data;selection={taskId:data.task.id,date:data.task.selectedDate,group:data.task.selectedGroup,dimension:data.task.dimension};
+      state.data=data;selection={taskId:data.task.id,date:data.task.selectedDate,group:data.task.selectedGroup,dimension:data.task.dimension,...(data.task.portraitDimension?{portraitDimension:data.task.portraitDimension}:{})};
       try{sessionStorage.setItem('deliveryOriginalSelection',JSON.stringify(selection));}catch{}
       text('#dailyMetricSelect option[value="firstOrderRate"]',data.task.metric);
       const dates=all('#customDateRange input');if(dates[0]&&data.task.daily.length&&!dates[0].dataset.initialized){dates[0].value=data.task.daily[0].date;dates[1].value=data.task.daily.at(-1).date;dates.forEach(n=>n.dataset.initialized='true');}
@@ -226,9 +226,28 @@
     text('#contextTaskName',group.querySelector('.task-node').dataset.taskName);
     text('#contextInputName',node.dataset.audience||'任务全量');
   }
-  window.deliveryContext=()=>state.data?JSON.stringify({task:state.data.task.sourceTaskId,date:state.data.task.selectedDate,dimension:state.data.task.dimension,summary:state.data.task.summary,notes:state.data.task.notes}):'当前未选择已接入的数据';
+  window.deliveryContext=()=>state.data?JSON.stringify({task:state.data.task.sourceTaskId,date:state.data.task.selectedDate,dimension:state.data.task.dimension,portraitDimension:state.data.task.portraitDimension,portrait:state.data.task.portrait.slice(0,50),portraitRowsTotal:state.data.task.portrait.length,audienceFacts:state.data.task.audienceFacts,summary:state.data.task.summary,notes:state.data.task.notes}):'当前未选择已接入的数据';
   window.askAi=async question=>{state.ai={question,answer:{title:'分析暂不可用',answer:'当前没有可用 Agent，请先连接 Agent 后重试。'}};window.render();};
   function exportData(){if(!state.data)return;const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(state.data,null,2)],{type:'application/json'}));a.href=url;a.download='投放分析-'+state.data.task.id+'.json';a.click();URL.revokeObjectURL(url);}
+  function fieldDetails(task) {
+    const s=task.summary;
+    let html='<h4>数据来源标识</h4><p>'+esc(task.sourceTaskId)+' · '+esc(task.partition)+'</p>';
+    if(task.kind==='effect')html+='<h4>所选统计日 · 源表个人效果</h4>'+table(['项目','实际数据'],[
+      ['统一个人目标',pct(s.personalTarget)],['目标非空人数',num(s.target_count)+' / '+num(s.users)],
+      ['个人渗透率均值',pct(s.personalRateMean)],['个人渗透率非空人数',num(s.rate_count)+' / '+num(s.users)],
+      ['个人渗透率原值范围',pct(s.personalRateMin)+' → '+pct(s.personalRateMax)],
+      ['源值检查',s.personalRateMax>1?'源值超过 100%，需核查源表，未截断或改写':'以源表原值为准'],
+    ])+'<p>个人目标只在非空覆盖全部样本且目标相同时显示；目标不一致或缺失时显示 —。个人均值与订单合计比率口径不同，不代替整体活动目标。</p>';
+    const facts=task.audienceFacts;
+    if(facts)html+='<h4>人群画像快照 · '+esc(facts.partition)+'</h4>'+table(['项目','实际数据'],[
+      ['近30天安心充订单',num(facts.summary.axc)],['近30天充电订单',num(facts.summary.charge)],
+      ['首单 ID 有值人数',num(facts.orderCoverage.first_axc_order_id)+' / '+num(facts.summary.users)],
+      ['最近单 ID 有值人数',num(facts.orderCoverage.last_axc_order_id)+' / '+num(facts.summary.users)],
+    ])+'<p>订单计数是当前人群快照的近30天汇总，不是投放后新增；订单 ID 仅校验非 NULL 且非空字符串，不拉取用户或订单明细。</p>';
+    html+='<h4>三个 API 字段用途</h4><p>“已接入”表示已用于统计、画像、范围限定或质量校验，不代表所有 PRD 功能已完成。完整查询依据随导出保存。</p>';
+    for(const source of task.fieldCoverage||[])html+='<h4>'+esc(source.name)+' · '+source.fields.filter(f=>f.status==='已接入').length+'/'+source.fields.length+'</h4>'+table(['字段','状态','用途'],source.fields.map(f=>[f.name,f.status,f.purpose]));
+    return html;
+  }
   function init() {
     if(initialized)return;initialized=true;
     // 原树和所有模块保留；不支持的组合只显示未接入，不能套用全量数据。
@@ -240,7 +259,18 @@
       const n=event.target.closest('button,[data-live-date]');if(!n)return;
       if(n.dataset.task){event.stopImmediatePropagation();selectTree(n);const id={summer:'effect',recall:'coupon'}[n.dataset.task];if(id)load({taskId:id});else{unsupported('该任务尚未接入真实数据');text('#contextTaskName',n.dataset.taskName);}return;}
       if(n.classList.contains('audience-option')){event.stopImmediatePropagation();selectTree(n);if(n.closest('.task-group').dataset.taskGroup==='summer')load({taskId:'effect'});else{unsupported('该人群的组合筛选尚未接入，点击召回任务名称可查看任务全量数据。');text('#contextInputName',n.dataset.audience);}return;}
-      if(n.dataset.profileDimension||n.dataset.dailyBreakdown){if(state.data)load({...selection,dimension:dimensions[n.dataset.profileDimension||n.dataset.dailyBreakdown]});}
+      if(n.dataset.profileDimension||n.dataset.dailyBreakdown){if(state.data)load({...selection,...(n.dataset.profileDimension?{portraitDimension:dimensions[n.dataset.profileDimension]}:{dimension:dimensions[n.dataset.dailyBreakdown]})});}
+      if(n.dataset.livePortrait&&state.data){event.stopImmediatePropagation();$('infoDialog').close();load({...selection,portraitDimension:n.dataset.livePortrait});return;}
+      if(n.dataset.liveBreakdown&&state.data){event.stopImmediatePropagation();$('infoDialog').close();load({...selection,dimension:n.dataset.liveBreakdown});return;}
+      if(n.id==='configureDimensions'){
+        event.stopImmediatePropagation();const task=state.data?.task;
+        if(!task){notice('当前没有可配置的真实数据');return;}
+        const options=task.portraitDimensionOptions||task.dimensionOptions;
+        text('#dialogTitle','选择画像与分日拆解维度');
+        $('dialogBody').innerHTML='<p>'+ '画像使用来源标签快照，切换画像维度不改变分日效果维度。'+'</p><div class="profile-dimensions">'+Object.entries(options).map(([key,label])=>'<button type="button" class="secondary-button compact-button" data-live-portrait="'+esc(key)+'">'+esc(label)+'</button>').join('')+'</div>';
+        $('dialogBody').insertAdjacentHTML('beforeend','<h4>分日效果拆解</h4><div class="profile-dimensions">'+Object.entries(task.dimensionOptions).map(([key,label])=>'<button type="button" class="secondary-button compact-button" data-live-breakdown="'+esc(key)+'">'+esc(label)+'</button>').join('')+'</div>');
+        $('infoDialog').showModal();return;
+      }
       if(n.dataset.profileView){chart=n.dataset.profileView;if(state.data)renderData();else emptyProfile();}
       if(n.dataset.dailyFunnelView){funnel=n.dataset.dailyFunnelView;all('#dailyFunnelSwitch button').forEach(b=>b.classList.toggle('active',b===n));if(state.data)renderData();else renderFunnel('dailyFunnelVisual',emptyStages,funnel);}
       if(n.dataset.funnelView){resourceFunnel=n.dataset.funnelView;all('#funnelViewSwitch button').forEach(b=>b.classList.toggle('active',b===n));renderFunnel('funnelVisual',emptyStages,resourceFunnel);}
@@ -254,16 +284,17 @@
         $('dialogBody').innerHTML='<p>页面以服务器 API 聚合快照为准。有值展示真实统计，缺少数据展示 — 或暂无数据。</p>'+table(['模块','当前接入情况'],[
           ['人群画像、分日效果、单维度拆解','已接入；以所选任务和日期为准'],
           ['召回复购发券漏斗','已接入任务全量；分层人群组合暂无数据'],
-          ['投放前均衡检查','暂无数据'],['跨日累计、目标与基准','暂无数据'],
+          ['投放前均衡检查','暂无数据'],['跨日累计、整体活动目标与历史基准','暂无数据；源表个人目标另列于分日指标和下方说明'],
           ['资源位曝光、点击','暂无数据'],['小时实时趋势','暂无数据'],['历史活动对比、下次投放建议','暂无数据'],
-          ['人群包 ID、状态、有效期、创建人','暂无数据']
+          ['数据来源标识','已使用 crowd_id / source_task_id 限定数据；源标识见下方'],['人群包管理状态、有效期、创建人','暂无数据']
         ])+'<p>'+esc(task?'当前来源：'+task.sourceName+'；分区：'+task.partition+'。 '+task.notes.join(' '):'当前选择暂无已接入数据。')+'</p>';
+        if(task)$('dialogBody').insertAdjacentHTML('beforeend',fieldDetails(task));
         $('infoDialog').showModal();return;
       }
       if(n.id==='closeDialog'){$('infoDialog').close();return;}
       const evidence=['showConclusionEvidence','showMovementEvidence','showMonitorEvidence'];
       if(evidence.includes(n.id)){event.stopImmediatePropagation();notice(state.data?'来源 '+state.data.task.sourceName+'；分区 '+state.data.task.partition+'；'+state.data.task.evidence.length+' 次聚合查询，完整查询依据随导出保存。':'当前暂无查询依据');}
-      const deferred=['addProfileDrill','configureDimensions','addDimensionPrompt','customBreakdownDimension','selectHistoryActivity','recheckBalance','viewBalanceRule','configureFunnel','exportDailyReport'];
+      const deferred=['addProfileDrill','addDimensionPrompt','customBreakdownDimension','selectHistoryActivity','recheckBalance','viewBalanceRule','configureFunnel','exportDailyReport'];
       if(deferred.includes(n.id)){event.stopImmediatePropagation();notice('该能力所需数据或配置尚未接入；当前可使用原有画像维度和分日效果。');}
     },true);
     document.addEventListener('keydown',event=>{const n=event.target.closest('[data-live-date]');if(n&&['Enter',' '].includes(event.key)){event.preventDefault();if(state.data)load({...selection,date:n.dataset.liveDate});}});

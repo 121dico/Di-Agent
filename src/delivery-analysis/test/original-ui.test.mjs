@@ -140,3 +140,33 @@ test('空画像的条形和表格模式在刷新后继续保持，真实漏斗�
  assert.equal(bar.style.background,'rgb(37, 99, 235)');assert.equal(bar.style.width,'100%');
  dom.window.close();
 });
+
+test('原配置入口可选择新增画像维度，数据说明列出字段用途和个人目标',async()=>{
+ const value=structuredClone(data);
+ Object.assign(value.task,{id:'effect',kind:'effect',portraitDimension:'charge_is_member_active',portraitDimensionOptions:{charge_life_cycle:'生命周期',charge_is_member_active:'会员有效标记'},portrait:[{value:'未知',users:20}],fieldCoverage:[{name:'effect-api',fields:[{name:'target_rate',label:'目标值',status:'已接入',purpose:'源表个人目标'}]}]});
+ Object.assign(value.task.summary,{personalTarget:.12,personalRateMean:.14,personalRateMin:0,personalRateMax:2,rate_count:100,target_count:100});
+ const dom=await page(value),d=dom.window.document;
+ dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true;};
+ dom.window.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ assert.match(d.querySelector('#dailyMetrics').textContent,/个人目标 12.00%/);
+ assert.match(d.querySelector('#profileDimensionTitle').textContent,/会员有效标记/);
+ d.querySelector('#configureDimensions').click();
+ assert.ok(d.querySelector('[data-live-portrait="charge_is_member_active"]'));
+ d.querySelector('#closeDialog').click();
+ d.querySelector('#openDataNote').click();
+ assert.match(d.querySelector('#dialogBody').textContent,/target_rate/);
+ assert.match(d.querySelector('#dialogBody').textContent,/源值超过 100%/);
+ dom.window.close();
+});
+
+test('画像快捷按钮不覆盖分日效果维度',async()=>{
+ const value=structuredClone(data);value.task.dimension='member_status';value.task.dimensionOptions.member_status='会员状态';
+ const dom=await page(value),d=dom.window.document;
+ let requested;
+ dom.window.fetch=async url=>{requested=new URL(url,'http://localhost');return {ok:true,json:async()=>value};};
+ d.querySelector('[data-profile-dimension="city"]').click();
+ await new Promise(r=>setTimeout(r,30));
+ assert.equal(requested.searchParams.get('dimension'),'member_status');
+ assert.equal(requested.searchParams.get('portraitDimension'),'city_name');
+ dom.window.close();
+});
