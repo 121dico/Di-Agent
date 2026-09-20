@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {JSDOM} from 'jsdom';
 const root=new URL('../app/',import.meta.url);
-async function page(result,status=200) {
+async function page(result,status=200,savedSelection=null) {
  const dom=new JSDOM(await readFile(new URL('index.html',root),'utf8'),{url:'http://localhost/',runScripts:'outside-only'});
+ if(savedSelection)dom.window.sessionStorage.setItem('deliveryOriginalSelection',savedSelection);
  dom.window.fetch=async()=>({ok:status===200,json:async()=>result});
  for(const file of ['report-runtime.js','original-live.js'])dom.window.eval(await readFile(new URL(file,root),'utf8'));
  dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
@@ -46,3 +47,38 @@ test('切换未接入人群时清除旧漏斗数据说明',async()=>{
  assert.match(d.querySelector('#phaseAvailabilityNote').textContent,/组合筛选尚未接入/);
  dom.window.close();
 });
+
+test('成功读取后缺口明确为空，保留本地人群包字段布局',async()=>{
+ const dom=await page(data),d=dom.window.document;
+ for(const id of ['balanceDimensions','funnelVisual','breakdownVisual']){
+  assert.match(d.getElementById(id).textContent,/暂无数据/);
+  assert.doesNotMatch(d.getElementById(id).textContent,/正在读取/);
+ }
+ assert.equal(d.querySelectorAll('#audiencePackageMeta .package-meta-row').length,9);
+ const idRow=[...d.querySelectorAll('.package-meta-row')].find(n=>n.textContent.includes('整体人群包 ID'));
+ assert.equal(idRow.querySelector('strong').textContent,'—');
+ assert.doesNotMatch(d.body.textContent,/DEMO-AUD|214,084|7\.62%|94\.2%|286,400/);
+ dom.window.close();
+});
+test('未接入人群点击刷新后仍为空，不回退到上一任务数据',async()=>{
+ const dom=await page(data),d=dom.window.document;
+ const option=d.querySelector('[data-task-group="recall"] .audience-option');option.click();
+ d.getElementById('refreshAnalysis').click();
+ await new Promise(resolve=>setTimeout(resolve,30));
+ assert.equal(dom.window.state.data,null);
+ assert.ok(option.classList.contains('active'));
+ assert.doesNotMatch(d.getElementById('dailyMetrics').textContent,/25.00%/);
+ dom.window.close();
+});
+
+ test('空画像不等于真实零人，浏览器重载保留未接入选择',async()=>{
+ const empty=structuredClone(data);empty.task.portrait=[];
+ const dom=await page(empty),d=dom.window.document;
+ assert.match(d.getElementById('preOverview').textContent,/人群暂无数据/);
+ d.querySelector('[data-task-group="recall"] .audience-option').click();
+ const saved=dom.window.sessionStorage.getItem('deliveryOriginalSelection');dom.window.close();
+ const reloaded=await page(data,200,saved);
+ assert.equal(reloaded.window.state.data,null);
+ assert.ok(reloaded.window.document.querySelector('[data-task-group="recall"] .audience-option.active'));
+ reloaded.window.close();
+ });

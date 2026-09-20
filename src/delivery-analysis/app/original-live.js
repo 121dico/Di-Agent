@@ -20,7 +20,7 @@
       const card = cards[index];
       if (card) node.querySelector('.metric-top span').textContent = card[0];
       node.querySelector(':scope > strong').textContent = card ? card[1] : '—';
-      node.querySelector('small').textContent = card ? card[2] : '暂未接入';
+      node.querySelector('small').textContent = card ? card[2] : '暂无数据';
     });
   }
   function table(headers, rows) {
@@ -28,6 +28,28 @@
   }
   function banner(id, title, description) {
     text('#'+id+' .conclusion-copy h2',title); text('#'+id+' .conclusion-copy p',description);
+  }
+  function packageMeta(task) {
+    text('#audiencePackageMeta .package-heading strong', task ? (task.kind === 'coupon' ? '任务全量 · '+task.sourceTaskId : '近30天安心充低频购买用户') : '暂无数据');
+    const values = task ? {'分析类型':'来源分组统计','分析实体':'DUID','快照日期':task.portraitPartition,'人群时效性':'来源日快照'} : {};
+    all('#audiencePackageMeta .package-meta-row').forEach(row => {
+      row.querySelector('strong').textContent = values[row.querySelector(':scope > span').textContent] || '—';
+    });
+  }
+  function emptyGaps() {
+    const gaps = {
+      balanceDimensions:'暂无数据 · 缺少投放前快照与分流配置',
+      funnelVisual:'暂无数据 · 缺少资源位曝光、点击及阶段关联',
+      breakdownVisual:'暂无数据 · 缺少跨日去重累计口径',
+      breakdownTable:'暂无数据',
+    };
+    Object.entries(gaps).forEach(([id,message]) => {$(id).textContent=message;$(id).dataset.availability='empty';});
+    text('.realtime-chart','暂无数据 · 缺少小时级效果数据');
+    text('#subview-effect > .root-cause-panel .cause-list','暂无数据 · 缺少累计未达成人群');
+    text('#funnelDefinitionNote','暂无数据 · 资源位口径待接入');
+    text('#resourceFunnelPanel .funnel-footnote','阶段数据接入后展示转化漏斗。');
+    text('.realtime-trend-panel .data-note','暂无数据 · 小时级数据尚未接入');
+    text('.realtime-trend-panel .movement-line-legend','—');
   }
   function clearData(message) {
     for (const id of ['preMetrics','effectMetrics','dailyMetrics','realtimeMetrics']) metric(id,[]);
@@ -44,7 +66,8 @@
     text('#experimentBalance .balance-note p','均衡检查尚未接入，暂不判断是否通过。');
     text('#experimentBalance .balance-summary p','保留原检查模块，待对应数据可用后接入。');
     text('#subview-effect > .root-cause-panel .cause-recommend p','累计归属和营销建议暂未接入。');
-    for(const selector of ['#dailyFunnelNote','#dailyFunnelPanel .funnel-footnote','#dailyBreakdownPanel .data-note','#dailyInvalidDate','#audiencePackageMeta'])text(selector,message);
+    for(const selector of ['#dailyFunnelNote','#dailyFunnelPanel .funnel-footnote','#dailyBreakdownPanel .data-note','#dailyInvalidDate'])text(selector,message);
+    packageMeta(null);emptyGaps();
     text('#contextStatus',message); text('.sync-status','未加载');
     $('exportReport').disabled = true;
     state.ai.answer = null; window.render();
@@ -52,12 +75,13 @@
   }
   function profile(task) {
     const rows = task.portrait, total = rows.reduce((s,r)=>s+r.users,0), label = task.dimensionOptions[task.dimension];
-    text('.audience-summary > strong',num(total)); text('.audience-summary > span','DUID · 当前来源快照');
+    text('.audience-summary > strong',num(rows.length?total:null)); text('.audience-summary > span','DUID · 当前来源快照');
     text('.audience-summary .soft-tag','分区 '+task.portraitPartition);
     text('#profileDimensionTitle',label); text('#profileDrillPath',label);
     text('#profileDimensionDefinition','来源快照标签；不代表投放前状态');
     text('#profileVisualCaption',chart === 'table' ? '人数与占比' : '占比结构');
     text('#profileInsight',rows.length ? rows[0].value+'占比 '+pct(total ? rows[0].users/total : null)+'，共 '+num(rows[0].users)+' 人。' : '所选范围暂无画像数据');
+    if (!rows.length) {$('profileBars').textContent='暂无数据';return;}
     if (chart === 'table') $('profileBars').innerHTML = table(['标签枚举','人数','占比'],rows.map(r=>[r.value,num(r.users),pct(total?r.users/total:null)]));
     else if (chart === 'bar') $('profileBars').innerHTML = '<div class="profile-bars">'+rows.map(r=>'<div class="profile-bar-row"><span>'+esc(r.value)+'</span><div class="profile-bar-track"><b style="width:'+(total?100*r.users/total:0)+'%"></b></div><strong>'+num(r.users)+'</strong><em>'+pct(total?r.users/total:null)+'</em></div>').join('')+'</div>';
     else {
@@ -122,20 +146,22 @@
     text('#contextTaskName',one('[data-task="'+originalId+'"]').dataset.taskName);
     text('#contextInputName',t.id==='effect'?'近30天安心充低频购买用户':'任务全量 · '+t.sourceTaskId);
     text('#contextStatus','真实数据 · '+t.selectedDate);
-    text('.mock-badge','真实数据');text('.sync-status','快照 '+new Date(d.builtAt).toLocaleString('zh-CN',{hour12:false}));
-    text('#audiencePackageMeta','数据分区 '+t.partition+'；'+(t.kind==='coupon'?'当前为任务全量，各私家车流失人群组合筛选尚未接入。':'来源快照人群，分组不作随机实验结论。'));
+    text('.mock-badge','服务器真实数据');text('.sync-status','快照 '+new Date(d.builtAt).toLocaleString('zh-CN',{hour12:false}));
+    packageMeta(t);emptyGaps();
+    text('#historyReference .data-note','当前目标：'+t.metric);
     notice((d.status.lastError?d.status.lastError+'；保留上次快照。':'')+t.notes.join(' '));
     const groups=t.portraitGroups || t.groupSummary;
     const total=t.portrait.reduce((sum,r)=>sum+r.users,0);
-    metric('preMetrics',[['目标人群',num(total),'当前来源快照'],[groups[0]?groupName(groups[0].group,t.kind):'A组人数',num(groups[0]?.users),'来源分组'],[groups[1]?groupName(groups[1].group,t.kind):'B组人数',num(groups[1]?.users),'来源分组'],['均衡检查','—','投放前数据尚未接入']]);
+    metric('preMetrics',[['目标人群',num(t.portrait.length?total:null),'当前来源快照'],[groups[0]?groupName(groups[0].group,t.kind):'A组人数',num(groups[0]?.users),'来源分组'],[groups[1]?groupName(groups[1].group,t.kind):'B组人数',num(groups[1]?.users),'来源分组'],['均衡检查','—','投放前数据尚未接入']]);
     text('#preOverview .section-kicker','当前数据概览');
-    banner('preOverview','当前来源人群共 '+num(total)+' 人','已接入画像与分日效果。投放前均衡检查、历史活动对比等待对应数据，不输出推测结论。');
+    banner('preOverview',t.portrait.length?'当前来源人群共 '+num(total)+' 人':'当前来源人群暂无数据','已接入画像与分日效果。投放前均衡检查、历史活动对比等待对应数据，不输出推测结论。');
     banner('effectOverview','跨日累计暂未接入','各日人数及滚动订单不可直接累加；请在原“分日效果”页签查看真实数据。');
     text('#effectSettings .baseline-label','累计口径');text('#baselineSelection','累计基准暂未接入');
     profile(t);daily(t);$('exportReport').disabled=false;
     for(const attr of ['profile-dimension','daily-breakdown'])all('[data-'+attr+']').forEach(n=>n.classList.toggle('active',dimensions[n.getAttribute('data-'+attr)]===t.dimension));
   }
   async function load(next=selection) {
+    if(next.unsupported){unsupported(next.unsupported);return;}
     const changedTask=next.taskId!==selection.taskId;
     if(changedTask){all('#customDateRange input').forEach(n=>delete n.dataset.initialized);$('dailyPeriodSelect').value='7';$('customDateRange').classList.add('hidden');}
     const version=++state.request;selection=next;state.data=null;clearData('正在读取真实数据…');notice('正在读取真实数据…');
@@ -146,31 +172,58 @@
       state.data=data;selection={taskId:data.task.id,date:data.task.selectedDate,group:data.task.selectedGroup,dimension:data.task.dimension};
       try{sessionStorage.setItem('deliveryOriginalSelection',JSON.stringify(selection));}catch{}
       text('#dailyMetricSelect option[value="firstOrderRate"]',data.task.metric);
-      const dates=all('#customDateRange input');if(dates[0]&&!dates[0].dataset.initialized){dates[0].value=data.task.daily[0].date;dates[1].value=data.task.daily.at(-1).date;dates.forEach(n=>n.dataset.initialized='true');}
+      const dates=all('#customDateRange input');if(dates[0]&&data.task.daily.length&&!dates[0].dataset.initialized){dates[0].value=data.task.daily[0].date;dates[1].value=data.task.daily.at(-1).date;dates.forEach(n=>n.dataset.initialized='true');}
       renderData();
     }catch(error){if(version!==state.request)return;clearData(error.message);notice(error.message+'；请点击重新分析重试。');}
   }
-  function unsupported(message) {++state.request;state.data=null;clearData(message);notice(message);}
+  function unsupported(message) {
+    ++state.request;selection={unsupported:message,unknownTask:one('.task-node.active')?.dataset.task,unknownAudience:one('.audience-option.active')?.dataset.audience};state.data=null;
+    try{sessionStorage.setItem('deliveryOriginalSelection',JSON.stringify(selection));}catch{}
+    clearData('暂无数据');notice(message);
+  }
+  function selectTree(node) {
+    const group=node.closest('.task-group');
+    all('.task-group').forEach(n=>n.classList.toggle('active',n===group));
+    all('.task-node').forEach(n=>n.classList.toggle('active',group.contains(n)));
+    all('.audience-option').forEach(n=>n.classList.toggle('active',n===node));
+    all('.audience-option svg[data-lucide="check"]').forEach(n=>n.style.display=n.closest('.audience-option').classList.contains('active')?'':'none');
+    text('#contextTaskName',group.querySelector('.task-node').dataset.taskName);
+    text('#contextInputName',node.dataset.audience||'任务全量');
+  }
   window.deliveryContext=()=>state.data?JSON.stringify({task:state.data.task.sourceTaskId,date:state.data.task.selectedDate,dimension:state.data.task.dimension,summary:state.data.task.summary,notes:state.data.task.notes}):'当前未选择已接入的数据';
   window.askAi=async question=>{state.ai={question,answer:{title:'分析暂不可用',answer:'当前没有可用 Agent，请先连接 Agent 后重试。'}};window.render();};
   function exportData(){if(!state.data)return;const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(state.data,null,2)],{type:'application/json'}));a.href=url;a.download='投放分析-'+state.data.task.id+'.json';a.click();URL.revokeObjectURL(url);}
   function init() {
     if(initialized)return;initialized=true;
     // 原树和所有模块保留；不支持的组合只显示未接入，不能套用全量数据。
-    text('.mock-badge','真实数据');
+    text('.mock-badge','服务器真实数据');text('#toast','');
     text('[data-task="summer"] small','安心充权益 / 来源分组');
     all('[data-task-type]').forEach(n=>n.dataset.taskType=n.dataset.task==='summer'?'来源分组 / 真实数据':n.dataset.taskType);
     all('#dailyMetricSelect option').forEach(n=>{if(['exposureRate','clickRate'].includes(n.value)){n.disabled=true;n.textContent+='（未接入）';}});
     document.addEventListener('click',event=>{
       const n=event.target.closest('button,[data-live-date]');if(!n)return;
-      if(n.dataset.task){event.stopImmediatePropagation();const id={summer:'effect',recall:'coupon'}[n.dataset.task];if(id)load({taskId:id});else{unsupported('该任务尚未接入真实数据');text('#contextTaskName',n.dataset.taskName);}return;}
-      if(n.classList.contains('audience-option')){event.stopImmediatePropagation();if(n.closest('.task-group').dataset.taskGroup==='summer')load({taskId:'effect'});else{unsupported('该人群的组合筛选尚未接入，点击召回任务名称可查看任务全量数据。');text('#contextInputName',n.dataset.audience);}return;}
+      if(n.dataset.task){event.stopImmediatePropagation();selectTree(n);const id={summer:'effect',recall:'coupon'}[n.dataset.task];if(id)load({taskId:id});else{unsupported('该任务尚未接入真实数据');text('#contextTaskName',n.dataset.taskName);}return;}
+      if(n.classList.contains('audience-option')){event.stopImmediatePropagation();selectTree(n);if(n.closest('.task-group').dataset.taskGroup==='summer')load({taskId:'effect'});else{unsupported('该人群的组合筛选尚未接入，点击召回任务名称可查看任务全量数据。');text('#contextInputName',n.dataset.audience);}return;}
       if(n.dataset.profileDimension||n.dataset.dailyBreakdown){if(state.data)load({...selection,dimension:dimensions[n.dataset.profileDimension||n.dataset.dailyBreakdown]});}
       if(n.dataset.profileView){chart=n.dataset.profileView;renderData();}
       if(n.dataset.dailyFunnelView){funnel=n.dataset.dailyFunnelView;all('#dailyFunnelSwitch button').forEach(b=>b.classList.toggle('active',b===n));renderData();}
       if(n.dataset.liveDate&&state.data)load({...selection,date:n.dataset.liveDate});
       if(n.id==='refreshAnalysis'){event.stopImmediatePropagation();load();}
       if(n.id==='exportReport'){event.stopImmediatePropagation();exportData();}
+      if(['openApiGuide','openDataNote','openHelp'].includes(n.id)) {
+        event.stopImmediatePropagation();
+        text('#dialogTitle',n.textContent.trim());
+        const task=state.data?.task;
+        $('dialogBody').innerHTML='<p>页面以服务器 API 聚合快照为准。有值展示真实统计，缺少数据展示 — 或暂无数据。</p>'+table(['模块','当前接入情况'],[
+          ['人群画像、分日效果、单维度拆解','已接入；以所选任务和日期为准'],
+          ['召回复购发券漏斗','已接入任务全量；分层人群组合暂无数据'],
+          ['投放前均衡检查','暂无数据'],['跨日累计、目标与基准','暂无数据'],
+          ['资源位曝光、点击','暂无数据'],['小时实时趋势','暂无数据'],['历史活动对比、下次投放建议','暂无数据'],
+          ['人群包 ID、状态、有效期、创建人','暂无数据']
+        ])+'<p>'+esc(task?'当前来源：'+task.sourceName+'；分区：'+task.partition+'。 '+task.notes.join(' '):'当前选择暂无已接入数据。')+'</p>';
+        $('infoDialog').showModal();return;
+      }
+      if(n.id==='closeDialog'){$('infoDialog').close();return;}
       const evidence=['showConclusionEvidence','showMovementEvidence','showMonitorEvidence'];
       if(evidence.includes(n.id)){event.stopImmediatePropagation();notice(state.data?'来源 '+state.data.task.sourceName+'；分区 '+state.data.task.partition+'；'+state.data.task.evidence.length+' 次聚合查询，完整查询依据随导出保存。':'当前暂无查询依据');}
       const deferred=['addProfileDrill','configureDimensions','addDimensionPrompt','customBreakdownDimension','selectHistoryActivity','recheckBalance','viewBalanceRule','configureFunnel','exportDailyReport'];
@@ -184,13 +237,20 @@
     // 历史模块保留原有完整骨架；示例数值清空，尚无数据的结果继续隐藏。
     for (const id of ['historyReferenceResult','effectHistoryComparison']) {
       const region=$(id);
-      region.querySelectorAll('p,td,strong,b,em,.lift,.soft-tag').forEach(n=>{
+      region.querySelectorAll('p,td,strong,b,em,.lift,.soft-tag,.selected-history small,.history-note span').forEach(n=>{
         if (!n.closest('button') || n.matches('b,em,.lift')) n.textContent='—';
       });
       region.querySelectorAll('[style]').forEach(n=>n.style.removeProperty('width'));
     }
+    text('#historyReferenceEmpty strong','暂无数据 · 历史活动尚未接入');
+    text('#effectSelectedHistoryName','暂无数据');
     banner('effectHistoryComparison','历史活动暂未接入','等待历史数据后在原模块展示。');
     try{selection=JSON.parse(sessionStorage.getItem('deliveryOriginalSelection')||'null')||selection;}catch{}
+    if(selection.unsupported){
+      const group=all('.task-group').find(n=>n.dataset.taskGroup===selection.unknownTask);
+      const node=group&&(Array.from(group.querySelectorAll('.audience-option')).find(n=>n.dataset.audience===selection.unknownAudience)||group.querySelector('.task-node'));
+      if(node)selectTree(node);
+    }
     load();
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
