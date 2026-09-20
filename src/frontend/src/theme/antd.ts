@@ -1,9 +1,15 @@
 import type { ThemeConfig } from 'antd';
 
+// 选项高亮独立于深色主操作按钮，沿用报表蓝并提高透明度。
+const selectedBackground = 'rgba(47, 111, 219, 0.12)';
+
 const theme: ThemeConfig = {
   token: {
     colorPrimary: '#1d1d1f',
     colorInfo: '#005fcc',
+    controlItemBgHover: 'rgba(47, 111, 219, 0.06)',
+    controlItemBgActive: selectedBackground,
+    controlItemBgActiveHover: 'rgba(47, 111, 219, 0.18)',
     colorSuccess: '#167c46',
     colorWarning: '#9a5700',
     colorError: '#c2352a',
@@ -55,7 +61,7 @@ const theme: ThemeConfig = {
       itemMarginInline: 6,
       itemHeight: 40,
       iconSize: 17,
-      itemSelectedBg: '#eef5ff',
+      itemSelectedBg: selectedBackground,
       itemSelectedColor: '#1d1d1f',
     },
     Avatar: {

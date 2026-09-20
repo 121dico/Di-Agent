@@ -8,7 +8,7 @@ html.dark {
   --wb-surface: #ffffff;
   --wb-surface-subtle: #f7f7f5;
   --wb-surface-hover: #f1f1ef;
-  --wb-surface-selected: #eef5ff;
+  --wb-surface-selected: rgba(47, 111, 219, 0.12);
   --wb-text-primary: #1d1d1f;
   --wb-text-secondary: #5f6368;
   --wb-text-tertiary: #686b70;
