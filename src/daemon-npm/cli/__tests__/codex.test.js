@@ -89,6 +89,10 @@ function buildPersistentHarness(overrides = {}) {
       child = fakeCodexChild((message, activeChild) => {
         if (message.method === 'initialize') {
           emitCodexLine(activeChild, { jsonrpc: '2.0', id: message.id, result: {} });
+        } else if (message.method === 'model/list') {
+          emitCodexLine(activeChild, { id: message.id, result: { data: ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5'].map(model => ({ model, isDefault: model === 'gpt-5.6-sol', serviceTiers: [{ id: 'priority' }], supportedReasoningEfforts: ['low', 'medium', 'high'].map(reasoningEffort => ({ reasoningEffort })) })) } });
+        } else if (message.method === 'config/read') {
+          emitCodexLine(activeChild, { id: message.id, result: { config: { model: 'gpt-5.6-sol' } } });
         } else if (message.method === 'thread/start') {
           emitCodexLine(activeChild, { jsonrpc: '2.0', id: message.id, result: { thread: { id: 'thread-1' } } });
         } else if (message.method === 'turn/start') {
@@ -206,7 +210,7 @@ test('codex runtime config rejects malformed or unknown policy instead of silent
   assert.throws(() => normalizeRuntimeConfig({ approval_mode: 'request' }), /version/);
   assert.throws(() => normalizeRuntimeConfig({
     version: 1,
-    model: 'not-a-model',
+    model: '--not-a-model',
     reasoning_effort: 'medium',
     approval_mode: 'auto',
   }), /model/);
@@ -883,4 +887,18 @@ test('Codex resumes the saved native thread and applies model changes without lo
  assert.equal(messages.some(m=>m.method==='thread/start'),false);
  assert.equal(messages.find(m=>m.method==='thread/resume').params.threadId,'saved-thread');
  assert.equal(s.sessionId,'thread-1');
+});
+
+// Go 的 omitempty 会省略 Default 的空 model；必须覆盖实际线上消息形状。
+test('Default survives omitted model on the daemon wire boundary', async () => {
+  const config = { version: 2, reasoning_effort: 'medium', approval_mode: 'auto', service_tier: 'default' };
+  assert.strictEqual(normalizeRuntimeConfig(config).model, '');
+  assert.deepStrictEqual(normalizeRuntimeConfig({}), { ...config, model: '' });
+  const harness = buildPersistentHarness();
+  const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({ agentId: 'a1' }, harness.ctx);
+  await runtime.ready;
+  const result = await runtime.sendPrompt('hello', config);
+  assert.strictEqual(result.result, 'hello');
+  const turn = harness.child.stdin.writes.map(JSON.parse).find(item => item.method === 'turn/start');
+  assert.strictEqual(turn.params.model, 'gpt-5.6-sol');
 });

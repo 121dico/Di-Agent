@@ -197,6 +197,7 @@ func Setup(r *gin.Engine, deps Deps) {
 		apiGroup.POST("/agents/:id/stop", deps.AgentHandler.StopAgent)
 		apiGroup.POST("/agents/:id/skills/open-location", deps.AgentHandler.OpenSkillLocation)
 		apiGroup.POST("/agents/:id/skills/install", deps.AgentHandler.InstallGitHubSkill)
+		apiGroup.GET("/agents/:id/models", deps.AgentHandler.ListModels)
 		apiGroup.GET("/agents/:id/files/browse", deps.AgentHandler.BrowseFiles)
 
 		// Fixed enterprise reports

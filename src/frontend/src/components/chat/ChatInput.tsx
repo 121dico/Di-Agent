@@ -160,6 +160,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     return globalAgents.find((agent) => agent.id === directAgentId)
       ?? agentMembers.find((agent) => agent.agent_id === directAgentId);
   }, [agentMembers, directAgentId, globalAgents]);
+  const supportsModelSelection = conversation?.type === 'agent' && ['codex', 'claude'].includes(runtimeAgent?.cli_tool ?? '');
   const supportsCodexControls = conversation?.type === 'agent' && runtimeAgent?.cli_tool === 'codex';
   const runtimePreferenceIdentity = directAgentId ? `${conversationId}:${directAgentId}` : '';
   const [runtimePreferenceState, setRuntimePreferenceState] = useState<{
@@ -605,7 +606,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         replyPreview,
         mentions,
         targetAgentId,
-        !isGroup && selectedAgent?.cli_tool === 'codex' ? runtimeConfig : undefined,
+        !isGroup && selectedAgent?.cli_tool === 'codex' ? runtimeConfig
+          : !isGroup && selectedAgent?.cli_tool === 'claude' ? { ...DEFAULT_AGENT_RUNTIME_CONFIG, model: runtimeConfig.model } : undefined,
       );
       // Persist the @mentioned agent as sticky target for subsequent messages
       if (isGroup && mentionedAgentId) {
@@ -850,8 +852,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 />
               </Tooltip>
             </div>
-            {conversation?.type === 'agent' && (supportsCodexControls
-              ? <ComposerRuntimeControls value={runtimeConfig} onChange={handleRuntimeChange} />
+            {conversation?.type === 'agent' && (supportsModelSelection
+              ? <ComposerRuntimeControls key={directAgentId} agentId={directAgentId} modelOnly={!supportsCodexControls} value={runtimeConfig} onChange={handleRuntimeChange} />
               : <ComposerRuntimeFallback />)}
             <Button
               type="primary"

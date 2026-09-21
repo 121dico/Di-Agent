@@ -113,3 +113,10 @@
   .runtimeSegment { gap: 3px; }
   .fastLabel { display: none; }
 }
+
+.modelScanStatus {
+  display: block;
+  max-width: 270px;
+  white-space: normal;
+  line-height: 1.5;
+}

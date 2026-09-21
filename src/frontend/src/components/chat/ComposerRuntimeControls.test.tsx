@@ -8,6 +8,8 @@ import {
   ComposerApprovalControl,
   ComposerRuntimeControls,
 } from './ComposerRuntimeControls';
+import { getAgentModels } from '@/api/agentModels';
+vi.mock('@/api/agentModels', () => ({ getAgentModels: vi.fn() }));
 import { DEFAULT_AGENT_RUNTIME_CONFIG } from './agentRuntime';
 
 const mounted: Array<{ container: HTMLDivElement; unmount: () => void }> = [];
@@ -93,14 +95,15 @@ describe('Composer runtime controls', () => {
     expect(css).not.toMatch(/dangerMenuItem[^}]*background:\s*(?:#000|black|rgba\(0,\s*0,\s*0)/);
   });
 
-  it('offers the full model list and emits only the selected model change', async () => {
+  it('scans the selected agent and offers native models absent from the old hardcoded list', async () => {
+    vi.mocked(getAgentModels).mockResolvedValue({ source: 'runtime', default_model: 'local-model', models: [{ id: 'local-model', label: 'Local runtime model', is_default: true, reasoning_efforts: ['medium', 'ultra'], supports_priority: false }] });
     const onChange = vi.fn();
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
     mounted.push({ container, unmount: () => root.unmount() });
     act(() => root.render(
-      <ComposerRuntimeControls value={DEFAULT_AGENT_RUNTIME_CONFIG} onChange={onChange} />,
+      <ComposerRuntimeControls agentId="agent-local" value={DEFAULT_AGENT_RUNTIME_CONFIG} onChange={onChange} />,
     ));
 
     const trigger = container.querySelector<HTMLButtonElement>('[aria-label^="选择模型，"]');
@@ -109,17 +112,17 @@ describe('Composer runtime controls', () => {
       await new Promise((resolve) => window.setTimeout(resolve, 0));
     });
     const menuText = document.body.textContent ?? '';
-    for (const label of [
-      'Default', '5.6 Sol', '5.6 Terra', '5.6 Luna',
-      '5.5', '5.4', '5.4 Mini', '5.3 Codex Spark',
-    ]) expect(menuText).toContain(label);
+    expect(menuText).toContain('Local runtime model');
+    expect(menuText).toContain('重新扫描本地模型');
+    expect(getAgentModels).toHaveBeenCalledWith('agent-local');
+    expect(menuText).not.toContain('5.4 Mini');
 
     const option = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
-      .find((item) => item.textContent?.includes('5.4 Mini'));
+      .find((item) => item.textContent?.includes('Local runtime model'));
     await act(async () => option?.click());
     expect(onChange).toHaveBeenCalledWith({
       ...DEFAULT_AGENT_RUNTIME_CONFIG,
-      model: 'gpt-5.4-mini',
+      model: 'local-model',
       service_tier: 'default',
     });
   });

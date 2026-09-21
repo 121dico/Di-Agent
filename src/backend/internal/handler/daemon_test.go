@@ -972,3 +972,13 @@ func TestDaemonWS_Ping_RespondsPong(t *testing.T) {
 		t.Errorf("expected pong, got type %q", pong.Type)
 	}
 }
+
+func TestModelDiscoveryDoesNotCreateTaskBoardItems(t *testing.T) {
+	calls := []string{}
+	syncer := &fakeTaskBoardSyncer{lifecycleCalls: &calls}
+	h := &DaemonHandler{taskSync: syncer}
+	h.syncTaskToBoard(context.Background(), &model.DaemonTask{CLITool: "__di_agent_list_models__"}, `{"models":[]}`, "")
+	if len(calls) != 0 {
+		t.Fatal("read-only model scan must not create a business task")
+	}
+}

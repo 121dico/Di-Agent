@@ -514,7 +514,7 @@ test('daemon rejects unsupported runtime policy instead of changing its meaning'
   await assert.rejects(() => executeTaskOnce({
     id: 'claude-invalid-runtime', cli_tool: 'claude', prompt: 'hello',
     runtime_config: { version: 1, model: 'gpt-5.6-sol', reasoning_effort: 'high', approval_mode: 'full' },
-  }), /does not support runtime_config/);
+  }), /仅支持模型选择/);
 });
 
 test('ensureDiAgentCodexMcpConfig writes task context and auto-approved platform tools', () => {

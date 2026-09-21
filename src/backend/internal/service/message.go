@@ -1248,6 +1248,14 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 		if !ok || !capabilityChecker.SupportsCapability(*agent.MachineID, "agent_runtime_controls_v2") {
 			return nil, fmt.Errorf("%w: 这台电脑的 Di Agent daemon 版本过旧，请重新运行连接命令升级后再试", ErrMsgInvalidRuntime)
 		}
+	} else if agent.CLITool == "claude" && selectedRuntime.Version != 0 {
+		if selectedRuntime.ApprovalMode != "auto" || selectedRuntime.ReasoningEffort != "medium" || selectedRuntime.ServiceTier != "default" {
+			return nil, fmt.Errorf("%w: Claude 目前仅支持模型选择", ErrMsgInvalidRuntime)
+		}
+		checker, ok := s.daemonHub.(interface{ SupportsCapability(string, string) bool })
+		if !ok || !checker.SupportsCapability(*agent.MachineID, "model_selection_v1") {
+			return nil, fmt.Errorf("%w: 请更新这台电脑的 daemon 后选择模型", ErrMsgInvalidRuntime)
+		}
 	} else if selectedRuntime.Version != 0 || selectedRuntime.Model != "" || selectedRuntime.ReasoningEffort != "" || selectedRuntime.ApprovalMode != "" || selectedRuntime.ServiceTier != "" {
 		return nil, fmt.Errorf("%w: %s 暂不支持可配置运行策略", ErrMsgInvalidRuntime, agent.CLITool)
 	}
@@ -1316,7 +1324,7 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 		},
 	}
 	var dispatchErr error
-	if agent.CLITool == "codex" || len(images) > 0 {
+	if agent.CLITool == "codex" || (agent.CLITool == "claude" && selectedRuntime.Version != 0) || len(images) > 0 {
 		capabilitySender, ok := s.daemonHub.(interface {
 			SendToMachineRequiringCapability(machineID, capability string, msg ws.WSMessage) error
 		})
@@ -1324,6 +1332,9 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 			dispatchErr = fmt.Errorf("daemon runtime capability sender unavailable")
 		} else {
 			capability := "agent_runtime_controls_v2"
+			if agent.CLITool == "claude" && selectedRuntime.Version != 0 {
+				capability = "model_selection_v1"
+			}
 			if len(images) > 0 {
 				capability = "image_inputs_v1"
 			}

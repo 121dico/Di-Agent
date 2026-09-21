@@ -215,7 +215,8 @@ function detectCapabilities() {
   // older daemon understands per-turn sandbox or approval semantics.
   const caps = readDiAgentEnvironment(process.env, 'DAEMON_DISABLE_STREAM_SLOT') === '1'
     ? []
-    : ['agent_runtime_controls_v1', 'agent_runtime_controls_v2', 'image_inputs_v1'];
+    : ['agent_runtime_controls_v1', 'agent_runtime_controls_v2', 'image_inputs_v1', 'model_selection_v1'];
+  caps.push('model_discovery_v1');
   if (detectDocker()) caps.push('docker');
   return caps;
 }
@@ -2282,12 +2283,26 @@ function validateTaskRuntimeConfig(task) {
     spec.runtimeConfigFingerprint(task.runtime_config);
     return;
   }
+  if (task.cli_tool === 'claude') {
+    require('../cli/claude-model-controls').normalizeClaudeRuntime(task.runtime_config);
+    return;
+  }
   if (hasExplicitRuntimeConfig(task.runtime_config)) {
     throw new Error(`CLI "${task.cli_tool}" does not support runtime_config`);
   }
 }
 
 async function executeTask(task, taskCtx, onEvent) {
+  if (task.cli_tool === '__di_agent_list_models__') {
+    const { cli_tool: cliTool } = JSON.parse(task.prompt);
+    if (!cliTools.getCliTool(cliTool)) throw new Error('此运行器暂不支持扫描模型');
+    const command = resolveCommand(cliTool, task.runtime_variant);
+    const catalog = await require('../cli/runtime-models').scanRuntimeModels({
+      cliTool, command,
+      env: cliTool === 'codex' ? { ...process.env, CODEX_HOME: ensureDiAgentCodexHome() } : process.env,
+    });
+    return JSON.stringify(catalog);
+  }
   if (task.cli_tool === OPEN_PATH_TOOL) {
     logFlow('info', 'task.open_path_start', { task_id: task.id });
     return openSkillLocation(task.prompt);
@@ -3389,7 +3404,9 @@ async function handleTaskDispatch(ws, data) {
   recentDispatches.set(dedupKey, { ts: now, hasMessageId: Boolean(task.message_id) });
 
   const imageOutputDir = path.join(os.tmpdir(), 'di-agent-cli-tasks', String(task.id).replace(/[^a-zA-Z0-9_-]/g, '-'), 'image-outputs');
-  task.prompt = (task.prompt || '') + require('../cli/image-output').imageOutputInstruction(imageOutputDir);
+  if (task.cli_tool !== '__di_agent_list_models__') {
+    task.prompt = (task.prompt || '') + require('../cli/image-output').imageOutputInstruction(imageOutputDir);
+  }
   const { systemPrompt, userPrompt } = buildPromptParts(task);
 
   logFlow('info', 'task.dispatch_received', {

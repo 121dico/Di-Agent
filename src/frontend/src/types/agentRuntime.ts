@@ -1,5 +1,5 @@
 export const CODEX_MODEL_OPTIONS = [
-  { value: '', label: 'Default', description: '推荐模型组合' },
+  { value: '', label: 'Default', description: '使用本地默认模型' },
   { value: 'gpt-5.6-sol', label: '5.6 Sol' },
   { value: 'gpt-5.6-terra', label: '5.6 Terra' },
   { value: 'gpt-5.6-luna', label: '5.6 Luna' },
@@ -9,8 +9,8 @@ export const CODEX_MODEL_OPTIONS = [
   { value: 'gpt-5.3-codex-spark', label: '5.3 Codex Spark' },
 ] as const;
 
-export type AgentRuntimeModel = typeof CODEX_MODEL_OPTIONS[number]['value'];
-export type AgentReasoningEffort = 'low' | 'medium' | 'high';
+export type AgentRuntimeModel = string;
+export type AgentReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 export type AgentApprovalMode = 'request' | 'auto' | 'full';
 export type AgentServiceTier = 'default' | 'priority';
 
@@ -30,8 +30,8 @@ export const DEFAULT_AGENT_RUNTIME_CONFIG: AgentRuntimeConfig = {
   service_tier: 'default',
 };
 
-const MODELS = new Set(CODEX_MODEL_OPTIONS.map((option) => option.value));
-const EFFORTS = new Set<AgentReasoningEffort>(['low', 'medium', 'high']);
+const MODEL_ID = /^[a-zA-Z0-9][a-zA-Z0-9._:/\[\]-]{0,199}$/;
+const EFFORTS = new Set<AgentReasoningEffort>(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
 const APPROVALS = new Set<AgentApprovalMode>(['request', 'auto', 'full']);
 const SERVICE_TIERS = new Set<AgentServiceTier>(['default', 'priority']);
 const PRIORITY_UNSUPPORTED_MODELS = new Set<AgentRuntimeModel>([
@@ -54,11 +54,11 @@ export function normalizeAgentRuntimeConfig(value: unknown): AgentRuntimeConfig 
   };
   if (
     (candidate.version !== 1 && candidate.version !== 2)
-    || !MODELS.has(candidate.model as AgentRuntimeModel)
+    || (candidate.model != null && candidate.model !== '' && (typeof candidate.model !== 'string' || !MODEL_ID.test(candidate.model)))
     || !EFFORTS.has(candidate.reasoning_effort as AgentReasoningEffort)
     || !APPROVALS.has(candidate.approval_mode as AgentApprovalMode)
   ) return { ...DEFAULT_AGENT_RUNTIME_CONFIG };
-  const model = candidate.model as AgentRuntimeModel;
+  const model = candidate.model == null || candidate.model === 'default' ? '' : candidate.model as AgentRuntimeModel;
   const requestedServiceTier: unknown = candidate.version === 1
     ? 'default'
     : candidate.service_tier;

@@ -1,4 +1,5 @@
 'use strict';
+const { createClaudeModelControls, normalizeClaudeRuntime } = require('./claude-model-controls');
 const { createClaudeUsageMeter, usageEvent } = require('./token-usage');
 
 // ClaudeCliSpec: Claude Code CLI 的 spec 实现。
@@ -87,6 +88,8 @@ function createClaudeCliSpec(ctx) {
       } else {
         args.push('--permission-mode', 'dontAsk');
       }
+      const selectedModel = normalizeClaudeRuntime(task.runtime_config);
+      if (selectedModel) args.push('--model', selectedModel);
       if (systemPrompt) {
         args.push('--system-prompt', systemPrompt);
       }
@@ -325,6 +328,8 @@ function createClaudeCliSpec(ctx) {
     // 注意：调用方仍可像旧 spawnStreamJsonProcess 一样用 sendPrompt().then(...) 等待单个 turn
     // （内部仍然是 resultResolver 串行化）；events 是另一条观察通道，给 dispatcher 把
     // AgentEvent 翻译成现有 WS 消息使用。两条通道共享同一份 stdout 解析。
+    runtimeConfigFingerprint(value) { normalizeClaudeRuntime(value); return 'claude-model-controls'; },
+
     spawnPersistent({
       agentId,
       sessionId,
@@ -413,6 +418,7 @@ function createClaudeCliSpec(ctx) {
         stdoutBuf = lines.pop();
         for (const line of lines) {
           if (!line.trim()) continue;
+          modelControls.handleLine(line);
           const events = this.parseStreamEventAll(line, daemonCtx);
           if (events.length === 0) continue;
           // 新增：把每个事件同步推给 eventRef.current 回调，让 dispatcher 层（StreamBuffer）
@@ -485,6 +491,7 @@ function createClaudeCliSpec(ctx) {
       });
 
       child.on('close', (code) => {
+        modelControls.close();
         const hadPendingTurn = Boolean(resultResolver);
         if (resultResolver) {
           const r = resultResolver;
@@ -540,8 +547,14 @@ function createClaudeCliSpec(ctx) {
         resultTimer.unref();
       });
 
+      const modelControls = createClaudeModelControls(child, message => {
+        eventRef?.current?.({ type: 'thinking', content: message });
+      });
       const sendPrompt = (prompt, runtimeConfig, approvalContext) => {
-        const run = () => sendPromptRaw(prompt, approvalContext);
+        const run = () => {
+          const applying = modelControls.apply(runtimeConfig);
+          return applying ? applying.then(() => sendPromptRaw(prompt, approvalContext)) : sendPromptRaw(prompt, approvalContext);
+        };
         queueTail = queueTail.then(run, run);
         return queueTail;
       };

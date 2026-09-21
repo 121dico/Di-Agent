@@ -552,7 +552,7 @@ func (h *DaemonHandler) handleTaskComplete(data json.RawMessage, machine *model.
 // syncTaskToBoard 统一 WebSocket 与 HTTP polling 两条 daemon 完成路径。
 // 任务结果落内存成功后才创建/修复看板卡片，最后再发送 conversation-scoped 事件。
 func (h *DaemonHandler) syncTaskToBoard(ctx context.Context, task *model.DaemonTask, result, taskErr string) {
-	if h.taskSync == nil || task == nil {
+	if h.taskSync == nil || task == nil || task.CLITool == "__di_agent_list_models__" {
 		return
 	}
 	if err := h.taskSync.CreateFromDaemonTask(ctx, task, result, taskErr); err != nil {

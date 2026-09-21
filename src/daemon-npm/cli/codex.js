@@ -1,5 +1,6 @@
 'use strict';
 const { createCodexUsageMeter, codexExecUsage, usageEvent } = require('./token-usage');
+const { resolveModelPolicy, isModelRejection } = require('./codex-model-policy');
 const { codexToolEvents } = require('./codex-tool-events');
 
 // CodexCliSpec: OpenAI Codex CLI 的 spec 实现。
@@ -39,11 +40,7 @@ const { readDiAgentEnvironment } = require('./environment');
 const { resolveRuntimeCandidates, resolveRuntimeCandidate, runtimeVariant } = require('./runtime');
 
 const LOCAL_PROXY_PORTS = [7897, 7890, 1087];
-const CODEX_MODELS = new Set([
-  '', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna',
-  'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex-spark',
-]);
-const REASONING_EFFORTS = new Set(['low', 'medium', 'high']);
+const { normalizeModel, modelID, EFFORTS: REASONING_EFFORTS, listCodexModels } = require('./runtime-models');
 const APPROVAL_MODES = new Set(['request', 'auto', 'full']);
 const SERVICE_TIERS = new Set(['default', 'priority']);
 const PRIORITY_UNSUPPORTED_MODELS = new Set(['gpt-5.4-mini', 'gpt-5.3-codex-spark']);
@@ -64,8 +61,8 @@ function normalizeRuntimeConfig(value) {
   if (typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('Invalid Codex runtime config: expected an object');
   }
-  const input = value;
-  if (Object.keys(input).length === 0) {
+  const input = { ...value, model: normalizeModel(value.model) };
+  if (Object.keys(value).length === 0) {
     return { ...DEFAULT_RUNTIME_CONFIG };
   }
   if (input.version !== 1 && input.version !== 2) {
@@ -73,9 +70,6 @@ function normalizeRuntimeConfig(value) {
   }
   if (input.version === 1 && input.service_tier) {
     throw new Error('Invalid Codex runtime config: service tier requires version 2');
-  }
-  if (!CODEX_MODELS.has(input.model)) {
-    throw new Error('Invalid Codex runtime config: unsupported model');
   }
   if (!REASONING_EFFORTS.has(input.reasoning_effort)) {
     throw new Error('Invalid Codex runtime config: unsupported reasoning effort');
@@ -409,6 +403,15 @@ function createCodexCliSpec(ctx) {
       const pendingCalls = new Map(); // rpc id -> { resolve }
       let threadId = null;
       let observedModel;
+      let availableModels = [];
+      let nativeDefault = '';
+      const refreshModels = async () => {
+        try {
+          availableModels = await listCodexModels(rpcCall);
+          const result = await rpcCall('config/read', { includeLayers: false });
+          nativeDefault = result.result?.config?.model || '';
+        } catch { /* 扫描异常不阻断原生默认调用；不能把空目录当成无权访问。 */ }
+      };
       const usageMeter = createCodexUsageMeter({ resumed: Boolean(resume && savedThreadId) });
       let currentTurn = null; // {turnId, resolve, timer, text}
       let pendingTurnApprovalContext = null;
@@ -472,7 +475,7 @@ function createCodexCliSpec(ctx) {
         if (!verification || verification.verified || verification.unverifiedLogged) return;
         const appliedModel = typeof settings.model === 'string'
           && settings.model !== ''
-          && CODEX_MODELS.has(settings.model)
+          && (settings.model === verification.config.model || availableModels.some(m => m.id === settings.model))
           ? settings.model
           : 'unknown';
         const rawEffort = settings.effort ?? settings.reasoningEffort;
@@ -776,6 +779,7 @@ function createCodexCliSpec(ctx) {
           clientInfo: { name: 'di-agent-daemon', title: 'Di Agent', version: '0.4.4' },
         });
         if (init.error) throw new Error(`codex app-server initialize 失败: ${init.error.message}`);
+        await refreshModels();
         const thread = resume && savedThreadId
           ? await rpcCall('thread/resume', { threadId: savedThreadId })
           : await rpcCall('thread/start', { cwd });
@@ -813,11 +817,15 @@ function createCodexCliSpec(ctx) {
             text = systemPrompt
               ? `${CODEX_MCP_FALLBACK}[系统指令]\n${systemPrompt}\n\n${prompt}`
               : `${CODEX_MCP_FALLBACK}${prompt}`;
-            firstTurn = false;
+
           }
           observedModel = undefined;
           usageMeter.beginTurn();
-          const controls = codexTurnControls(runtimeConfig);
+          const requested = normalizeRuntimeConfig(runtimeConfig);
+          if (requested.model && !availableModels.some(m => m.id === requested.model)) await refreshModels();
+          const policy = resolveModelPolicy(requested, availableModels, nativeDefault);
+          let controls = codexTurnControls(policy.config);
+          if (policy.changed) dispatchEvent(thinkingEvent(`已按本地模型能力调整为 ${policy.config.model}（${policy.config.reasoning_effort}）。`));
           pendingTurnApprovalContext = approvalContext || {};
           pendingRuntimeVerification = {
             config: controls.config,
@@ -833,12 +841,23 @@ function createCodexCliSpec(ctx) {
               approvalContext?.task_id || null,
             );
           }
-          const res = await rpcCall('turn/start', {
+          const input = require('./image-input').codexImageInput(text, approvalContext?.images);
+          let res = await rpcCall('turn/start', {
             threadId,
             cwd,
-            input: require('./image-input').codexImageInput(text, approvalContext?.images),
+            input,
             ...controls.params,
           });
+          if (isModelRejection(res)) {
+            await refreshModels();
+            const recovered = resolveModelPolicy(requested, availableModels, nativeDefault, true, controls.config.model);
+            if (recovered.config.model && recovered.config.model !== controls.config.model) {
+              controls = codexTurnControls(recovered.config);
+              pendingRuntimeVerification.config = controls.config;
+              dispatchEvent(thinkingEvent(`原模型不可用，已切换为本地默认模型 ${controls.config.model}。`));
+              res = await rpcCall('turn/start', { threadId, cwd, input, ...controls.params });
+            }
+          }
           const turnId = res && res.result && res.result.turn && res.result.turn.id;
           if (!turnId) {
             pendingTurnApprovalContext = null;
@@ -847,6 +866,7 @@ function createCodexCliSpec(ctx) {
             resolve({ error: `turn/start 失败: ${JSON.stringify((res && res.error) || {}).slice(0, 120)}` });
             return;
           }
+          firstTurn = false;
           daemonCtx.logFlow('info', 'agent.prompt_sent', {
             agent_id: agentId,
             conversation_id: conversationId,

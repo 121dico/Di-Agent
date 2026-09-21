@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/121dico/Di-Agent/src/backend/internal/model"
@@ -43,16 +44,8 @@ func (s *AgentRuntimeService) GetOverview(
 	return overview, nil
 }
 
-var supportedAgentModels = map[string]bool{
-	"":                    true,
-	"gpt-5.6-sol":         true,
-	"gpt-5.6-terra":       true,
-	"gpt-5.6-luna":        true,
-	"gpt-5.5":             true,
-	"gpt-5.4":             true,
-	"gpt-5.4-mini":        true,
-	"gpt-5.3-codex-spark": true,
-}
+// 只验证参数形状，可用模型以目标运行器的实时目录为准。
+var runtimeModelIdentifier = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._:/\[\]-]*$`)
 
 // NormalizeAgentRuntimeConfig converts an omitted policy into the safe product default and
 // rejects arbitrary model/config strings before they can reach a local CLI process.
@@ -76,10 +69,13 @@ func NormalizeAgentRuntimeConfig(input model.AgentRuntimeConfig) (model.AgentRun
 	if input.ServiceTier == "" {
 		input.ServiceTier = "default"
 	}
-	if !supportedAgentModels[input.Model] {
+	if input.Model == "default" {
+		input.Model = ""
+	}
+	if input.Model != "" && (len(input.Model) > 200 || !runtimeModelIdentifier.MatchString(input.Model)) {
 		return model.AgentRuntimeConfig{}, fmt.Errorf("%w: unsupported model", ErrMsgInvalidRuntime)
 	}
-	if input.ReasoningEffort != "low" && input.ReasoningEffort != "medium" && input.ReasoningEffort != "high" {
+	if input.ReasoningEffort != "none" && input.ReasoningEffort != "minimal" && input.ReasoningEffort != "low" && input.ReasoningEffort != "medium" && input.ReasoningEffort != "high" && input.ReasoningEffort != "xhigh" && input.ReasoningEffort != "max" && input.ReasoningEffort != "ultra" {
 		return model.AgentRuntimeConfig{}, fmt.Errorf("%w: unsupported reasoning effort", ErrMsgInvalidRuntime)
 	}
 	if input.ApprovalMode != "request" && input.ApprovalMode != "auto" && input.ApprovalMode != "full" {

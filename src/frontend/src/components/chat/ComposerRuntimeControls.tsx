@@ -1,7 +1,10 @@
 import React from 'react';
+import { useAgentModels } from '@/hooks/useAgentModels';
 import { Button, Dropdown, Tooltip } from 'antd';
 import {
   CheckOutlined,
+  ReloadOutlined,
+  LoadingOutlined,
   DownOutlined,
   SafetyCertificateOutlined,
   ThunderboltOutlined,
@@ -13,14 +16,18 @@ import {
   type AgentApprovalMode,
   type AgentReasoningEffort,
   type AgentRuntimeConfig,
-  type AgentRuntimeModel,
 } from './agentRuntime';
 import styles from './ComposerControls.module.css';
 
 const EFFORTS: Array<{ value: AgentReasoningEffort; label: string }> = [
+  { value: 'none', label: '无' },
+  { value: 'minimal', label: '极低' },
   { value: 'low', label: '低' },
   { value: 'medium', label: '中' },
   { value: 'high', label: '高' },
+  { value: 'xhigh', label: '更高' },
+  { value: 'max', label: '最高' },
+  { value: 'ultra', label: 'Ultra' },
 ];
 
 const APPROVALS: Array<{
@@ -34,37 +41,49 @@ const APPROVALS: Array<{
 ];
 
 interface ComposerRuntimeControlsProps {
+  agentId?: string;
+  modelOnly?: boolean;
   value: AgentRuntimeConfig;
   onChange: (value: AgentRuntimeConfig) => void;
 }
 
-export const ComposerRuntimeControls: React.FC<ComposerRuntimeControlsProps> = ({ value, onChange }) => {
-  const modelLabel = CODEX_MODEL_OPTIONS.find((item) => item.value === value.model)?.label ?? 'Default';
-  const effortLabel = EFFORTS.find((item) => item.value === value.reasoning_effort)?.label ?? '中';
-  const prioritySupported = supportsPriorityServiceTier(value.model);
+export const ComposerRuntimeControls: React.FC<ComposerRuntimeControlsProps> = ({ value, onChange, agentId, modelOnly = false }) => {
+  const { catalog, loading, error, scan } = useAgentModels(agentId);
+  const selectedModel = catalog?.models.find(item => item.id === (value.model || catalog.default_model));
+  const modelLabel = value.model
+    ? (selectedModel?.label ?? CODEX_MODEL_OPTIONS.find(item => item.value === value.model)?.label ?? value.model)
+    : 'Default';
+  const effortLabel = EFFORTS.find(item => item.value === value.reasoning_effort)?.label ?? '中';
+  const prioritySupported = selectedModel ? selectedModel.supports_priority : supportsPriorityServiceTier(value.model);
   const priorityEnabled = prioritySupported && value.service_tier === 'priority';
-
-  const modelItems: MenuProps['items'] = CODEX_MODEL_OPTIONS.map((option) => ({
-    key: `model:${option.value || 'default'}`,
-    label: (
-      <span className={styles.menuOption}>
-        <span>{option.label}</span>
-        {'description' in option && <span>{option.description}</span>}
-      </span>
-    ),
-    icon: value.model === option.value ? <CheckOutlined /> : null,
-    onClick: () => {
-      const model = option.value as AgentRuntimeModel;
-      onChange({
-        ...value,
-        model,
-        service_tier: supportsPriorityServiceTier(model) ? value.service_tier : 'default',
-      });
-    },
-  }));
-  const effortItems: MenuProps['items'] = EFFORTS.map((option) => ({
-    key: `effort:${option.value}`,
-    label: option.label,
+  const available = catalog?.models.filter(item => item.id !== '') ?? [];
+  const modelItems: MenuProps['items'] = [
+    { key: 'model:default', label: `Default · ${catalog?.default_model || '本地默认模型'}`,
+      icon: !value.model ? <CheckOutlined /> : null,
+      onClick: () => onChange({ ...value, model: '' }) },
+    ...available.map(option => ({
+      key: `model:${option.id}`,
+      label: <span className={styles.menuOption}><span>{option.label}</span><span>{option.id}</span></span>,
+      icon: value.model === option.id ? <CheckOutlined /> : null,
+      onClick: () => onChange({
+        ...value, model: option.id,
+        reasoning_effort: option.reasoning_efforts.length && !option.reasoning_efforts.includes(value.reasoning_effort)
+          ? option.default_reasoning_effort ?? option.reasoning_efforts[0]! : value.reasoning_effort,
+        service_tier: option.supports_priority ? value.service_tier : 'default',
+      }),
+    })),
+    ...(value.model && !available.some(item => item.id === value.model)
+      ? [{ key: 'model:current', label: `${modelLabel} · 当前选择，待扫描确认`, disabled: true }] : []),
+    { type: 'divider' },
+    ...(error || catalog?.warning ? [{ key: 'scan:error', disabled: true, label: <span className={styles.modelScanStatus}>{error || catalog?.warning}</span> }] : []),
+    { key: 'scan', icon: loading ? <LoadingOutlined /> : <ReloadOutlined />, disabled: loading || !agentId,
+      label: loading ? '正在扫描本地模型…' : '重新扫描本地模型', onClick: () => { void scan(); } },
+  ];
+  const efforts = selectedModel?.reasoning_efforts.length
+    ? EFFORTS.filter(item => selectedModel.reasoning_efforts.includes(item.value))
+    : EFFORTS.filter(item => ['low', 'medium', 'high'].includes(item.value));
+  const effortItems: MenuProps['items'] = efforts.map(option => ({
+    key: `effort:${option.value}`, label: option.label,
     icon: value.reasoning_effort === option.value ? <CheckOutlined /> : null,
     onClick: () => onChange({ ...value, reasoning_effort: option.value }),
   }));
@@ -75,6 +94,7 @@ export const ComposerRuntimeControls: React.FC<ComposerRuntimeControlsProps> = (
       aria-label={`当前运行设置：${modelLabel}，推理强度${effortLabel}，极速${priorityEnabled ? '开启' : '关闭'}`}
     >
       <Dropdown
+        onOpenChange={open => { if (open) void scan(); }}
         menu={{
           className: styles.checkMenu,
           items: modelItems,
@@ -93,7 +113,7 @@ export const ComposerRuntimeControls: React.FC<ComposerRuntimeControlsProps> = (
           <span className={styles.modelLabel}>{modelLabel}</span>
         </Button>
       </Dropdown>
-      <Dropdown
+      {!modelOnly && <><Dropdown
         menu={{
           className: styles.checkMenu,
           items: effortItems,
@@ -131,7 +151,7 @@ export const ComposerRuntimeControls: React.FC<ComposerRuntimeControlsProps> = (
             <span className={styles.fastLabel}>极速</span>
           </Button>
         </span>
-      </Tooltip>
+      </Tooltip></>}
     </div>
   );
 };

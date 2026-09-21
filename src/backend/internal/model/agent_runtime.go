@@ -27,7 +27,7 @@ type AgentRuntimeRecentRun struct {
 // It deliberately exposes only an allowlisted product contract, never arbitrary CLI flags.
 type AgentRuntimeConfig struct {
 	Version         int    `json:"version"`
-	Model           string `json:"model,omitempty"`
+	Model           string `json:"model"`
 	ReasoningEffort string `json:"reasoning_effort"`
 	ApprovalMode    string `json:"approval_mode"`
 	ServiceTier     string `json:"service_tier"`
