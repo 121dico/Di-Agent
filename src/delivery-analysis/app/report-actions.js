@@ -4,6 +4,7 @@
   const $=id=>document.getElementById(id),all=s=>Array.from(document.querySelectorAll(s));
   const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const offline=window.deliveryOffline,live=window.deliveryLive;
+  const savingTasks=new Set();
   let catalog=[],sources=[],moduleOptions=[],refreshing=false,exporting=false,initialized=false,restored=false,checkedRefresh=false;
   const data=()=>window.state.data;
   async function request(path,body,method=body?'POST':'GET',raw=false){
@@ -55,13 +56,15 @@
     form.onsubmit=async event=>{
       event.preventDefault();const modules=all('#moduleForm input:checked').map(n=>n.value);
       if(!modules.length){feedback('至少保留一个分析模块');return;}
+      if(savingTasks.has(id)){feedback('此任务的上一份配置正在保存，请完成后再保存');return;}
+      savingTasks.add(id);
       const button=$('saveReportModules');button.disabled=true;
       try{
         const item=offline?{...current.analysisTask,modules}:(await request('tasks/'+encodeURIComponent(id),{modules},'PATCH')).item;
         if(data()?.analysisTask?.id===id||(!data()?.analysisTask&&data()?.task.id===id)){data().analysisTask=item;applyModules();}
         if(offline)offline.analysisTask=item;
         if(activeForm())$('infoDialog').close();status(offline?'已调整此离线报告的显示模块':'模块配置已保存');
-      }catch(e){if(activeForm())feedback(e.message);else status(e.message);}finally{button.disabled=false;}
+      }catch(e){if(activeForm())feedback(e.message);else status(e.message);}finally{savingTasks.delete(id);button.disabled=false;}
     };
   }
   async function createTask(){

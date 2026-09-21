@@ -522,4 +522,4 @@ M0 → M1 → M2 → M3 ──→ M6(单聊跑通) → M7(群聊跑通) → M8(�
 
 - [x] [V1.2指标总览密度优化](task/report-overview-density.md)：8项真实指标与增长带、全宽布局、紧凑筛选和折叠地图；已部署开发机，桌面/两列窄视口及筛选验收通过。
 
-- [ ] [投放分析任务与交互HTML导出](task/delivery-report-actions.md)：功能已接通，正在完成真实页面和后台重新分析验收。
+- [x] [投放分析任务与交互HTML导出](task/delivery-report-actions.md)：新建任务、模块持久化、后台重算、离线交互HTML导出已上线并完成真实页面验收。

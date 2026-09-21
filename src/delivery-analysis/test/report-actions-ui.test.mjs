@@ -39,3 +39,20 @@ for(const operation of ['save','create'])test(operation+' 迟到提交只保存�
   assert.equal(d.getElementById('infoDialog').open,true);assert.equal(d.getElementById(replacement.id),replacement);assert.equal(navigations,0);
  }finally{dom.window.close();}
 });
+test('同任务重新打开配置时，上一份保存完成前不允许再次提交',async()=>{
+ const dom=new JSDOM(await readFile(new URL('index.html',root),'utf8'),{url:'http://localhost',runScripts:'outside-only'}),w=dom.window,d=w.document;
+ const task={id:'coupon',sourceId:'coupon',name:'召回',modules:MODULES.map(m=>m.id)};
+ let complete,patches=0;
+ w.state={data:{analysisTask:task,task:{id:'coupon'},moduleOptions:MODULES,status:{}}};w.deliveryLive={selection:()=>({taskId:'coupon'})};
+ w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ w.fetch=async(path,opts)=>{if(opts.method==='PATCH'){patches++;await new Promise(r=>complete=r);return {ok:true,json:async()=>({item:{...task,modules:JSON.parse(opts.body).modules}})};}return {ok:true,json:async()=>({items:[],sources:[],modules:MODULES})};};
+ const submit=()=>d.getElementById('moduleForm').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+ const select=id=>d.querySelectorAll('#moduleForm input').forEach(n=>n.checked=n.value===id);
+ try{
+  w.eval(await readFile(new URL('report-actions.js',root),'utf8'));d.dispatchEvent(new w.Event('DOMContentLoaded'));await new Promise(r=>setTimeout(r,5));
+  d.getElementById('configureReportModules').click();select('audienceProfile');submit();d.getElementById('infoDialog').close();
+  d.getElementById('configureReportModules').click();select('effectOverview');submit();assert.equal(patches,1);assert.match(d.getElementById('reportFormFeedback').textContent,/正在保存/);
+  complete();await new Promise(r=>setTimeout(r,5));assert.equal(d.getElementById('infoDialog').open,true);
+  submit();assert.equal(patches,2);complete();await new Promise(r=>setTimeout(r,5));assert.deepEqual(Array.from(w.state.data.analysisTask.modules),['effectOverview']);
+ }finally{w.close();}
+});
