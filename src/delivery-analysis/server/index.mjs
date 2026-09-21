@@ -1,3 +1,4 @@
+import {gzipSync} from 'node:zlib';
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -10,8 +11,10 @@ const ROOT=dirname(dirname(fileURLToPath(import.meta.url)));
 const files=new Map(['index.html','original-live.js','report-runtime.js','agent-theme.css','report-theme.css','agent-bridge.js'].map(name=>['/'+name,name]));
 const mime={html:'text/html; charset=utf-8',js:'application/javascript; charset=utf-8',css:'text/css; charset=utf-8'};
 function json(res,status,data) {
-  res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});
-  res.end(JSON.stringify(data));
+  const gzip=(res.req.headers['accept-encoding']||'').split(',').some(part=>{const [name,...params]=part.trim().split(';');const quality=params.find(p=>p.trim().startsWith('q='));return name==='gzip'&&(!quality||Number(quality.trim().slice(2))>0);});
+  const body=JSON.stringify(data);
+  res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Vary':'Accept-Encoding',...(gzip?{'Content-Encoding':'gzip'}:{})});
+  res.end(gzip?gzipSync(body):body);
 }
 
 export function createServer({gateway,store,appDirectory=join(ROOT,'app')}) {
@@ -32,7 +35,7 @@ export function createServer({gateway,store,appDirectory=join(ROOT,'app')}) {
         if(url.pathname==='/api/tasks')return json(res,200,{items:tasks});
         const id=url.searchParams.get('taskId') || tasks[0].id;
         let task;
-        try {task=selectTask(snapshot,id,{date:url.searchParams.get('date'),group:url.searchParams.get('group')||'all',dimension:url.searchParams.get('dimension')||'charge_life_cycle',portraitDimension:url.searchParams.get('portraitDimension')||undefined,cumulativeGroup:url.searchParams.get('cumulativeGroup')||'all',cumulativeDimension:url.searchParams.get('cumulativeDimension')||'charge_life_cycle'});} catch {
+        try {task=selectTask(snapshot,id,{date:url.searchParams.get('date'),group:url.searchParams.get('group')||'all',dimension:url.searchParams.get('dimension')||'charge_life_cycle',portraitDimension:url.searchParams.get('portraitDimension')||undefined,profileDimensions:url.searchParams.get('profileDimensions')||undefined,cumulativeGroup:url.searchParams.get('cumulativeGroup')||'all',cumulativeDimension:url.searchParams.get('cumulativeDimension')||'charge_life_cycle'});} catch {
           return json(res,400,{error:'日期、分组或维度不在当前数据范围内'});
         }
         if(!task)return json(res,404,{error:'该任务尚未接入真实数据'});

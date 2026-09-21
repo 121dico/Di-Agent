@@ -42,3 +42,16 @@ test('单组筛选保留原成对视图另一来源组的真实读数',()=>{
   assert.equal(control.users,10);assert.equal(control.rate,1/6);
  },true,both);
 });
+
+test('公开画像查询接收交叉路径，拒绝重复与超过三级的路径',()=>withServer(async(base)=>{
+ const headers={Authorization:'Bearer valid'};
+ for(const path of ['charge_life_cycle,charge_life_cycle','charge_life_cycle,city_name,charge_freq_type,member_status'])assert.equal((await fetch(base+'/api/bootstrap?profileDimensions='+path,{headers})).status,400);
+ const result=await (await fetch(base+'/api/bootstrap?profileDimensions=charge_life_cycle',{headers})).json();
+ assert.deepEqual(result.task.profileAnalysis.dimensions,['charge_life_cycle']);assert.equal(result.task.profileAnalysis.total,10);
+}));
+
+test('画像查询支持压缩传输并尊重客户端禁用压缩',()=>withServer(async(base)=>{
+ const compressed=await fetch(base+'/api/bootstrap',{headers:{Authorization:'Bearer valid','Accept-Encoding':'gzip'}});
+ assert.equal(compressed.headers.get('content-encoding'),'gzip');assert.equal((await compressed.json()).task.summary.users,10);
+ const plain=await fetch(base+'/api/bootstrap',{headers:{Authorization:'Bearer valid','Accept-Encoding':'gzip;q=0'}});assert.equal(plain.headers.get('content-encoding'),null);
+}));

@@ -141,3 +141,22 @@ test('六条BOSS配置按包和组关联，时间与红包ID保真且不污染�
  assert.equal(ref.cities.length,100);assert.equal(ref.channels.length,7);assert.equal(ref.businessTarget,null);
  assert.equal(result.summary.users,10);task.kind='effect';assert.equal(selectTask(snapshot,'coupon').deploymentReference,null);
 });
+
+test('三级画像来自联合计数，保留真实相关性并受日期与组别约束',async()=>{
+ const {selectTask}=await import('../server/snapshot.mjs');
+ const rows=[{date:'2026-08-24',group_type:'control_group',users:10,records:10}];
+ const task={id:'coupon',kind:'coupon',dates:['2026-08-24'],rows,dimensions:{charge_life_cycle:[{...rows[0],value:'老用户'}],charge_freq_type:[],city_name:[]},profileCube:{keys:['charge_life_cycle','charge_freq_type','city_name'],rows:[
+ {...rows[0],charge_life_cycle:'老用户',charge_freq_type:'低频',city_name:'北京',users:8,records:8},
+ {...rows[0],charge_life_cycle:'老用户',charge_freq_type:'高频',city_name:'上海',users:2,records:2},
+ ]}};
+ const snapshot={queries:[],tasks:[task]};
+ const result=selectTask(snapshot,'coupon',{profileDimensions:['charge_life_cycle','charge_freq_type','city_name']});
+ assert.equal(result.profileAnalysis.total,10);
+ assert.deepEqual(result.profileAnalysis.rows.map(r=>[r.values,r.users,r.share,r.parentShare]),[[['老用户','低频','北京'],8,.8,1],[['老用户','高频','上海'],2,.2,1]]);
+ assert.equal(result.profileAnalysis.basis,'joint_snapshot');
+ assert.equal(result.profileCube,undefined,'完整多维聚合不得通过bootstrap暴露');
+ assert.throws(()=>selectTask(snapshot,'coupon',{profileDimensions:['city_name','city_name']}));
+ assert.throws(()=>selectTask(snapshot,'coupon',{profileDimensions:['city_name','charge_freq_type','charge_life_cycle','member_status']}));
+ delete task.profileCube;
+ assert.equal(selectTask(snapshot,'coupon',{profileDimensions:['charge_life_cycle','city_name']}).profileAnalysis.status,'missing');
+});

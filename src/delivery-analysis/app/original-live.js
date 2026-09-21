@@ -113,6 +113,7 @@
     text('.realtime-trend-panel .movement-line-legend','—');
   }
   function clearData(message) {
+    all('#addProfileDrill,#resetProfileDrill,#addDimensionPrompt,#dimensionPrompt').forEach(n=>n.disabled=true);
     all('.apollo-reference,.boss-reference').forEach(n=>{n.hidden=true;n.replaceChildren();});
     for (const id of ['preMetrics','effectMetrics','dailyMetrics','realtimeMetrics']) metric(id,[]);
     for (const id of ['preOverview','effectOverview','movementOverview']) banner(id,'数据尚未就绪',message);
@@ -121,7 +122,7 @@
     text('.audience-summary > strong','—'); text('.audience-summary .soft-tag','等待数据');
     text('#breakdownVisualDefinition','累计标签拆解暂未接入');
     text('.realtime-trend-panel .data-note','小时级数据暂未接入');
-    text('#profileInsight',message); text('#profileVisualCaption','等待数据');
+    text('#profileInsight',message); text('#profileVisualCaption','等待数据');text('#profileDrillPath','等待数据');
     text('#experimentBalance .status-pill','尚未接入');text('#experimentBalance .section-kicker','实验前检查');$('recheckBalance').disabled=true;
     text('#experimentBalance .balance-insight p','缺少投放前快照和已核验分流配置，暂不输出均衡结论。');
     text('#experimentBalance .balance-summary strong','均衡检查暂未接入');
@@ -161,14 +162,102 @@
     $('balanceDimensions').querySelector('.visual-empty-caption')?.remove();
     $('recheckBalance').disabled=false;
   }
+  let profilePreferences={};
+  try{profilePreferences=JSON.parse(sessionStorage.getItem('deliveryProfilePreferences')||'{}');}catch{}
+  const profileOptions=task=>task.portraitDimensionOptions||task.dimensionOptions;
+  const profilePath=task=>task.profileAnalysis?.dimensions||[task.portraitDimension||task.dimension];
+  function configuredDimensions(task){
+    const options=profileOptions(task),saved=profilePreferences[task.id]?.dimensions;
+    const chosen=Array.isArray(saved)?saved.filter(k=>Object.hasOwn(options,k)):Object.keys(options);
+    return chosen.length?chosen:Object.keys(options);
+  }
+  function saveProfilePreferences(task,changes){
+    profilePreferences[task.id]={...profilePreferences[task.id],...changes};
+    try{sessionStorage.setItem('deliveryProfilePreferences',JSON.stringify(profilePreferences));}catch{}
+  }
+  function profileFeedback(message){
+    let node=$('profileFeedback');if(!node){node=document.createElement('p');node.id='profileFeedback';node.setAttribute('role','status');$('dimensionPrompt').closest('.ask-bar,.dimension-prompt')?.insertAdjacentElement('afterend',node);if(!node.isConnected)$('audienceProfile').appendChild(node);}
+    node.textContent=message;
+  }
+  function chooseProfile(path){
+    if(!state.data)return;
+    saveProfilePreferences(state.data.task,{path});
+    load({...selection,portraitDimension:path[0],profileDimensions:path.join(',')});
+  }
+  function profileControls(task){
+    const options=profileOptions(task),path=profilePath(task),chosen=configuredDimensions(task);
+    $('dimensionTabs').innerHTML=chosen.map(k=>'<button type="button" class="'+(k===path[0]?'active':'')+'" data-profile-dimension="'+esc(Object.keys(dimensions).find(name=>dimensions[name]===k)||k)+'" aria-pressed="'+(k===path[0])+'">'+esc(options[k])+'</button>').join('');
+    text('#profileDrillPath',path.map(k=>options[k]).join(' × '));
+    $('addProfileDrill').disabled=path.length>=3||!task.profileCrossDimensions?.includes(path[0]);
+    $('addProfileDrill').title=path.length>=3?'最多支持三级维度拆分':!task.profileCrossDimensions?.includes(path[0])?'该维度联合快照暂未准备完成':'增加下一级维度';
+    $('resetProfileDrill').classList.toggle('hidden',path.length<2);$('resetProfileDrill').disabled=false;
+    $('dimensionPrompt').disabled=false;$('addDimensionPrompt').disabled=false;
+    $('dimensionPrompt').placeholder='例如：生命周期 × 充电频次 × 城市；或再看看城市分框和战区';
+    $('profileViewSwitch').classList.remove('hidden');
+    const primaryView=one('[data-profile-view="pie"]');if(primaryView)primaryView.lastChild.textContent=path.length>1?' 交叉矩阵':' 饼图';
+    all('[data-profile-view]').forEach(n=>{n.classList.toggle('active',n.dataset.profileView===chart);n.setAttribute('aria-selected',String(n.dataset.profileView===chart));});
+  }
+  function openProfilePicker(){
+    const task=state.data?.task;if(!task)return;
+    const path=profilePath(task),options=profileOptions(task);
+    if(path.length>=3){profileFeedback('最多支持三级维度拆分；可重置后重新选择。');return;}
+    const choices=(task.profileCrossDimensions||[]).filter(k=>!path.includes(k)&&configuredDimensions(task).includes(k));
+    text('#dialogTitle','选择第 '+(path.length+1)+' 级维度');
+    $('dialogBody').innerHTML='<p>当前路径：'+esc(path.map(k=>options[k]).join(' × '))+'</p><p>按同一来源快照的联合人数拆分，展示完整交叉分布。</p><div class="dimension-options">'+choices.map(k=>'<label class="dimension-option"><input type="radio" name="profileDrillDimension" value="'+esc(k)+'"><span>'+esc(options[k])+'</span></label>').join('')+'</div>'+(choices.length?'<button class="primary-button full-button" id="confirmProfileDrill" type="button">继续拆分</button>':'<p>暂无其他已配置且有联合数据的维度；可在配置维度中添加。</p>');
+    $('infoDialog').showModal();
+  }
+  function renderProfileCross(task){
+    const a=task.profileAnalysis,options=profileOptions(task),path=a.dimensions;
+    text('#profileDimensionTitle',path.map(k=>options[k]).join(' × '));
+    text('#profileDimensionDefinition','同一来源快照联合聚合；父级为前 '+(path.length-1)+' 级组合，未用边际比例估算');
+    text('#profileVisualCaption','真实交叉人数 · '+(a.rows?.length||0)+' 个非空组合');
+    if(a.status!=='available'){emptyVisual('profileBars','联合快照尚未准备完成，请稍后重新分析');text('#profileInsight','暂无可核验的联合统计，不根据单维占比估算。');return;}
+    text('#profileInsight','当前 '+num(a.total)+' 人，按 '+path.map(k=>options[k]).join(' × ')+' 展开，共 '+a.rows.length+' 个非空组合。');
+    if(!a.rows.length){emptyVisual('profileBars','当前范围没有人群');return;}
+    const flattened=a.rows.map(r=>({value:r.values.join(' × '),users:r.users,share:r.share,parentShare:r.parentShare}));
+    if(chart==='bar'){
+      setVisual('profileBars','<div class="cross-bar-list">'+flattened.map(r=>'<div class="cross-bar-row"><div><strong>'+esc(r.value)+'</strong><small>'+num(r.users)+' 人 · 父级 '+pct(r.parentShare)+'</small></div><div class="cross-bar-track"><b style="width:'+(100*(r.share||0))+'%"></b></div><em>'+pct(r.share)+'</em></div>').join('')+'</div>');return;
+    }
+    // 默认沿用Demo矩阵；“数据表格”给出所有组合的精确长表，避免高基数矩阵难以阅读。
+    if(chart==='table'){setVisual('profileBars',table([...path.map(k=>options[k]),'人数','总体占比','父级占比'],a.rows.map(r=>[...r.values,num(r.users),pct(r.share),pct(r.parentShare)])));return;}
+    const columns=[...new Map(a.rows.map(r=>[JSON.stringify(r.values.slice(1)),r.values.slice(1)])).values()];
+    const rowNames=[...new Set(a.rows.map(r=>r.values[0]))],lookup=new Map(a.rows.map(r=>[JSON.stringify(r.values),r]));
+    const parents=new Map();for(const r of a.rows){const k=JSON.stringify(r.values.slice(0,-1));parents.set(k,(parents.get(k)||0)+r.users);}
+    const note='<div class="profile-cross-note">真实联合人数；总体占比以当前人群为分母，父级占比以此前维度组合为分母。零父级比例显示 —。</div>';
+    const matrix='<div class="profile-cross-scroll" tabindex="0" role="region" aria-label="交叉维度矩阵，可横向滚动"><table class="profile-cross-table"><thead><tr><th>'+esc(options[path[0]])+'</th>'+columns.map(c=>'<th>'+esc(c.join(' × '))+'</th>').join('')+'<th>行合计</th></tr></thead><tbody>'+rowNames.map(value=>{
+      const total=a.rows.filter(r=>r.values[0]===value).reduce((s,r)=>s+r.users,0);
+      return '<tr><th scope="row">'+esc(value)+'</th>'+columns.map(c=>{
+        const values=[value,...c],cell=lookup.get(JSON.stringify(values)),users=cell?.users||0,parent=parents.get(JSON.stringify(values.slice(0,-1)))||0,share=a.total?users/a.total:null;
+        return '<td style="--cross-intensity:'+(.04+.6*(share||0)).toFixed(3)+'"><strong>总体 '+pct(share)+'</strong><small>父级 '+pct(parent?users/parent:null)+' · '+num(users)+' 人</small></td>';
+      }).join('')+'<td class="cross-total"><strong>'+pct(total?1:null)+'</strong><small>'+num(total)+' 人</small></td></tr>';
+    }).join('')+'</tbody></table></div>';
+    setVisual('profileBars',note+matrix);
+  }
+  function applyProfilePrompt(){
+    const task=state.data?.task;if(!task)return;
+    const prompt=$('dimensionPrompt').value.trim();if(!prompt){profileFeedback('请输入想看的维度，例如：生命周期和充电频次。');return;}
+    const options=profileOptions(task),aliases={charge_life_cycle:['生命周期'],charge_freq_type:['充电频次','充电频率'],charge_duid_role_name_v2_type:['用户身份'],member_status:['会员状态','是否会员'],city_name:['城市'],city_fenkuang:['城市分框'],charge_region:['战区']};
+    const textWithoutFrame=prompt.replaceAll('城市分框','□□□□');
+    const matches=Object.keys(options).map(k=>{const names=[options[k],...(aliases[k]||[])];const source=k==='city_name'?textWithoutFrame:prompt;const indices=names.map(n=>source.indexOf(n)).filter(i=>i>=0);return {key:k,index:indices.length?Math.min(...indices):-1};}).filter(r=>r.index>=0).sort((a,b)=>a.index-b.index);
+    const keys=matches.map(r=>r.key);
+    if(!keys.length){profileFeedback('未识别到现有维度，可识别：'+Object.values(options).join('、')+'。');return;}
+    const cross=/交叉|拆分|组合|[×*]|按.*再按/.test(prompt);
+    if(cross&&(keys.length>3||keys.some(k=>!task.profileCrossDimensions?.includes(k)))){profileFeedback(keys.length>3?'最多支持三级维度，请减少到三个。':'所选维度的联合快照尚不可用，可先查看单维分布。');return;}
+    saveProfilePreferences(task,{dimensions:[...new Set([...configuredDimensions(task),...keys])]});
+    profileFeedback((cross?'已识别交叉维度：':'已补充维度：')+keys.map(k=>options[k]).join('、')+'。');
+    $('dimensionPrompt').value='';chooseProfile(cross?keys:[keys[0]]);
+  }
+
   function profile(task) {
+    profileControls(task);
     const rows = task.portrait, total = rows.reduce((s,r)=>s+r.users,0), label = (task.portraitDimensionOptions||task.dimensionOptions)[task.portraitDimension||task.dimension];
     text('.audience-summary > strong',num(rows.length?total:null)); text('.audience-summary > span','DUID · 当前来源快照');
     text('.audience-summary .soft-tag','分区 '+task.portraitPartition);
-    text('#profileDimensionTitle',label); text('#profileDrillPath',label);
+    text('#profileDimensionTitle',label);
     text('#profileDimensionDefinition','来源快照标签；不代表投放前状态');
     text('#profileVisualCaption',chart === 'table' ? '人数与占比' : '占比结构');
     text('#profileInsight',rows.length ? rows[0].value+'占比 '+pct(total ? rows[0].users/total : null)+'，共 '+num(rows[0].users)+' 人。' : '所选范围暂无画像数据');
+    if(task.profileAnalysis?.dimensions.length>1){renderProfileCross(task);return;}
     if (!rows.length) {emptyProfile();return;}
     $('profileBars').removeAttribute('data-empty-visual');
     if (chart === 'table') $('profileBars').innerHTML = table(['标签枚举','人数','占比'],rows.map(r=>[r.value,num(r.users),pct(total?r.users/total:null)]));
@@ -177,8 +266,8 @@
       const pie = rows.slice(0,5);
       if (rows.length > 5) pie.push({value:'其他',users:rows.slice(5).reduce((s,r)=>s+r.users,0)});
       let offset = 0;
-      const segments = pie.map((r,i)=>{const ratio = total ? 100*r.users/total : 0, start=offset; offset+=ratio;return '<circle class="profile-pie-segment" cx="80" cy="80" r="54" pathLength="100" stroke="'+colors[i]+'" stroke-dasharray="'+ratio+' '+(100-ratio)+'" stroke-dashoffset="'+(-start)+'"><title>'+esc(r.value)+' '+num(r.users)+' 人</title></circle>';}).join('');
-      $('profileBars').innerHTML = '<div class="profile-pie-grid"><div class="profile-pie-chart"><svg class="profile-pie-ring" viewBox="0 0 160 160" aria-label="'+esc(label)+'占比结构"><circle class="profile-pie-track" cx="80" cy="80" r="54"></circle>'+segments+'</svg><div class="profile-pie-detail" aria-live="polite"></div></div><div class="profile-pie-legend">'+pie.map((r,i)=>'<div class="profile-pie-item" tabindex="0"><i class="profile-pie-swatch" style="background:'+colors[i]+'"></i><strong>'+esc(r.value)+'</strong><small>'+num(r.users)+' · '+pct(total?r.users/total:null)+'</small></div>').join('')+'</div></div>';
+      const segments = pie.map((r,i)=>{const ratio = total ? 100*r.users/total : 0, start=offset; offset+=ratio;return '<circle data-profile-index="'+i+'" class="profile-pie-segment" cx="80" cy="80" r="54" pathLength="100" stroke="'+colors[i]+'" stroke-dasharray="'+ratio+' '+(100-ratio)+'" stroke-dashoffset="'+(-start)+'"><title>'+esc(r.value)+' '+num(r.users)+' 人</title></circle>';}).join('');
+      $('profileBars').innerHTML = '<div class="profile-pie-grid"><div class="profile-pie-chart"><svg class="profile-pie-ring" viewBox="0 0 160 160" aria-label="'+esc(label)+'占比结构"><circle class="profile-pie-track" cx="80" cy="80" r="54"></circle>'+segments+'</svg><div class="profile-pie-detail" aria-live="polite"></div></div><div class="profile-pie-legend">'+pie.map((r,i)=>'<div class="profile-pie-item" role="button" aria-label="'+esc(r.value+'，'+num(r.users)+'人，点击选择下一级维度')+'" tabindex="0" data-profile-index="'+i+'"><i class="profile-pie-swatch" style="background:'+colors[i]+'"></i><strong>'+esc(r.value)+'</strong><small>'+num(r.users)+' · '+pct(total?r.users/total:null)+'</small></div>').join('')+'</div></div>';
     }
   }
   function renderExperimentReference(task,mode) {
@@ -322,21 +411,22 @@
     banner('effectOverview','跨日累计暂未接入','各日人数及滚动订单不可直接累加；请在原“分日效果”页签查看真实数据。');
     text('#effectSettings .baseline-label','累计口径');text('#baselineSelection','累计基准暂未接入');
     $('configureFunnel').disabled=!t.cumulative;balance(t);profile(t);daily(t);cumulative(t);$('exportReport').disabled=false;
-    for(const attr of ['profile-dimension','daily-breakdown'])all('[data-'+attr+']').forEach(n=>n.classList.toggle('active',dimensions[n.getAttribute('data-'+attr)]===(attr==='profile-dimension'?(t.portraitDimension||t.dimension):t.dimension)));
+    for(const attr of ['profile-dimension','daily-breakdown'])all('[data-'+attr+']').forEach(n=>n.classList.toggle('active',(dimensions[n.getAttribute('data-'+attr)]||n.getAttribute('data-'+attr))===(attr==='profile-dimension'?(t.portraitDimension||t.dimension):t.dimension)));
   }
   async function load(next=selection) {
     if(next.unsupported){unsupported(next.unsupported);return;}
     const changedTask=next.taskId!==selection.taskId;
-    if(changedTask){all('#customDateRange input').forEach(n=>delete n.dataset.initialized);$('dailyPeriodSelect').value='7';$('customDateRange').classList.add('hidden');}
+    if(changedTask){const saved=profilePreferences[next.taskId];const path=saved?.path||saved?.dimensions?.slice(0,1);if(path?.length)next={...next,portraitDimension:path[0],profileDimensions:path.join(',')};chart=saved?.chart||'pie';all('#customDateRange input').forEach(n=>delete n.dataset.initialized);$('dailyPeriodSelect').value='7';$('customDateRange').classList.add('hidden');}
     const version=++state.request;selection=next;state.data=null;clearData('正在读取真实数据…');notice('正在读取真实数据…');
     try {
       const response=await fetch('/api/bootstrap?'+new URLSearchParams(next),{headers:{Authorization:'Bearer '+(localStorage.getItem('di_agent_token')||'')}});
       const data=await response.json();if(!response.ok)throw new Error(data.error||'读取失败');
       if(version!==state.request)return;if(data.env!=='live')throw new Error('接口未返回真实数据');
-      state.data=data;selection={taskId:data.task.id,date:data.task.selectedDate,group:data.task.selectedGroup,dimension:data.task.dimension,...(data.task.cumulative?{cumulativeGroup:data.task.cumulative.selectedGroup,cumulativeDimension:data.task.cumulative.dimension}:{}),...(data.task.portraitDimension?{portraitDimension:data.task.portraitDimension}:{})};
+      state.data=data;selection={taskId:data.task.id,date:data.task.selectedDate,group:data.task.selectedGroup,dimension:data.task.dimension,...(data.task.cumulative?{cumulativeGroup:data.task.cumulative.selectedGroup,cumulativeDimension:data.task.cumulative.dimension}:{}),...(data.task.portraitDimension?{portraitDimension:data.task.portraitDimension}:{}),...(data.task.profileAnalysis?{profileDimensions:data.task.profileAnalysis.dimensions.join(',')}:{})};
       try{sessionStorage.setItem('deliveryOriginalSelection',JSON.stringify(selection));}catch{}
       text('#dailyMetricSelect option[value="firstOrderRate"]',data.task.metric);
       const dates=all('#customDateRange input');if(dates[0]&&data.task.daily.length&&!dates[0].dataset.initialized){dates[0].value=data.task.daily[0].date;dates[1].value=data.task.daily.at(-1).date;dates.forEach(n=>n.dataset.initialized='true');}
+      chart=profilePreferences[data.task.id]?.chart||chart;
       renderData();
     }catch(error){if(version!==state.request)return;clearData(error.message);notice(error.message+'；请点击重新分析重试。');}
   }
@@ -380,7 +470,6 @@
     const pending=[
       ['#createTask,[data-add-audience-task],.audience-actions button','缺少任务/人群管理接口，见数据范围'],
       ['#configureReportModules','模块配置尚未实现'],
-      ['#addProfileDrill,#resetProfileDrill,#addDimensionPrompt,[aria-label="用自然语言补充分析维度"]','组合画像及自然语言维度尚未实现'],
       ['#selectHistoryActivity,#changeHistoryActivity,#viewHistoryMatch,#viewHistoryBreakdown,#historyFilter,#runHistory,#createCandidate,#viewSnapshot','缺少可比历史活动数据'],
       ['#exportDailyReport','日报格式与生成流程尚未实现；可导出当前聚合 JSON'],
       ['[data-task="activation"],[data-task-group="activation"] .audience-option','尚未接入该任务的数据'],
@@ -397,25 +486,41 @@
     all('[data-task-type]').forEach(n=>n.dataset.taskType=n.dataset.task==='summer'?'来源分组 / 真实数据':n.dataset.taskType);
     all('#dailyMetricSelect option').forEach(n=>{if(['exposureRate','clickRate'].includes(n.value)){n.disabled=true;if(!n.textContent.includes('（未接入）'))n.textContent+='（未接入）';}});
     document.addEventListener('click',event=>{
-      const n=event.target.closest('button,[data-live-date]');if(!n)return;
+      const n=event.target.closest('button,[data-live-date],.profile-pie-item,.profile-pie-segment');if(!n)return;
       if(n.classList.contains('funnel-stage')){event.stopImmediatePropagation();text('#dialogTitle',n.querySelector('span').textContent);$('dialogBody').innerHTML='<p>人数：'+esc(n.querySelector('strong').textContent)+'；占首阶段比例：'+esc(n.querySelector('em').textContent)+'</p><p>'+esc(n.closest('section').querySelector('.funnel-definition-note')?.textContent||'当前所选日期与人群范围')+'</p><p>基于源表阶段标记按 DUID 去重；此处展示集合关系，不代表新增订单或因果增量。</p>';$('infoDialog').showModal();return;}
       if(n.dataset.liveDeployment&&state.data?.task.deploymentReference){event.stopImmediatePropagation();text('#dialogTitle','BOSS投放配置');$('dialogBody').innerHTML=deploymentDetails(state.data.task.deploymentReference);$('infoDialog').showModal();return;}
       if(n.dataset.liveCrowd){event.stopImmediatePropagation();const crowd=state.data?.task.crowdReferences?.find(c=>c.id===n.dataset.liveCrowd);if(crowd){text('#dialogTitle',crowd.prdLabel+' · Ditag详情');$('dialogBody').innerHTML=crowdDetails(crowd,state.data.task.deploymentReference);$('infoDialog').showModal();}return;}
       if(n.dataset.task){event.stopImmediatePropagation();selectTree(n);const id={summer:'effect',recall:'coupon'}[n.dataset.task];if(id)load({taskId:id});else{unsupported('该任务尚未接入真实数据');text('#contextTaskName',n.dataset.taskName);}return;}
       if(n.classList.contains('audience-option')){event.stopImmediatePropagation();selectTree(n);if(n.closest('.task-group').dataset.taskGroup==='summer')load({taskId:'effect'});else{unsupported('该人群的组合筛选尚未接入，点击召回任务名称可查看任务全量数据。');text('#contextInputName',n.dataset.audience);}return;}
-      if(n.dataset.profileDimension||n.dataset.dailyBreakdown){if(state.data)load({...selection,...(n.dataset.profileDimension?{portraitDimension:dimensions[n.dataset.profileDimension]}:{dimension:dimensions[n.dataset.dailyBreakdown]})});}
+      if(n.dataset.profileDimension){event.stopImmediatePropagation();chooseProfile([dimensions[n.dataset.profileDimension]||n.dataset.profileDimension]);return;}
+      if(n.dataset.dailyBreakdown){if(state.data)load({...selection,dimension:dimensions[n.dataset.dailyBreakdown]});}
       if(n.dataset.livePortrait&&state.data){event.stopImmediatePropagation();$('infoDialog').close();load({...selection,portraitDimension:n.dataset.livePortrait});return;}
       if(n.dataset.liveBreakdown&&state.data){event.stopImmediatePropagation();$('infoDialog').close();load({...selection,dimension:n.dataset.liveBreakdown});return;}
       if(n.id==='configureDimensions'){
         event.stopImmediatePropagation();const task=state.data?.task;
-        if(!task){notice('当前没有可配置的真实数据');return;}
-        const options=task.portraitDimensionOptions||task.dimensionOptions;
-        text('#dialogTitle','选择画像与分日拆解维度');
-        $('dialogBody').innerHTML='<p>'+ '画像使用来源标签快照，切换画像维度不改变分日效果维度。'+'</p><div class="profile-dimensions">'+Object.entries(options).map(([key,label])=>'<button type="button" class="secondary-button compact-button" data-live-portrait="'+esc(key)+'">'+esc(label)+'</button>').join('')+'</div>';
-        $('dialogBody').insertAdjacentHTML('beforeend','<h4>分日效果拆解</h4><div class="profile-dimensions">'+Object.entries(task.dimensionOptions).map(([key,label])=>'<button type="button" class="secondary-button compact-button" data-live-breakdown="'+esc(key)+'">'+esc(label)+'</button>').join('')+'</div>');
+        if(!task){profileFeedback('当前没有可配置的真实数据');return;}
+        const options=profileOptions(task),chosen=configuredDimensions(task);
+        text('#dialogTitle','配置画像维度');
+        $('dialogBody').innerHTML='<p>选择要展示的画像维度，至少保留一个。联合拆分支持已准备好的快照维度；额外日期与ID字段仅支持单维查看。</p><div class="dimension-options">'+Object.entries(options).map(([key,label])=>'<label class="dimension-option"><input type="checkbox" data-live-portrait="'+esc(key)+'" value="'+esc(key)+'" '+(chosen.includes(key)?'checked':'')+'><span>'+esc(label)+'</span></label>').join('')+'</div><p role="status" id="profileDialogFeedback"></p><button class="primary-button full-button" type="button" id="confirmDimensions">应用维度配置</button>';
+        $('dialogBody').insertAdjacentHTML('beforeend','<h4>分日效果拆解（独立设置）</h4><div class="profile-dimensions">'+Object.entries(task.dimensionOptions).map(([key,label])=>'<button type="button" class="secondary-button compact-button" data-live-breakdown="'+esc(key)+'">'+esc(label)+'</button>').join('')+'</div>');
         $('infoDialog').showModal();return;
       }
-      if(n.dataset.profileView){chart=n.dataset.profileView;if(state.data)renderData();else emptyProfile();}
+      if(n.id==='confirmDimensions'){
+        event.stopImmediatePropagation();const task=state.data?.task;if(!task)return;
+        const chosen=all('#dialogBody input:checked').map(n=>n.value);
+        if(!chosen.length){text('#profileDialogFeedback','至少选择一个分析维度');return;}
+        saveProfilePreferences(task,{dimensions:chosen});$('infoDialog').close();
+        chooseProfile([chosen.includes(profilePath(task)[0])?profilePath(task)[0]:chosen[0]]);return;
+      }
+      if(n.id==='addProfileDrill'||n.classList.contains('profile-pie-item')||n.classList.contains('profile-pie-segment')){event.stopImmediatePropagation();openProfilePicker();return;}
+      if(n.id==='confirmProfileDrill'){
+        event.stopImmediatePropagation();const selected=one('#dialogBody input[name="profileDrillDimension"]:checked');
+        if(!selected){let hint=$('profilePickerHint');if(!hint){hint=document.createElement('p');hint.id='profilePickerHint';hint.setAttribute('role','status');$('dialogBody').appendChild(hint);}hint.textContent='请选择一个维度';return;}
+        const path=profilePath(state.data.task);$('infoDialog').close();chooseProfile([...path,selected.value]);return;
+      }
+      if(n.id==='resetProfileDrill'){event.stopImmediatePropagation();if(state.data)chooseProfile([profilePath(state.data.task)[0]]);return;}
+      if(n.id==='addDimensionPrompt'){event.stopImmediatePropagation();applyProfilePrompt();return;}
+      if(n.dataset.profileView){event.stopImmediatePropagation();chart=n.dataset.profileView;if(state.data){saveProfilePreferences(state.data.task,{chart});renderData();}else emptyProfile();return;}
       if(n.dataset.dailyFunnelView){funnel=n.dataset.dailyFunnelView;all('#dailyFunnelSwitch button').forEach(b=>b.classList.toggle('active',b===n));if(state.data)renderData();else renderFunnel('dailyFunnelVisual',emptyStages,funnel);}
       if(n.dataset.funnelView){resourceFunnel=n.dataset.funnelView;all('#funnelViewSwitch button').forEach(b=>b.classList.toggle('active',b===n));if(state.data?.task.cumulative)cumulative(state.data.task);else renderFunnel('funnelVisual',emptyStages,resourceFunnel);}
       if(n.dataset.liveCumulativeGroup&&state.data){event.stopImmediatePropagation();load({...selection,cumulativeGroup:n.dataset.liveCumulativeGroup});return;}
@@ -454,14 +559,14 @@
         ])+'<p>'+esc(task?'当前来源：'+task.sourceName+'；分区：'+task.partition+'。 '+task.notes.join(' '):'当前选择暂无已接入数据。')+'</p>';
         $('dialogBody').insertAdjacentHTML('beforeend','<h4>PRD 尚缺的6类数据/配置</h4>'+table(['类别','影响'],[
           ['人群包目录与管理信息','搜索人群、任务关联、包状态/有效期、修改删除'],['实验与活动配置剩余缺口','包与实验组配置关系、配置日期和下线记录已知；实际成员、稳定分组、券批次及整体目标仍待核验'],['投放前标签快照','实验均衡与前置画像'],['同口径大盘基准','大盘效果及差异'],['曝光点击事件','资源位曝光/点击漏斗与指标'],['可比历史活动','历史验证、变化差、历史基准']
-        ])+'<p>组合下钻、自然语言加维度、日报、模块配置还缺实现。暂不可用入口已标明原因；置灰不代表需求已完成。投放期新增订单/收入另需增量订单口径。</p>');
+        ])+'<p>画像支持三级联合拆分与自然语言选维度；效果组合下钻、日报、模块配置仍缺实现。暂不可用入口已标明原因；置灰不代表需求已完成。投放期新增订单/收入另需增量订单口径。</p>');
         if(task)$('dialogBody').insertAdjacentHTML('beforeend',fieldDetails(task));
         $('infoDialog').showModal();return;
       }
       if(n.id==='closeDialog'){$('infoDialog').close();return;}
       const evidence=['showConclusionEvidence','showMovementEvidence','showMonitorEvidence'];
       if(evidence.includes(n.id)){event.stopImmediatePropagation();notice(state.data?'来源 '+state.data.task.sourceName+'；分区 '+state.data.task.partition+'；'+state.data.task.evidence.length+' 次聚合查询，完整查询依据随导出保存。':'当前暂无查询依据');}
-      const deferred=['addProfileDrill','addDimensionPrompt','customBreakdownDimension','selectHistoryActivity','configureFunnel','exportDailyReport'];
+      const deferred=['customBreakdownDimension','selectHistoryActivity','configureFunnel','exportDailyReport'];
       if(deferred.includes(n.id)){event.stopImmediatePropagation();notice('该能力所需数据或配置尚未接入；当前可使用原有画像维度和分日效果。');}
     },true);
     document.addEventListener('keydown',event=>{const n=event.target.closest('[data-live-date]');if(n&&['Enter',' '].includes(event.key)){event.preventDefault();if(state.data)load({...selection,date:n.dataset.liveDate});}});
@@ -470,6 +575,12 @@
       const task=state.data?.task,rows=task?selectedRows(task):[];
       if(rows.length && !rows.some(r=>r.date===task.selectedDate))load({...selection,date:rows.at(-1).date});else renderData();
     };
+    $('dimensionPrompt').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.isComposing){event.preventDefault();applyProfilePrompt();}});
+    $('profileBars').addEventListener('keydown',event=>{if(event.target.closest('.profile-pie-item')&&['Enter',' '].includes(event.key)){event.preventDefault();openProfilePicker();}});
+    const highlight=event=>{const item=event.target.closest('[data-profile-index]');if(!item)return;all('#profileBars [data-profile-index]').forEach(n=>n.classList.toggle('is-active',n.dataset.profileIndex===item.dataset.profileIndex));text('#profileBars .profile-pie-detail',one('#profileBars .profile-pie-item[data-profile-index="'+item.dataset.profileIndex+'"]')?.textContent||'');};
+    $('profileBars').addEventListener('mouseover',highlight);$('profileBars').addEventListener('focusin',highlight);
+    const unhighlight=()=>{all('#profileBars .is-active').forEach(n=>n.classList.remove('is-active'));text('#profileBars .profile-pie-detail','');};
+    $('profileBars').addEventListener('mouseleave',unhighlight);$('profileBars').addEventListener('focusout',unhighlight);
     $('dailyPeriodSelect').onchange=updatePeriod;
     $('dailyMetricSelect').onchange=renderData;all('#customDateRange input').forEach(n=>n.onchange=updatePeriod);
     // 避免隐藏的历史示例被误认为真实结论。

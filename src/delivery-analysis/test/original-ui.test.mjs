@@ -156,7 +156,7 @@ test('原配置入口可选择新增画像维度，数据说明列出字段用�
 });
 
 test('画像快捷按钮不覆盖分日效果维度',async()=>{
- const value=structuredClone(data);value.task.dimension='member_status';value.task.dimensionOptions.member_status='会员状态';
+ const value=structuredClone(data);value.task.dimension='member_status';value.task.dimensionOptions.member_status='会员状态';value.task.dimensionOptions.city_name='城市';
  const dom=await page(value),d=dom.window.document;
  let requested;
  dom.window.fetch=async url=>{requested=new URL(url,'http://localhost');return {ok:true,json:async()=>value};};
@@ -269,5 +269,65 @@ test('BOSS配置在原漏斗及包详情可见，组别过滤与错误清理不�
  assert.match(d.querySelector('#dailyMetrics').textContent,/25.00%/);
  dom.window.fetch=async()=>({ok:false,json:async()=>({error:'读取失败'})});d.querySelector('#refreshAnalysis').click();await new Promise(resolve=>setTimeout(resolve,30));
  assert.equal(d.querySelector('#dailyFunnelPanel .boss-reference').hidden,true);assert.doesNotMatch(d.querySelector('#dailyFunnelPanel').textContent,/1531348692446228480/);
+ dom.window.close();
+});
+
+test('画像配置可多选并记忆，二三级拆分与重置通过真实查询契约驱动',async()=>{
+ const payload=structuredClone(data);
+ const keys=['charge_life_cycle','charge_freq_type','city_name'];
+ payload.task.portraitDimensionOptions={charge_life_cycle:'生命周期',charge_freq_type:'充电频次',city_name:'城市'};
+ payload.task.profileCrossDimensions=keys;
+ payload.task.profileAnalysis={status:'available',dimensions:[keys[0]],total:100,rows:[{values:['老用户'],users:100,share:1,parentShare:1}]};
+ const dom=await page(payload),d=dom.window.document;let request='';
+ dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true;};dom.window.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ dom.window.fetch=async url=>{request=url;const path=new URL(url,'http://localhost').searchParams.get('profileDimensions').split(',');const result=structuredClone(payload);result.task.profileAnalysis={status:'available',basis:'joint_snapshot',dimensions:path,total:100,rows:[{values:path.map((_,i)=>['老用户','低频','北京'][i]),users:100,share:1,parentShare:1}]};return {ok:true,json:async()=>result};};
+ assert.equal(d.querySelector('#addProfileDrill').disabled,false);
+ d.querySelector('#addProfileDrill').click();
+ d.querySelector('input[value="charge_freq_type"]').checked=true;d.querySelector('#confirmProfileDrill').click();
+ await new Promise(r=>setTimeout(r,20));
+ assert.match(request,/profileDimensions=charge_life_cycle%2Ccharge_freq_type/);
+ assert.match(d.querySelector('#profileBars').textContent,/总体.*100.00%/);
+ d.querySelector('#addProfileDrill').click();d.querySelector('input[value="city_name"]').checked=true;d.querySelector('#confirmProfileDrill').click();
+ await new Promise(r=>setTimeout(r,20));
+ assert.match(d.querySelector('#profileDrillPath').textContent,/生命周期 × 充电频次 × 城市/);
+ assert.equal(d.querySelector('#addProfileDrill').disabled,true);
+ d.querySelector('#resetProfileDrill').click();await new Promise(r=>setTimeout(r,20));
+ assert.equal(d.querySelector('#profileDrillPath').textContent,'生命周期');
+ d.querySelector('#configureDimensions').click();assert.equal(d.querySelectorAll('#dialogBody input[type="checkbox"]').length,3);
+ d.querySelector('input[value="city_name"]').checked=false;d.querySelector('#confirmDimensions').click();
+ await new Promise(r=>setTimeout(r,20));assert.equal(d.querySelectorAll('#dimensionTabs button').length,2);
+ dom.window.close();
+});
+
+test('自然语言区分城市与城市分框，图例键盘可拆分，错误后清除联合结果',async()=>{
+ const payload=structuredClone(data);
+ payload.task.portraitDimensionOptions={charge_life_cycle:'生命周期',city_name:'城市',city_fenkuang:'城市分框',charge_region:'战区'};
+ payload.task.profileCrossDimensions=Object.keys(payload.task.portraitDimensionOptions);
+ payload.task.profileAnalysis={status:'available',dimensions:['charge_life_cycle'],total:100,rows:[{values:['老用户'],users:100}]};
+ const dom=await page(payload),d=dom.window.document;let request='';
+ dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true;};dom.window.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ dom.window.fetch=async url=>{request=url;return {ok:true,json:async()=>payload};};
+ const legend=d.querySelector('.profile-pie-item');legend.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));assert.match(d.querySelector('#dialogTitle').textContent,/选择第 2 级维度/);d.querySelector('#closeDialog').click();
+ d.querySelector('#dimensionPrompt').value='再看看城市分框和战区';d.querySelector('#addDimensionPrompt').click();await new Promise(r=>setTimeout(r,20));
+ assert.equal(new URL(request,'http://localhost').searchParams.get('profileDimensions'),'city_fenkuang');
+ assert.match(d.querySelector('#profileFeedback').textContent,/城市分框、战区/);
+ d.querySelector('#dimensionPrompt').value='生命周期 × 城市 × 战区';d.querySelector('#addDimensionPrompt').click();await new Promise(r=>setTimeout(r,20));
+ assert.equal(new URL(request,'http://localhost').searchParams.get('profileDimensions'),'charge_life_cycle,city_name,charge_region');
+ d.querySelector('#dimensionPrompt').value='天气';d.querySelector('#addDimensionPrompt').click();assert.match(d.querySelector('#profileFeedback').textContent,/未识别/);
+ dom.window.fetch=async()=>({ok:false,json:async()=>({error:'服务不可用'})});d.querySelector('#refreshAnalysis').click();await new Promise(r=>setTimeout(r,20));
+ assert.equal(d.querySelector('#addProfileDrill').disabled,true);assert.doesNotMatch(d.querySelector('#profileBars').textContent,/老用户/);
+ dom.window.close();
+});
+
+test('切换任务恢复各自画像路径，配置弹窗保留分日所有维度入口',async()=>{
+ const payload=structuredClone(data);payload.task.portraitDimensionOptions={charge_life_cycle:'生命周期',city_name:'城市'};payload.task.dimensionOptions.city_name='城市';
+ const dom=await page(payload),d=dom.window.document;const urls=[];
+ dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true;};dom.window.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ dom.window.fetch=async url=>{const params=new URL(url,'http://localhost').searchParams;urls.push(params);const result=structuredClone(payload);result.task.id=params.get('taskId');result.task.kind=result.task.id;result.task.portraitDimension=params.get('portraitDimension')||'charge_life_cycle';return {ok:true,json:async()=>result};};
+ d.querySelector('#configureDimensions').click();assert.ok(d.querySelector('[data-live-breakdown="city_name"]'));
+ d.querySelector('input[value="charge_life_cycle"]').checked=false;d.querySelector('#confirmDimensions').click();await new Promise(r=>setTimeout(r,20));
+ d.querySelector('[data-task="summer"]').click();await new Promise(r=>setTimeout(r,20));
+ d.querySelector('[data-task="recall"]').click();await new Promise(r=>setTimeout(r,20));
+ assert.equal(urls.at(-1).get('profileDimensions'),'city_name');assert.equal(d.querySelector('#dimensionTabs .active').textContent,'城市');
  dom.window.close();
 });

@@ -43,3 +43,9 @@ test('新增个人效果指标缺失或覆盖数越界时不发布快照',async(
     await assert.rejects(buildSnapshot(fake),/invalid personal/);
   }
 });
+
+test('联合快照逐维对账，不允许同总数但错标签的联合桶发布',async()=>{
+ const fake=gateway(),query=fake.query;
+ fake.query=async function(q){const rows=await query.call(this,q);return q.group_by.includes('city_name')&&q.group_by.includes('charge_life_cycle')?rows.map(r=>({...r,city_name:'错误城市'})):rows;};
+ await assert.rejects(buildSnapshot(fake),/joint marginal mismatch/);
+});
