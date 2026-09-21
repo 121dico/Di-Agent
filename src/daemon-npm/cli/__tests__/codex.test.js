@@ -902,3 +902,51 @@ test('Default survives omitted model on the daemon wire boundary', async () => {
   const turn = harness.child.stdin.writes.map(JSON.parse).find(item => item.method === 'turn/start');
   assert.strictEqual(turn.params.model, 'gpt-5.6-sol');
 });
+
+test('Codex recovers an immediate native version rejection once, but never replays observed work', async () => {
+  const versionError = "The 'gpt-6-astra' model requires a newer version of Codex. Please upgrade.";
+  for (const scenario of ['recover', 'twice', 'text', 'tool', 'approval', 'network', 'early-item', 'early-file', 'early-approval-rejection']) {
+    const harness = buildPersistentHarness();
+    const turns = []; const events = [];
+    harness.ctx.spawn = () => fakeCodexChild((msg, child) => {
+      if (msg.method === 'initialize') emitCodexLine(child, { id: msg.id, result: {} });
+      if (msg.method === 'model/list') emitCodexLine(child, { id: msg.id, result: { data: [{ model: 'gpt-5.6-sol', isDefault: true, supportedReasoningEfforts: [{ reasoningEffort: 'medium' }] }] } });
+      if (msg.method === 'config/read') emitCodexLine(child, { id: msg.id, result: { config: { model: 'gpt-6-astra' } } });
+      if (msg.method === 'thread/start' || msg.method === 'thread/resume') emitCodexLine(child, { id: msg.id, result: { thread: { id: 'thread-safe' } } });
+      if (msg.method === 'turn/start') {
+        turns.push(msg.params); const count = turns.length; const id = `turn-${count}`;
+        if (scenario === 'early-item' || scenario === 'early-file') {
+          emitCodexLine(child, { method: 'item/completed', params: { item: scenario === 'early-item' ? { type: 'agentMessage', text: 'already completed' } : { type: 'fileChange', id: 'changed-file' } } });
+        }
+        if (scenario === 'early-approval-rejection') {
+          emitCodexLine(child, { id: 'early-approval', method: 'item/commandExecution/requestApproval', params: { threadId: 'thread-safe' } });
+          emitCodexLine(child, { id: msg.id, error: { message: 'unsupported model' } });
+          return;
+        }
+        emitCodexLine(child, { id: msg.id, result: { turn: { id } } });
+        setImmediate(() => {
+          if (scenario === 'text') child.stdout.emit('data', JSON.stringify({ method: 'item/agentMessage/delta', params: { delta: 'already answered' } }) + '\n');
+          if (scenario === 'tool') child.stdout.emit('data', JSON.stringify({ method: 'item/started', params: { item: { id: 'cmd', type: 'commandExecution', command: 'echo side-effect' } } }) + '\n');
+          if (scenario === 'approval') child.stdout.emit('data', JSON.stringify({ id: 'approval-1', method: 'item/commandExecution/requestApproval', params: { threadId: 'thread-safe', turnId: id } }) + '\n');
+          const success = scenario === 'recover' && count === 2;
+          if (success) child.stdout.emit('data', JSON.stringify({ method: 'item/agentMessage/delta', params: { delta: 'recovered' } }) + '\n');
+          child.stdout.emit('data', JSON.stringify({ method: 'turn/completed', params: { turn: { id, status: success ? 'completed' : 'failed', ...(success ? {} : { error: { message: scenario === 'network' ? 'network timeout' : versionError } }) } } }) + '\n');
+        });
+      }
+    });
+    const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({ agentId: 'a', eventRef: { current: event => events.push(event) } }, harness.ctx);
+    await runtime.ready;
+    const result = await runtime.sendPrompt('do the task', { version: 2, model: '', reasoning_effort: 'medium', approval_mode: 'request', service_tier: 'default' });
+    const retry = scenario === 'recover' || scenario === 'twice';
+    assert.strictEqual(turns.length, retry ? 2 : 1, scenario);
+    if (retry) {
+      assert.strictEqual(turns[1].model, 'gpt-5.6-sol');
+      assert.strictEqual(turns[1].approvalPolicy, turns[0].approvalPolicy);
+      assert.deepStrictEqual(turns[1].sandboxPolicy, turns[0].sandboxPolicy);
+    }
+    if (scenario === 'recover') {
+      assert.strictEqual(result.result, 'recovered');
+      assert.strictEqual(events.some(event => event.type === 'turn_end' && event.error), false);
+    } else assert.ok(result.error, scenario);
+  }
+});

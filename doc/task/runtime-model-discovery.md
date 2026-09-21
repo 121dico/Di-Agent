@@ -14,13 +14,15 @@ Codex 查询 `model/list`（分页）及 `config/read` 的 model 字段；Claude
 ## Default 修复与恢复边界
 Go 的 `model,omitempty` 曾让 Default 的空字段在传输中消失，旧 daemon 将 undefined 当成不支持的模型。现在后端发送空字符串，同时 daemon 和前端兼容缺失、空值和 default 别名。
 静态模型白名单改为安全的标识符校验，模型能力由本机原生目录决定。Default 保留本地配置中的隐藏/自定义模型，不把列表首项推测成默认值。
-Codex 同一原生会话支持切换回本地默认；仅在无 turn ID 的明确模型拒绝时刷新目录并最多恢复一次。先使用未被拒绝的本地默认，再考虑目录声明的默认；权限和沙盒不变。
+Codex 同一原生会话支持切换回本地默认；无 turn ID 的明确模型拒绝可恢复。部分旧 CLI 会先分配 turn ID 再返回模型版本不兼容；仅明确的此类拒绝且尚无模型输出、工具或审批活动时也允许恢复。两条路径共享最多一次恢复预算。先使用未被拒绝的本地默认，再考虑目录声明的默认；权限和沙盒不变。
 Claude 用原生 set_model 切换；仅明确的模型参数拒绝允许在发送用户消息之前恢复 Default。旧目录缓存不否决新扫描模型。
-网络、认证、限额等外部故障仍可能失败，执行中的任务不自动重放。
+网络、认证、限额等外部故障仍可能失败，有实际输出、工具或审批活动的任务不自动重放。
 
 ## 验证
 - 回归覆盖 Go 真实缺字段形状、空对象、动态模型、原生目录分页/空结果/超时、敏感字段过滤、旧响应隔离、失败保留目录、任务归属与扫描不写业务看板。
-- 实测线上 Desktop/CLI/Claude 的模型目录，Default Desktop 在原报错对话返回“默认模型调用成功”。其它人机验收记录见本任务工作目录。
+- 实测线上 Desktop/CLI/Claude 的模型目录；Desktop 在原报错网页对话返回“默认模型调用成功”。旧 CLI 的 gpt-6-astra 版本拒绝自动恢复后返回“CLI 自动恢复成功”；Claude 显式选择 sonnet 别名返回“模型切换调用成功”。
+- daemon 全量 248 项通过，包含 turn/start 响应前到达消息、文件变更、审批时禁止恢复，以及两条恢复路径共享一次预算。
+- 网页已验收 Desktop Default 和 Desktop/CLI 原生目录；后续 Claude 选择与刷新保留的最后界面验收因 Mac 锁屏暂停，API 真调用已验证。
 - 全量前端：399 通过，2 个既有相关性外失败（SkillsView Router、reportV12Presentation NaN）。全量 backend 的 ServeSite traversal 测试在当前环境返回 404 而非期望 403；本次相关 service/handler 测试通过。
 
 参考：https://learn.chatgpt.com/docs/app-server （原生 model/list）

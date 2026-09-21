@@ -7,7 +7,7 @@ function resolveModelPolicy(config, models, nativeDefault, forceDefault = false,
   const configured = require('./runtime-models').modelID(nativeDefault) ? nativeDefault : '';
   // 隐藏/自定义默认模型可能不在菜单中，目录缺失不能证明它不可用。
   const defaultID = configured || catalogDefault?.id || '';
-  if (forceDefault) next.model = (configured && configured !== rejectedModel ? configured : catalogDefault?.id) || ''; 
+  if (forceDefault) next.model = (configured && configured !== rejectedModel ? configured : catalogDefault?.id) || '';
   else if (!config.model) next.model = defaultID;
   const effective = listed.find(m => m.id === next.model);
   if (!effective) return { config: next, changed: Boolean(config.model && next.model !== config.model) };
@@ -27,4 +27,10 @@ function isModelRejection(response) {
     && /\bmodel\b/i.test(message)
     && !/timeout|timed out|connection|network|rate.?limit|quota|auth/i.test(message);
 }
-module.exports = { resolveModelPolicy, isModelRejection };
+function isPreGenerationModelError(message) {
+  const text = String(message || '');
+  return /model/i.test(text)
+    && /requires a newer version of Codex|model[^\n]*(?:is not supported|does not exist|not found)|unsupported model/i.test(text)
+    && !/timeout|timed out|connection|network|quota|rate.?limit|authentication/i.test(text);
+}
+module.exports = { resolveModelPolicy, isModelRejection, isPreGenerationModelError };

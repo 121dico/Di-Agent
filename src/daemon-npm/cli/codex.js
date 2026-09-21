@@ -1,6 +1,6 @@
 'use strict';
 const { createCodexUsageMeter, codexExecUsage, usageEvent } = require('./token-usage');
-const { resolveModelPolicy, isModelRejection } = require('./codex-model-policy');
+const { resolveModelPolicy, isModelRejection, isPreGenerationModelError } = require('./codex-model-policy');
 const { codexToolEvents } = require('./codex-tool-events');
 
 // CodexCliSpec: OpenAI Codex CLI 的 spec 实现。
@@ -528,7 +528,12 @@ function createCodexCliSpec(ctx) {
         logRuntimeApplied(verification, settings);
       };
 
+      const markRuntimeActivity = () => {
+        if (currentTurn) currentTurn.hadActivity = true;
+        else if (pendingRuntimeVerification) pendingRuntimeVerification.hadActivity = true;
+      };
       const dispatchEvent = (ev) => {
+        if (['text', 'thinking', 'tool_use', 'tool_result'].includes(ev.type)) markRuntimeActivity();
         const onEvent = eventRef && eventRef.current;
         if (typeof onEvent === 'function') {
           try { onEvent(ev); } catch { /* 回调异常不阻断事件流 */ }
@@ -574,6 +579,7 @@ function createCodexCliSpec(ctx) {
           return;
         }
         if (method === 'item/started' || method === 'item/completed') {
+          if (p.item?.type !== 'userMessage') markRuntimeActivity();
           const events = codexToolEvents(p.item || {}, method === 'item/started' ? 'started' : 'completed', nativeToolStarts);
           if (events) { for (const event of events) dispatchEvent(event); return; }
         }
@@ -604,6 +610,12 @@ function createCodexCliSpec(ctx) {
           const turnError = method !== 'turn/completed' || turnObj.status === 'error' || turnObj.error
             ? (turnObj.error?.message || turnObj.error || 'codex turn failed')
             : undefined;
+          // 原生运行器可能先分配 turn ID，再在模型服务端参数校验失败。
+          // 只对明确版本/模型拒绝且尚无模型输出、工具或审批的轮次恢复。
+          if (turnError && !turn.hadActivity && !turn.recovery.used && isPreGenerationModelError(turnError)) {
+            finishTurn({ error: String(turnError), rejectedModel: turn.runtimeVerification.config.model, recoverModel: true });
+            return;
+          }
           void (async () => {
             await verifyRuntimeAfterTurn(turn.runtimeVerification);
             if (currentTurn !== turn) return;
@@ -617,6 +629,7 @@ function createCodexCliSpec(ctx) {
       };
 
       const handleServerRequest = async (msg) => {
+        markRuntimeActivity();
         const method = String(msg.method || '');
         const kind = method.includes('commandExecution')
           ? 'command'
@@ -805,7 +818,7 @@ function createCodexCliSpec(ctx) {
 
       // --- sendPrompt：串行化 + turn/start + 等 turn 终态 ---
       let queueTail = Promise.resolve();
-      const sendPromptRaw = (prompt, runtimeConfig, approvalContext) => new Promise((resolve) => {
+      const sendPromptRaw = (prompt, runtimeConfig, approvalContext, recovery) => new Promise((resolve) => {
         if (child.exitCode !== null) {
           resolve({ error: 'Agent process not running' });
           return;
@@ -848,10 +861,11 @@ function createCodexCliSpec(ctx) {
             input,
             ...controls.params,
           });
-          if (isModelRejection(res)) {
+          if (!recovery.used && !pendingRuntimeVerification.hadActivity && isModelRejection(res)) {
             await refreshModels();
             const recovered = resolveModelPolicy(requested, availableModels, nativeDefault, true, controls.config.model);
             if (recovered.config.model && recovered.config.model !== controls.config.model) {
+              recovery.used = true;
               controls = codexTurnControls(recovered.config);
               pendingRuntimeVerification.config = controls.config;
               dispatchEvent(thinkingEvent(`原模型不可用，已切换为本地默认模型 ${controls.config.model}。`));
@@ -881,6 +895,8 @@ function createCodexCliSpec(ctx) {
             text: '',
             approvalContext,
             runtimeVerification: pendingRuntimeVerification,
+            hadActivity: pendingRuntimeVerification?.hadActivity === true,
+            recovery,
           };
           pendingTurnApprovalContext = null;
           pendingRuntimeVerification = null;
@@ -908,7 +924,23 @@ function createCodexCliSpec(ctx) {
         });
       });
       const sendPrompt = (prompt, runtimeConfig, approvalContext) => {
-        const run = () => sendPromptRaw(prompt, runtimeConfig, approvalContext);
+        const run = async () => {
+          const recovery = { used: false };
+          const initialFirstTurn = firstTurn;
+          const outcome = await sendPromptRaw(prompt, runtimeConfig, approvalContext, recovery);
+          if (!outcome.recoverModel) return outcome;
+          await refreshModels();
+          const requested = normalizeRuntimeConfig(runtimeConfig);
+          const next = resolveModelPolicy(requested, availableModels, nativeDefault, true, outcome.rejectedModel).config;
+          if (next.model && next.model !== outcome.rejectedModel) {
+            recovery.used = true;
+            firstTurn = initialFirstTurn;
+            dispatchEvent(thinkingEvent(`当前运行版本不支持原模型，已恢复为 ${next.model}。`));
+            return sendPromptRaw(prompt, next, approvalContext, recovery);
+          }
+          dispatchEvent(turnEndEvent({ error: outcome.error }));
+          return { error: outcome.error };
+        };
         queueTail = queueTail.then(run, run);
         return queueTail;
       };
