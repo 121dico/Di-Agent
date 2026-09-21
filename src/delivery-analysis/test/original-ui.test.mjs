@@ -102,6 +102,7 @@ test('投放悬浮问答默认收起，展开关闭保留草稿并恢复焦点',
  dom.window.fetch=async()=>({ok:true,json:async()=>({data:[]})});
  dom.window.eval(await readFile(new URL('agent-bridge.js',root),'utf8'));
  dom.window.eval(await readFile(new URL('agent-widget.js',root),'utf8'));
+ assert.equal(d.querySelector('.delivery-agent-launcher').textContent,'');
  const drawer=d.querySelector('.delivery-agent-panel');
  assert.ok(drawer);
  assert.equal(dom.window.getComputedStyle(drawer).position,'fixed');

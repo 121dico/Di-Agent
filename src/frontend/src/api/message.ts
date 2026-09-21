@@ -35,7 +35,8 @@ export async function getMessages(
 
   const qs = params.toString();
   const path = `/api/conversations/${conversationId}/messages${qs ? `?${qs}` : ''}`;
-  return get<Message[]>(path);
+  // 新会话的空列表可能由 Go 序列化为 null，统一在 API 边界归一化。
+  return (await get<Message[] | null>(path)) ?? [];
 }
 
 export async function recallMessage(

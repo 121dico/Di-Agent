@@ -1,4 +1,5 @@
 import React, { useCallback } from 'react';
+import { pageAgentPath } from '@/utils/pageAgentConversation';
 import { Button } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -39,6 +40,8 @@ const AgentsView: React.FC = () => {
   }, [setSelectedMachine, setSelectedAgent]);
 
   const handleStartAgentChat = useCallback(async (agent: Agent) => {
+    const pagePath = pageAgentPath(agent.name);
+    if (pagePath) { navigate(pagePath); return; }
     const existing = conversations.find(
       (c) => c.type === 'agent' && c.peer_id === agent.id,
     );

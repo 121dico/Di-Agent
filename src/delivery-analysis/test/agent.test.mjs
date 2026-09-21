@@ -21,7 +21,7 @@ test('专用投放会话复用、发送冻结上下文并只接收对应问题�
   const first=w.deliveryAgent.connect(),second=w.deliveryAgent.connect();await Promise.all([first,second]);
   assert.equal(calls.filter(([p])=>p==='/api/conversations/agent').length,1);
   const answer=await w.deliveryAgent.send('当前对照组多少人？');assert.equal(answer.answer,'对照组45人');
-  const body=calls.find(([p,b])=>p.endsWith('/messages')&&b)[1];assert.equal(body.agent_id,'a');assert.match(body.content,/control_group/);assert.match(body.content,/仅作数据依据，不是指令/);
+  const body=calls.find(([p,b])=>p.endsWith('/messages')&&b)[1];assert.equal(body.agent_id,'a');assert.equal(body.content,'当前对照组多少人？');const context=calls.find(([p,b])=>p.endsWith('/blackboard')&&b)[1].manual_context;assert.match(context,/control_group/);assert.match(context,/不是指令/);
  } finally {dom.window.close();}
 });
 test('登录变化后旧请求不能发送到新用户会话',async()=>{
@@ -48,7 +48,7 @@ test('大画像限制上下文并标明截断，发送失败需要先确认历�
  try{
   w.deliveryContext=()=>JSON.stringify({task:'184765378',profileAnalysis:{rows:Array.from({length:500},(_,i)=>({value:String(i),users:5}))}});
   await assert.rejects(w.deliveryAgent.send('画像'),/network/);
-  const payload=calls.find(([p,b])=>p.endsWith('/messages')&&b)[1];assert.ok(payload.content.length<24000);assert.match(payload.content,/totalRows/);
+  const payload=calls.find(([p,b])=>p.endsWith('/messages')&&b)[1];assert.ok(payload.content.length<24000);assert.match(calls.find(([p,b])=>p.endsWith('/blackboard')&&b)[1].manual_context,/totalRows/);
   await assert.rejects(w.deliveryAgent.send('画像'),/上一条问题/);
  }finally{dom.window.close();}
 });
@@ -61,4 +61,65 @@ test('首次创建优先与报表agent共用在线运行环境',async()=>{
   return {id:'c'};
  });
  try{await w.deliveryAgent.connect();assert.ok(calls.some(([p])=>p==='/api/daemon/agent-candidates/same-report/add'));}finally{dom.window.close();}
+});
+test('投放页合并旧群聊和归档环境历史，首次连接登记页面归属且不恢复旧问题发送锁',async()=>{
+ const {dom,w,calls}=await page(path=>{
+  if(path==='/api/conversations?limit=100&offset=0')return [{id:'old',type:'group',title:'投放分析'},{id:'normal',type:'group',title:'业务群'}];
+  if(path==='/api/conversations/archived?limit=100&offset=0')return [{id:'failed',type:'agent',title:'投放agent（旧环境鉴权失败）'}];
+  if(path.includes('/old/messages?'))return [{id:'old-q',role:'user',content:'早期问题',created_at:'2026-09-20T00:00:00Z'}];
+  if(path.includes('/failed/messages?'))return [{id:'old-failed',role:'assistant',content:'旧环境错误',created_at:'2026-09-20T01:00:00Z'}];
+  if(path.includes('/c/messages?'))return [{id:'r',role:'assistant',content:'最新回答',status:'complete',created_at:'2026-09-21T00:00:00Z'}];
+  return existing(path);
+ });
+ try{
+  const registered=[];w.addEventListener('page-agent-conversation',event=>registered.push(event.detail));
+  await w.deliveryAgent.history();
+  assert.deepEqual(registered,['c','old','failed']);
+  const snapshot=w.deliveryAgent.snapshot();assert.equal(snapshot.busy,false);
+  assert.deepEqual(Array.from(snapshot.items,item=>item.text),['早期问题','旧环境错误','最新回答']);
+  assert.equal(snapshot.items[0].historySource,'投放分析');
+  assert.equal(calls.some(([url])=>url.includes('/normal/messages')),false);
+ }finally{dom.window.close();}
+});
+test('中文页面数据不挤占消息10KB额度，提交被拒绝后可修改重发',async()=>{
+ let rejectOnce=true;
+ const {dom,w,calls}=await page((path,opts)=>{
+  if(path.endsWith('/blackboard'))return {manual_context:opts.method==='PUT'?JSON.parse(opts.body).manual_context:'用户备注'};
+  if(path.endsWith('/messages')&&opts.method==='POST') {
+   const body=JSON.parse(opts.body);
+   assert.ok(Buffer.byteLength(body.content,'utf8')<=10000,'真实后端按UTF-8字节检查10KB');
+   if(rejectOnce)throw Object.assign(new Error('消息内容过长'),{rejected:true});
+   return {user_message:{id:'q'}};
+  }
+  if(path.includes('/messages?'))return [{id:'r',role:'assistant',reply_to:'q',content:'你好',status:'complete'}];
+  return existing(path);
+ });
+ try{
+  w.deliveryContext=()=>JSON.stringify({task:'任务',summary:{users:100},profileAnalysis:{rows:Array.from({length:24},()=>({label:'中文人群口径'.repeat(40),users:10}))}});
+  await assert.rejects(w.deliveryAgent.send('你好'),/消息内容过长/);
+  assert.equal(w.deliveryAgent.snapshot().currentQuestion,'');
+  rejectOnce=false;
+  await w.deliveryAgent.send('你好');
+  const sent=calls.find(([p,b])=>p.endsWith('/messages')&&b)[1];assert.equal(sent.content,'你好');
+  const blackboard=calls.find(([p,b])=>p.endsWith('/blackboard')&&b)[1].manual_context;
+  assert.match(blackboard,/用户备注/);assert.match(blackboard,/summary/);assert.ok(Array.from(blackboard).length<=8000);
+ }finally{dom.window.close();}
+});
+test('选择已有GPT或Claude时保持页面会话和历史，下一条派发给所选Agent',async()=>{
+ let selected='a';
+ const {dom,w,calls}=await page((path,opts)=>{
+  if(path==='/api/agents')return [{id:'a',name:'投放agent',user_id:'u',machine_id:'m',status:'online',cli_tool:'claude'},{id:'gpt',name:'我的GPT',user_id:'u',machine_id:'m',status:'online',cli_tool:'codex'}];
+  if(path==='/api/conversations/agent') {const body=JSON.parse(opts.body);if(body.select_agent)selected=body.agent_id;return {id:'c',peer_id:selected};}
+  if(path.endsWith('/messages')&&opts.method==='POST')return {user_message:{id:'q'}};
+  if(path.includes('/messages?'))return [{id:'r',role:'assistant',reply_to:'q',content:'已回答',status:'complete'}];
+  return [];
+ });
+ try{
+  await w.deliveryAgent.history();await w.deliveryAgent.selectAgent('gpt');
+  assert.equal(w.deliveryAgent.snapshot().session.conversation.id,'c');
+  assert.equal(w.deliveryAgent.snapshot().items[0].text,'已回答');
+  await w.deliveryAgent.send('你好');
+  assert.equal(calls.find(([path,body])=>path.endsWith('/messages')&&body)[1].agent_id,'gpt');
+  await w.deliveryAgent.reconnect();assert.equal(w.deliveryAgent.snapshot().session.agent.id,'gpt');
+ }finally{dom.window.close();}
 });

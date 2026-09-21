@@ -1,0 +1,39 @@
+.panel { display: flex; flex-direction: column; height: 100%; min-height: 0; color: var(--wb-text-primary, #202124); background: var(--wb-surface, #fff); overflow: hidden; }
+.header { display: flex; align-items: center; gap: 10px; padding: 16px 18px; border-bottom: 1px solid var(--wb-border-default, #e8e8e8); flex: 0 0 auto; }
+.avatar { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 11px; background: var(--wb-surface-selected, #eef4ff); color: var(--wb-link, #326ee6); }
+.heading { display: flex; flex: 1; flex-direction: column; gap: 3px; }
+.heading strong { font-size: 15px; font-weight: 650; }
+.heading span { font-size: 11px; color: var(--color-text-secondary, #777); }
+.iconButton { border: 0; background: transparent; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; cursor: pointer; color: var(--color-text-secondary, #777); }
+.iconButton:hover { background: var(--wb-surface-hover, #f4f4f4); }
+.context { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; margin: 12px 16px 0; padding: 9px 11px; border: 1px solid var(--wb-border-default, #e8e8e8); border-radius: 10px; background: var(--wb-surface-secondary, #fafafa); flex: 0 0 auto; min-width: 0; }
+.context > span { font-size: 10px; color: var(--color-text-secondary, #777); }
+.context strong { font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+.context small { width: 100%; font-size: 10px; color: var(--color-text-secondary, #777); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.messages { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+.initialMessages { display: none; }
+.empty { display: flex; flex: 1; min-height: 0; overflow: auto; flex-direction: column; justify-content: center; align-items: center; gap: 13px; padding: 28px; text-align: center; color: var(--color-text-secondary, #777); font-size: 13px; }
+.empty svg { color: var(--wb-link, #326ee6); }
+.empty strong { color: var(--wb-text-primary, #202124); font-weight: 550; font-size: 15px; }
+.empty p { line-height: 1.75; margin: 0; max-width: 250px; }
+.notice { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 16px; font-size: 11px; color: var(--color-text-secondary, #777); flex: 0 0 auto; }
+.notice span { overflow-wrap: anywhere; }
+.notice button { flex-shrink: 0; padding: 4px 7px; border: 1px solid var(--wb-border-default, #e8e8e8); border-radius: 6px; background: var(--wb-surface, #fff); color: var(--wb-link, #326ee6); cursor: pointer; }
+.composer { margin: 8px 14px 14px; padding: 10px 11px; border: 1px solid var(--wb-border-default, #e8e8e8); border-radius: 13px; flex: 0 0 auto; }
+.composer:focus-within { border-color: var(--wb-link, #326ee6); }
+.composer textarea { display: block; width: 100%; padding: 0; resize: none; border: 0; background: transparent; color: inherit; font: inherit; font-size: 13px; line-height: 1.65; outline: none; }
+.composerBottom { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding-top: 6px; }
+.composerBottom small { font-size: 10px; color: var(--color-text-secondary, #777); }
+.sendButton { width: 31px; height: 31px; display: grid; place-items: center; border: 0; border-radius: 9px; background: var(--wb-text-primary, #202124); color: white; cursor: pointer; }
+.sendButton:disabled { opacity: .3; cursor: not-allowed; }
+.panel button:focus-visible { outline: 2px solid var(--wb-link, #326ee6); outline-offset: 3px; }
+@media (max-height: 560px) {
+  .header { padding: 10px 14px; }
+  .context { margin-top: 7px; padding: 6px 9px; }
+  .empty { padding: 12px 20px; gap: 7px; justify-content: flex-start; }
+  .empty > svg { display: none; }
+  .composer { margin-bottom: 10px; padding: 7px 10px; }
+}
+
+.agentPicker { display: flex; align-items: center; gap: 8px; padding: 10px 16px 0; flex: 0 0 auto; font-size: 11px; color: var(--color-text-secondary, #777); }
+.agentPicker select { min-width: 0; flex: 1; padding: 6px; border: 1px solid var(--wb-border-default, #e8e8e8); border-radius: 7px; background: var(--wb-surface, #fff); color: var(--wb-text-primary, #202124); font: inherit; }

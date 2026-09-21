@@ -160,7 +160,7 @@ export function useWebSocket() {
               created_at: new Date().toISOString(),
             });
           }
-          if (convId !== activeId) {
+          if (convId !== activeId && !useConversationStore.getState().pageConversationIds[convId]) {
             incrementUnread(convId);
             playNotificationBeep();
           }

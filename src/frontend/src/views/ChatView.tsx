@@ -11,7 +11,9 @@ import { usePersonalReportStore } from '@/store/personalReportStore';
 import styles from './ChatView.module.css';
 
 const ChatView: React.FC = () => {
-  const { activeId } = useConversation();
+  const { activeId: selectedId, conversations } = useConversation();
+  // 刷新恢复时先等消息列表确认归属，避免先闪现页面 Agent 的历史。
+  const activeId = conversations.some((item) => item.id === selectedId) ? selectedId : null;
   const fetchConversations = useConversationStore((state) => state.fetchConversations);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshFailed, setRefreshFailed] = useState(false);

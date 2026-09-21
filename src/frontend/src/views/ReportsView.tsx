@@ -48,6 +48,8 @@ import { buildEstimatedCurvePath, buildObservedCurvePath } from './reportCurvePa
 import { fitReportLocalTrend } from './reportLocalFit';
 import { expandChinaRegionSelection, summarizeChinaRegionSelection } from '@/components/report/ChinaRegionPicker';
 import { ReportRegionFilter } from '@/components/report/ReportRegionFilter';
+import { ReportAgentWidget } from '@/components/report/ReportAgentWidget';
+import type { ReportAgentContext } from '@/components/report/reportAgentContext';
 import styles from './ReportsView.module.css';
 
 const defaultQuery = JSON.stringify({ fieldList: [{ name: 'duid', alias: 'user_count', aggFunctionEnum: 'COUNT DISTINCT' }], conditionList: [], groupList: [], needPagination: false }, null, 2);
@@ -366,9 +368,10 @@ export function DonutChart({ distribution, hidden, onToggle, centerLabel = '已�
 
 interface PublicReportsWorkspaceProps {
   visible: boolean;
+  onAgentContext: (context: ReportAgentContext) => void;
 }
 
-const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible }) => {
+const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible, onAgentContext }) => {
   const pageRef = useRef<HTMLElement>(null);
   const visibleRef = useRef(visible);
   useEffect(() => { visibleRef.current = visible; }, [visible]);
@@ -541,6 +544,19 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
   const analyticsDateRangeLabel = analytics?.start_date && analytics?.end_date
     ? `${analytics.start_date} → ${analytics.end_date}`
     : selectedRangeLabel;
+  const agentCityKey = JSON.stringify(expandedAppliedCities);
+  const agentSummary = analyticsLoading ? '统计加载中，暂不引用数值。' : analyticsError ? '当前统计加载失败，请查询真实数据后再分析。' : analytics ? JSON.stringify(analytics.summary) : '当前没有可用汇总，请先读取报表数据。';
+  const agentDateRange = analyticsLoading ? selectedRangeLabel : analyticsDateRangeLabel;
+  useEffect(() => {
+    onAgentContext({
+      reportId: selected?.id,
+      reportName: selected?.name ?? '公共报表',
+      dataDate: activePartition === '—' ? undefined : activePartition,
+      dateRange: agentDateRange,
+      cities: JSON.parse(agentCityKey) as string[],
+      summary: agentSummary,
+    });
+  }, [onAgentContext, selected?.id, selected?.name, activePartition, agentDateRange, agentCityKey, agentSummary]);
 
   useEffect(() => {
     const root = pageRef.current;
@@ -1008,6 +1024,7 @@ const PublicReportsWorkspace: React.FC<PublicReportsWorkspaceProps> = ({ visible
 const ReportsView: React.FC = () => {
   const [workspace, setWorkspace] = useState<'public' | 'personal'>('public');
   const [personalVisited, setPersonalVisited] = useState(false);
+  const [agentContext, setAgentContext] = useState<ReportAgentContext>({ reportName: '公共报表', cities: [] });
 
   const selectWorkspace = (next: 'public' | 'personal') => {
     if (next === 'personal') setPersonalVisited(true);
@@ -1021,8 +1038,9 @@ const ReportsView: React.FC = () => {
         <button type="button" aria-current={workspace === 'personal' ? 'page' : undefined} onClick={() => selectWorkspace('personal')}>我的报表</button>
       </nav>
       <div className={workspace === 'public' ? styles.reportHubPane : styles.reportHubPaneHidden}>
-        <PublicReportsWorkspace visible={workspace === 'public'} />
+        <PublicReportsWorkspace visible={workspace === 'public'} onAgentContext={setAgentContext} />
       </div>
+      <ReportAgentWidget context={workspace === 'public' ? agentContext : { reportName: '我的报表', cities: [] }} />
       {personalVisited && (
         <div className={workspace === 'personal' ? styles.reportHubPane : styles.reportHubPaneHidden}>
           <PersonalReportsLibrary />

@@ -7,6 +7,7 @@ import (
 
 	"github.com/121dico/Di-Agent/src/backend/internal/domain"
 	"github.com/121dico/Di-Agent/src/backend/internal/middleware"
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 	"github.com/121dico/Di-Agent/src/backend/internal/service"
 	"github.com/gin-gonic/gin"
 )
@@ -42,7 +43,9 @@ type PrivateChatRequest struct {
 
 // AgentChatRequest 智能体私聊请求体。
 type AgentChatRequest struct {
-	AgentID string `json:"agent_id" binding:"required,uuid"`
+	AgentID     string `json:"agent_id" binding:"required,uuid"`
+	Workspace   string `json:"workspace" binding:"omitempty,oneof=report delivery"`
+	SelectAgent bool   `json:"select_agent"`
 }
 
 // GetOrCreatePrivate 查找或创建与指定好友的私聊会话
@@ -76,7 +79,13 @@ func (h *ConversationHandler) GetOrCreateAgentPrivate(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
-	conv, err := h.svc.GetOrCreateAgentChat(c.Request.Context(), userID, req.AgentID)
+	var conv *model.Conversation
+	var err error
+	if req.Workspace != "" {
+		conv, err = h.svc.GetOrCreatePageAgentChat(c.Request.Context(), userID, req.AgentID, req.Workspace, req.SelectAgent)
+	} else {
+		conv, err = h.svc.GetOrCreateAgentChat(c.Request.Context(), userID, req.AgentID)
+	}
 	if err != nil {
 		if errors.Is(err, service.ErrConvNotFound) {
 			middleware.ErrorResponse(c, http.StatusNotFound, 40415, err.Error())

@@ -2,10 +2,10 @@ import { useEffect, useCallback, useRef } from 'react';
 import { useMessageStore } from '@/store/messageStore';
 import { getUnreadMessages } from '@/api/message';
 import { markConversationRead } from '@/api/conversation';
-import type { OptimisticMessage, ReplyToPreview } from '@/types/message';
+import type { Message, OptimisticMessage, ReplyToPreview } from '@/types/message';
 import type { AttachmentPayload } from '@/types/attachment';
 import type { AgentRuntimeConfig } from '@/types/agentRuntime';
-import { CACHE_TTL_MS, MAX_MESSAGES, UNREAD_FETCH_LIMIT } from '@/config/constants';
+import { CACHE_TTL_MS, MAX_MESSAGES, PAGE_SIZE, UNREAD_FETCH_LIMIT } from '@/config/constants';
 
 /** Per-conversation last fetch timestamp */
 const lastFetchedAt: Record<string, number> = {};
@@ -15,6 +15,23 @@ const EMPTY_OPTIMISTIC_ARRAY: import('@/types/message').OptimisticMessage[] = []
 /** Invalidate cache on WS reconnect so missed messages are re-fetched */
 export function invalidateMessageCache() {
   Object.keys(lastFetchedAt).forEach((k) => delete lastFetchedAt[k]);
+}
+
+/** 显式预加载成功后复用缓存，保留请求期间由 WS 新建或更新的消息。 */
+export function primeMessagesCache(conversationId: string, messages: Message[], beforeRequest: readonly Message[]) {
+  const store = useMessageStore.getState();
+  for (const message of messages) {
+    const current = store.messages[conversationId]?.find((item) => item.id === message.id);
+    if (current && current !== beforeRequest.find((item) => item.id === message.id)) continue;
+    if (current?.status === 'streaming' && message.status === 'streaming') {
+      store.addMessage(conversationId, { ...message, content: message.content || current.content, blocks: current.blocks });
+    } else store.addMessage(conversationId, message);
+  }
+  useMessageStore.setState((state) => ({
+    messages: { ...state.messages, [conversationId]: [...(state.messages[conversationId] ?? [])].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)) },
+    hasMore: { ...state.hasMore, [conversationId]: messages.length >= PAGE_SIZE },
+  }));
+  lastFetchedAt[conversationId] = Date.now();
 }
 
 export function useMessages(conversationId: string | null) {

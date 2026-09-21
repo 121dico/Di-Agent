@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { isPageAgentConversation } from '@/utils/pageAgentConversation';
 import { message } from '@/utils/message';
 import type { Conversation, ConversationType } from '@/types/conversation';
 import * as convApi from '@/api/conversation';
@@ -10,6 +11,7 @@ import { STORAGE_KEYS } from '@/config/constants';
 
 interface ConversationState {
   conversations: Conversation[];
+  pageConversationIds: Record<string, boolean>;
   activeConversationId: string | null;
   directAgentChats: Record<string, string>;
   memberPanelOpen: boolean;
@@ -17,6 +19,7 @@ interface ConversationState {
   _fetching: boolean;
   _mutationVersion: number;
   fetchConversations: () => Promise<void>;
+  registerPageConversation: (id: string) => void;
   forkConversation: (sourceConversationId: string, body: ForkConversationRequest) => Promise<ConversationForkResult>;
   createConversation: (type: ConversationType, title: string) => Promise<Conversation>;
   archiveConversationLocal: (id: string) => void;
@@ -52,6 +55,7 @@ function sortConversations(list: Conversation[]): Conversation[] {
 
 export const useConversationStore = create<ConversationState>((set, get) => ({
   conversations: [],
+  pageConversationIds: {},
   activeConversationId: localStorage.getItem(STORAGE_KEYS.ACTIVE_CONV),
   directAgentChats: loadDirectAgentChats(),
   memberPanelOpen: false,
@@ -59,14 +63,25 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   _fetching: false,
   _mutationVersion: 0,
 
+  registerPageConversation: (id) => {
+    if (get().activeConversationId === id) get().setActive(null);
+    set((state) => ({
+      pageConversationIds: { ...state.pageConversationIds, [id]: true },
+      conversations: state.conversations.filter((item) => item.id !== id),
+    }));
+  },
+
   fetchConversations: async () => {
     if (get()._fetching) return;
     const version = get()._mutationVersion;
     set({ _fetching: true, loading: true });
     try {
-      const list = await convApi.getConversations();
+      const list = await convApi.getConversations({ includePageAgents: true });
       if (version === get()._mutationVersion) {
-        set({ conversations: sortConversations(list) });
+        const pageConversationIds = { ...get().pageConversationIds, ...Object.fromEntries(list.filter(isPageAgentConversation).map((item) => [item.id, true])) };
+        const activeId = get().activeConversationId;
+        if (activeId && pageConversationIds[activeId]) get().setActive(null);
+        set({ conversations: sortConversations(list.filter((item) => !pageConversationIds[item.id])), pageConversationIds });
       }
     } finally {
       set({ loading: false, _fetching: false });
@@ -172,6 +187,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   },
 
   setActive: (id) => {
+    if (id && get().pageConversationIds[id]) return;
     if (id) localStorage.setItem(STORAGE_KEYS.ACTIVE_CONV, id);
     else localStorage.removeItem(STORAGE_KEYS.ACTIVE_CONV);
     set({ activeConversationId: id, memberPanelOpen: false });
@@ -202,6 +218,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 export function resetConversationStore() {
   useConversationStore.setState({
     conversations: [],
+  pageConversationIds: {},
     activeConversationId: null,
     directAgentChats: {},
     memberPanelOpen: false,

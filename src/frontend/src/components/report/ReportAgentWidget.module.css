@@ -1,0 +1,12 @@
+.dock, .dialog { position: fixed; left: var(--report-agent-x); top: var(--report-agent-y); z-index: var(--z-task, 900); }
+.dock { width: 64px; }
+.launcher { display: flex; width: 64px; min-height: 52px; flex-direction: column; align-items: center; gap: 6px; padding: 0; border: 0; color: var(--wb-text-primary); background: transparent; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.launcher:active { cursor: grabbing; }
+.icon { display: grid; width: 52px; height: 52px; place-items: center; border: 1px solid rgba(255,255,255,.18); border-radius: 18px; color: #fff; background: var(--wb-action); box-shadow: 0 6px 22px rgba(29,29,31,.18); transition: background var(--motion-control), box-shadow var(--motion-control); }
+.launcher:hover .icon { background: var(--wb-action-hover); box-shadow: 0 8px 26px rgba(29,29,31,.23); }
+.launcher:focus-visible { outline: none; }
+.launcher:focus-visible .icon { outline: 2px solid var(--wb-focus); outline-offset: 3px; }
+.dialog { width: min(420px, calc(var(--ui-viewport-width, 100vw) - 24px)); height: min(580px, calc(var(--ui-viewport-height, 100vh) - 96px)); display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--wb-border-default); border-radius: 16px; color: var(--wb-text-primary); background: var(--wb-surface); box-shadow: 0 18px 64px rgba(29,29,31,.18), 0 4px 12px rgba(29,29,31,.06); }
+@media (prefers-reduced-motion: reduce) { .icon { transition: none; } }
+
+.dialog[hidden] { display: none; }

@@ -398,7 +398,7 @@ func (r *ConversationRepo) FindAgentChat(ctx context.Context, userID, agentID st
 			     WHERE conversation_id = c.id AND deleted_at IS NULL
 			     ORDER BY created_at DESC LIMIT 1
 			 ) latest_msg ON true
-			 WHERE c.type = 'agent'
+			 WHERE c.type = 'agent' AND COALESCE(c.tags, '') NOT LIKE 'page-agent:%'
 			   AND c.user_id = $1
 			   AND ca.agent_id = $2
 			   AND c.archived_at IS NULL
@@ -429,7 +429,7 @@ func (r *ConversationRepo) CreateAgentChat(ctx context.Context, userID, agentID 
 			 SELECT 1 FROM conversations c
 			 JOIN conversation_agents ca ON ca.conversation_id = c.id
 			 JOIN agents a ON a.id = ca.agent_id
-			 WHERE c.type = 'agent' AND c.user_id = $1 AND ca.agent_id = $2
+			 WHERE c.type = 'agent' AND COALESCE(c.tags, '') NOT LIKE 'page-agent:%' AND c.user_id = $1 AND ca.agent_id = $2
 			   AND c.archived_at IS NULL AND (a.user_id IS NULL OR a.user_id = $1)
 		 )`,
 		userID, agentID,

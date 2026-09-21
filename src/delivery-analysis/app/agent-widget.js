@@ -16,7 +16,7 @@
   const dock = make('div','delivery-agent-dock');
   const launcher = make('button','delivery-agent-launcher');
   launcher.type = 'button'; launcher.setAttribute('aria-label','打开投放agent'); launcher.setAttribute('aria-expanded','false');
-  launcher.title = '投放agent · 拖动调整位置'; launcher.append(icon(),make('span','delivery-agent-label','投放agent')); dock.append(launcher);
+  launcher.title = '投放agent · 拖动调整位置'; launcher.append(icon()); dock.append(launcher);
   const panel = make('section','delivery-agent-panel');
   panel.id = 'delivery-agent-panel'; panel.hidden = true; panel.setAttribute('role','dialog'); panel.setAttribute('aria-label','投放agent对话'); panel.setAttribute('aria-modal','false');
   launcher.setAttribute('aria-controls',panel.id);
@@ -25,6 +25,9 @@
   const status = make('span','','陪你看清每一次投放'); heading.append(make('strong','','投放agent'),status);
   const close = make('button','delivery-agent-close','−'); close.type = 'button'; close.setAttribute('aria-label','收起投放agent');
   header.append(icon(),heading,close);
+  const picker = make('label','delivery-agent-picker','执行 Agent');
+  const agentSelect = make('select'); agentSelect.setAttribute('aria-label','投放执行 Agent'); picker.append(agentSelect);
+  agentSelect.addEventListener('change',()=>{void service.selectAgent(agentSelect.value).catch(failure=>{showError(failure.message);render(service.snapshot());});});
   const context = make('div','delivery-agent-context');
   const contextName = make('strong'); const contextScope = make('span'); context.append(make('small','','当前投放'),contextName,contextScope);
   const list = make('div','delivery-agent-messages'); list.setAttribute('role','log'); list.setAttribute('aria-label','投放问答记录');
@@ -34,14 +37,15 @@
   const input = make('textarea','delivery-agent-input'); input.rows = 2; input.maxLength = 12000; input.placeholder = '问问投放agent…'; input.setAttribute('aria-label','向投放agent提问');
   const bottom = make('div','delivery-agent-composer-bottom'); const hint = make('small','','Enter 发送 · Shift + Enter 换行');
   const send = make('button','delivery-agent-send','↑'); send.type = 'submit'; send.setAttribute('aria-label','发送给投放agent');
-  bottom.append(hint,send); form.append(input,bottom); panel.append(header,context,list,notice,form); document.body.append(dock,panel);
+  bottom.append(hint,send); form.append(input,bottom); panel.append(header,picker,context,list,notice,form); document.body.append(dock,panel);
+  let agentSignature = '';
   let open = false, composing = false, moved = false, drag = null, position = null, signature = '', lastIdentity = '';
   let model = service.snapshot();
   const userKey = () => window.state?.data?.currentUser?.id || 'anonymous';
   const storageKey = () => 'di_agent:delivery-agent-position:' + userKey();
   function place(next) {
     const margin = 12, width = window.innerWidth, height = window.innerHeight;
-    position = {x:Math.max(margin,Math.min(next.x,width-76)), y:Math.max(margin,Math.min(next.y,height-88))};
+    position = {x:Math.max(margin,Math.min(next.x,width-76)), y:Math.max(margin,Math.min(next.y,height-64))};
     dock.style.setProperty('--delivery-agent-x',position.x+'px'); dock.style.setProperty('--delivery-agent-y',position.y+'px');
     const panelWidth = Math.min(420,width-24), panelHeight = Math.min(580,height-100);
     panel.style.setProperty('--delivery-agent-x',Math.max(margin,Math.min(position.x+64-panelWidth,width-panelWidth-margin))+'px');
@@ -99,12 +103,24 @@
     }
     return content;
   }
-  function bubble(role,text) {
+  function bubble(role,text,historySource) {
     const row = make('div','delivery-agent-message '+(role==='user'?'delivery-agent-user':'delivery-agent-assistant'));
-    row.append(make('small','',role==='user'?'你':'投放agent'),role==='user'?make('div','delivery-agent-text',text):answerText(text));return row;
+    row.append(make('small','',(role==='user'?'你':'投放agent')+(historySource?' · 历史会话':'')),role==='user'?make('div','delivery-agent-text',text):answerText(text));return row;
   }
   function render(value) {
     model=value; updateContext();
+    const nextAgents=JSON.stringify([value.agents,value.session?.agent.id]);
+    if(nextAgents!==agentSignature){
+      agentSignature=nextAgents;agentSelect.replaceChildren();
+      for(const agent of value.agents || []){
+        const runtime=agent.cli_tool==='codex'?'GPT / Codex':agent.cli_tool==='claude'?'Claude':agent.cli_tool;
+        const online=['online','busy'].includes(agent.status);
+        const option=make('option','',agent.name+' · '+runtime+' · '+(agent.machine_name||'本地')+(online?'':'（离线）'));
+        option.value=agent.id;option.disabled=!online;agentSelect.append(option);
+      }
+      if(value.session)agentSelect.value=value.session.agent.id;
+    }
+    agentSelect.disabled=value.busy||value.connecting||!value.session;
     status.textContent=value.connecting?'正在连接':value.busy?'正在分析':value.session?'陪你看清每一次投放':'连接后即可继续对话';
     hint.textContent=value.busy?'正在分析，收起后仍会继续':'Enter 发送 · Shift + Enter 换行';
     notice.hidden=!value.error; noticeText.textContent=value.error; retry.disabled=value.busy||value.connecting;
@@ -119,7 +135,7 @@
       }
       list.append(empty);
     }
-    for (const item of value.items) list.append(bubble(item.role,item.text));
+    for (const item of value.items) list.append(bubble(item.role,item.text,item.historySource));
     if (value.currentQuestion) {
       list.append(bubble('user',value.currentQuestion));
       list.append(bubble('assistant',value.partial || (value.busy?'正在读取当前页面数据并分析…':'等待重新连接查看回复')));

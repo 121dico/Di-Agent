@@ -1,9 +1,11 @@
 import { get, post, put, del } from './client';
+import { isPageAgentConversation } from '@/utils/pageAgentConversation';
 import type { Conversation, ConversationAgent, ConversationType } from '@/types/conversation';
 import type { ConversationAgentRole } from '@/types/role';
 
-export async function getConversations(): Promise<Conversation[]> {
-  return get<Conversation[]>('/api/conversations?limit=100');
+export async function getConversations(options: { includePageAgents?: boolean } = {}): Promise<Conversation[]> {
+  const list = await get<Conversation[] | null>('/api/conversations?limit=100') ?? [];
+  return options.includePageAgents ? list : list.filter((item) => !isPageAgentConversation(item));
 }
 
 export async function createConversation(
@@ -19,8 +21,12 @@ export async function getOrCreatePrivateChat(
   return post<Conversation>('/api/conversations/private', { friend_id: friendId });
 }
 
-export async function getOrCreateAgentChat(agentId: string): Promise<Conversation> {
-  return post<Conversation>('/api/conversations/agent', { agent_id: agentId });
+export async function getOrCreateAgentChat(agentId: string, workspace?: 'report' | 'delivery', selectAgent = false): Promise<Conversation> {
+  const conversation = await post<Conversation>('/api/conversations/agent', { agent_id: agentId, ...(workspace ? { workspace, select_agent: selectAgent } : {}) });
+  if (isPageAgentConversation(conversation) && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('page-agent-conversation', { detail: conversation.id }));
+  }
+  return conversation;
 }
 
 export async function deleteConversation(id: string): Promise<void> {
@@ -40,7 +46,8 @@ export async function unarchiveConversation(id: string): Promise<void> {
 }
 
 export async function getArchivedConversations(): Promise<Conversation[]> {
-  return get<Conversation[]>('/api/conversations/archived');
+  const list = await get<Conversation[] | null>('/api/conversations/archived') ?? [];
+  return list.filter((item) => !isPageAgentConversation(item));
 }
 
 export async function renameConversation(

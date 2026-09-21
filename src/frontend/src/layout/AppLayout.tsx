@@ -48,8 +48,17 @@ const AppLayout: React.FC = () => {
   const [commandOpen, setCommandOpen] = useState(false);
   const [taskInspectorOpen, setTaskInspectorOpen] = useState(false);
 
+  const pageConversationIds = useConversationStore((s) => s.pageConversationIds);
+  useEffect(() => {
+    const register = (event: Event) => {
+      const id: unknown = (event as CustomEvent<unknown>).detail;
+      if (typeof id === 'string' && id) useConversationStore.getState().registerPageConversation(id);
+    };
+    window.addEventListener('page-agent-conversation', register);
+    return () => window.removeEventListener('page-agent-conversation', register);
+  }, []);
   const totalUnread = useMessageStore((s) =>
-    Object.values(s.unreadCounts).reduce((sum, c) => sum + c, 0),
+    Object.entries(s.unreadCounts).reduce((sum, [id, count]) => sum + (pageConversationIds[id] ? 0 : count), 0),
   );
 
   useEffect(() => {
