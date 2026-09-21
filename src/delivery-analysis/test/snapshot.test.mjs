@@ -85,3 +85,46 @@ test('召回可读取人工核验分流参考，但不改变漏斗统计或冒�
   assert.equal(actual.summary.users,10);assert.equal(actual.summary.rate,.5);
   task.sourceTaskId='unrelated';assert.equal(selectTask(snapshot,'coupon').experimentReference,null);
 });
+
+
+test('均衡模块可读取当前四维分组画像，缺维度不补零且不冒充投放前结论',async()=>{
+  const {selectTask}=await import('../server/snapshot.mjs');
+  const rows=[{date:'2026-08-24',group_type:'treatment_group',users:10},{date:'2026-08-24',group_type:'control_group',users:20}];
+  const values=[{...rows[0],value:'老用户',users:8},{...rows[0],value:'未知',users:2},{...rows[1],value:'老用户',users:10},{...rows[1],value:'新用户',users:10}];
+  const snapshot={queries:[],tasks:[{id:'coupon',kind:'coupon',sourceTaskId:'184765378',sourceName:'coupon-source',partition:'2026-09-16',dates:['2026-08-24'],rows,dimensions:{charge_life_cycle:values,charge_freq_type:values,charge_duid_role_name_v2_type:values}}]};
+  const actual=selectTask(snapshot,'coupon',{group:'control_group'}).groupPortrait;
+  assert.ok(actual,'当前来源已有两组画像，均衡模块应返回可展示的分组数据');
+  assert.equal(actual.basis,'current_snapshot');assert.equal(actual.partition,'2026-09-16');assert.equal(actual.cohortDate,'2026-08-24');
+  assert.deepEqual(actual.groups,[{group:'treatment_group',users:10},{group:'control_group',users:20}]);
+  const life=actual.dimensions.find(d=>d.key==='charge_life_cycle');
+  assert.equal(life.status,'available');
+  assert.deepEqual(life.values.find(v=>v.value==='老用户').groups,[{group:'treatment_group',users:8,share:.8},{group:'control_group',users:10,share:.5}]);
+  assert.equal(life.values.find(v=>v.value==='新用户').groups[0].users,0);
+  assert.equal(actual.dimensions.find(d=>d.key==='member_status').status,'missing');
+  assert.equal(actual.conclusion,null);
+});
+
+
+test('当前分组画像按人群快照独立于效果选日，零组和缺桶不产生假比例',async()=>{
+ const {selectTask}=await import('../server/snapshot.mjs');
+ const rows=[{date:'2026-09-19',group_type:'control',users:1}];
+ const snapshot={queries:[],tasks:[{id:'effect',kind:'effect',dates:['2026-09-19'],rows,dimensions:{charge_life_cycle:rows},audience:{partition:'2026-09-20',rows:[{group_type:'control',users:0},{group_type:'experiment',users:10}],dimensions:{charge_life_cycle:[{group_type:'experiment',value:'老用户',users:10}],charge_freq_type:[{group_type:'experiment',value:'低频',users:9}]}}}]};
+ const result=selectTask(snapshot,'effect').groupPortrait;
+ assert.equal(result.partition,'2026-09-20');assert.equal(result.cohortDate,null);
+ assert.equal(result.dimensions[0].values[0].groups[0].share,null);
+ assert.equal(result.dimensions[0].maxShareGap,null);
+ assert.equal(result.dimensions[1].status,'inconsistent');assert.deepEqual(result.dimensions[1].values,[]);
+});
+
+test('PRD三个Ditag包保留当前值与投放前规则版本，不改变漏斗或串到安心充',async()=>{
+ const {selectTask}=await import('../server/snapshot.mjs');
+ const rows=[{date:'2026-08-24',group_type:'control_group',users:10}];
+ const task={id:'coupon',kind:'coupon',sourceTaskId:'184765378',dates:['2026-08-24'],rows,dimensions:{charge_life_cycle:rows.map(r=>({...r,value:'老用户'}))}};
+ const snapshot={queries:[],tasks:[task]};const result=selectTask(snapshot,'coupon');
+ assert.equal(result.crowdReferences.length,3);
+ const pack=result.crowdReferences.find(c=>c.id==='1011337415');
+ assert.equal(pack.currentUsers,1781910);assert.equal(pack.name,'私家车流失31-60天');assert.equal(pack.prdLabel,'私家车流失60～90天');
+ assert.equal(pack.historical.version,'V4');assert.equal(pack.historical.name,'私家车流失60-90天');
+ assert.equal(result.summary.users,10);assert.equal(pack.historical.users,null);
+ task.kind='effect';assert.deepEqual(selectTask(snapshot,'coupon').crowdReferences,[]);
+});

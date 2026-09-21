@@ -1,3 +1,4 @@
+import {crowdReferences} from './crowd-reference.mjs';
 import {experimentReference} from './experiment-reference.mjs';
 import {buildCumulative, selectCumulative} from './cumulative.mjs';
 import {AUDIENCE_DIMENSIONS, describeCoverage} from './field-coverage.mjs';
@@ -154,6 +155,28 @@ export async function buildSnapshot(gateway) {
   return {version:1,builtAt:new Date().toISOString(),tasks,fieldCoverage:describeCoverage(sources,gateway.evidence),queries:gateway.evidence};
 }
 
+// 已发布快照内的同日分组画像；不把当前标签冒充投放前基线。
+function groupPortrait(task,selectedDate) {
+  const source=task.audience || task;
+  const scoped=rows=>(rows||[]).filter(r=>task.audience || r.date===selectedDate);
+  const base=scoped(source.rows);
+  const groups=[...new Set(base.map(r=>r.group_type))].map(group=>({group,users:summarize('audience',base.filter(r=>r.group_type===group)).users}));
+  const dimensions=['charge_life_cycle','charge_freq_type','charge_duid_role_name_v2_type','member_status'].map(key=>{
+    const rows=scoped(source.dimensions[key]);
+    const entry={key,label:DIMENSIONS[key],status:'missing',values:[],maxShareGap:null};
+    if(!rows.length || !groups.length)return entry;
+    // 缺桶或缺整组不能被当作真实零人；仅守恒的维度才展示人数和组内占比。
+    if(rows.some(r=>!groups.some(g=>g.group===r.group_type) || !Number.isFinite(r.users) || r.users<0) || groups.some(g=>summarize('audience',rows.filter(r=>r.group_type===g.group)).users!==g.users))return {...entry,status:'inconsistent'};
+    const values=[...new Set(rows.map(r=>r.value))].map(value=>({value,groups:groups.map(g=>{
+      const users=summarize('audience',rows.filter(r=>r.value===value && r.group_type===g.group)).users;
+      return {group:g.group,users,share:g.users>0?users/g.users:null};
+    })}));
+    const gaps=groups.length===2?values.map(v=>v.groups.every(g=>g.share!==null)?Math.abs(v.groups[0].share-v.groups[1].share):null).filter(v=>v!==null):[];
+    return {...entry,status:'available',values,maxShareGap:gaps.length?Math.max(...gaps):null};
+  });
+  return {basis:'current_snapshot',conclusion:null,partition:source.partition,sourceName:source.sourceName,cohortDate:task.audience?null:selectedDate,groups,dimensions};
+}
+
 export function selectTask(snapshot,id,{date,group='all',dimension='charge_life_cycle',portraitDimension,cumulativeGroup='all',cumulativeDimension='charge_life_cycle'}={}) {
   const task=snapshot.tasks.find(t=>t.id===id);
   if(!task)return null;
@@ -177,7 +200,7 @@ export function selectTask(snapshot,id,{date,group='all',dimension='charge_life_
     partition:audience.partition,summary:summarize('audience',audience.rows.filter(r=>group==='all'||r.group_type===group)),
     orderCoverage:Object.fromEntries(Object.entries(audience.orderCoverage||{}).map(([name,values])=>[name,summarize('audience',values.filter(r=>group==='all'||r.group_type===group)).users])),
   }:null;
-  return {...metadata,experimentReference:experimentReference(task),cumulative:selectCumulative(cumulative,{group:cumulativeGroup,dimension:cumulativeDimension}),audienceFacts,fieldCoverage:snapshot.fieldCoverage || [],portraitDimension:portraitKey,
+  return {...metadata,crowdReferences:crowdReferences(task),groupPortrait:groupPortrait(task,selectedDate),experimentReference:experimentReference(task),cumulative:selectCumulative(cumulative,{group:cumulativeGroup,dimension:cumulativeDimension}),audienceFacts,fieldCoverage:snapshot.fieldCoverage || [],portraitDimension:portraitKey,
     portraitDimensionOptions:Object.fromEntries(Object.keys(portraitDimensions).map(key=>[key,({...DIMENSIONS,...AUDIENCE_DIMENSIONS,activity_cycle:'流失周期'})[key] || key])),selectedDate,selectedGroup:group,dimension,dimensionOptions:{...DIMENSIONS,...(task.kind==='coupon'?{activity_cycle:'流失周期'}:{})},groups,
     groupDistribution:groups.map(g=>({group:g,rows:comparisonValues.map(value=>({value,...summarize(task.kind,comparisonRows.filter(r=>r.value===value && r.group_type===g))}))})),
     summary,distribution,portrait,portraitPartition:audience?.partition || task.partition,

@@ -209,3 +209,44 @@ test('原漏斗内展示Apollo历史参考，日期与空范围联动但不加�
  assert.equal(d.querySelector('#dailyFunnelPanel .apollo-reference').hidden,true);
  dom.window.close();
 });
+
+test('均衡原面板展示分组画像并能展开和查看口径，读取失败清除旧值',async()=>{
+ const live=structuredClone(data);
+ live.task.groupPortrait={basis:'current_snapshot',conclusion:null,partition:'2026-09-16',sourceName:'coupon-source',cohortDate:'2026-08-24',groups:[{group:'treatment_group',users:10},{group:'control_group',users:20}],dimensions:['charge_life_cycle','charge_freq_type','charge_duid_role_name_v2_type','member_status'].map(key=>({key,status:'available',maxShareGap:.3,values:[{value:'已知标签',groups:[{group:'treatment_group',users:8,share:.8},{group:'control_group',users:10,share:.5}]}]}))};
+ const dom=await page(live),d=dom.window.document;
+ dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true;};
+ dom.window.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ assert.match(d.querySelector('#experimentBalance .status-pill').textContent,/画像已接入/);
+ const details=d.querySelector('#balanceDimensions details');details.querySelector('summary').click();
+ assert.equal(details.open,true);assert.match(details.textContent,/8 人.*80.00%/);assert.match(details.textContent,/30.00.*百分点/);
+ assert.match(d.querySelector('#experimentBalance').textContent,/2026-09-16.*2026-08-24/);
+ assert.doesNotMatch(d.querySelector('#experimentBalance').textContent,/均衡检查通过|P值|p-value/);
+ d.querySelector('#viewBalanceRule').click();assert.equal(d.querySelector('#infoDialog').open,true);assert.match(d.querySelector('#dialogBody').textContent,/不是投放前/);
+ d.querySelector('#closeDialog').click();
+ dom.window.fetch=async()=>({ok:false,json:async()=>({error:'读取失败'})});
+ d.querySelector('#recheckBalance').click();await new Promise(resolve=>setTimeout(resolve,30));
+ assert.doesNotMatch(d.querySelector('#experimentBalance').textContent,/80.00%|30.00|画像已接入/);
+ dom.window.close();
+});
+
+test('Ditag三个人群在原目录展示并打开详情，不套用任务全量冒充包内效果',async()=>{
+ const {crowdReferences}=await import('../server/crowd-reference.mjs');
+ const live=structuredClone(data);live.task.crowdReferences=crowdReferences(live.task);
+ const dom=await page(live),d=dom.window.document;
+ dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true;};
+ dom.window.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ assert.equal(d.querySelectorAll('#audiencePackageMeta [data-live-crowd]').length,3);
+ const metadata=[...d.querySelectorAll('#audiencePackageMeta .package-meta-row')];
+ assert.match(metadata.find(n=>n.querySelector('span').textContent==='整体人群包 ID').textContent,/1011337400.*1011337415.*1011337424/);
+ assert.match(metadata.find(n=>n.querySelector('span').textContent==='有效期结束').textContent,/2026-12-31/);
+ assert.match(d.querySelector('#audiencePackageMeta').textContent,/2,458,957|2458957/);
+ const button=d.querySelector('[data-task-group="recall"] .audience-option');
+ assert.equal(button.disabled,false);button.click();
+ assert.equal(d.querySelector('#infoDialog').open,true);assert.match(d.querySelector('#dialogBody').textContent,/1011337400/);
+ assert.match(d.querySelector('#dialogBody').textContent,/V3|2026-08-11/);assert.match(d.querySelector('#dialogBody').textContent,/非自动同步/);
+ assert.equal(dom.window.state.data.task.summary.users,100);assert.match(d.querySelector('#contextInputName').textContent,/任务全量/);
+ d.querySelector('#closeDialog').click();
+ dom.window.fetch=async()=>({ok:false,json:async()=>({error:'数据不可用'})});d.querySelector('#refreshAnalysis').click();await new Promise(resolve=>setTimeout(resolve,30));
+ assert.doesNotMatch(d.querySelector('#audiencePackageMeta').textContent,/2,458,957|1011337400/);assert.equal(button.disabled,true);
+ dom.window.close();
+});
