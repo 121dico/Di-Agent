@@ -17,10 +17,12 @@ test('离线HTML不依赖网络，切换日期、表格与模块后数据仍正�
  try{
   await new Promise(r=>setTimeout(r,50));const d=dom.window.document;
   assert.equal(dom.window.injected,undefined);
-  assert.match(d.getElementById('dailyMetrics').textContent,/50.00%/);
+  assert.match(d.getElementById('dailyMetrics').textContent,/35.00%/);
+  assert.equal(d.querySelector('#dailyFunnelVisual .funnel-stage:last-child strong').textContent,'3');
   assert.equal(d.getElementById('contextTaskName').textContent,report.name);
   d.querySelector('[data-live-date="2026-08-13"]').dispatchEvent(new dom.window.MouseEvent('click',{bubbles:true}));await new Promise(r=>setTimeout(r,20));
-  assert.match(d.getElementById('dailyMetrics').textContent,/20.00%/);
+  assert.match(d.getElementById('dailyMetrics').textContent,/35.00%/);
+  assert.equal(d.querySelector('#dailyFunnelVisual .funnel-stage:last-child strong').textContent,'2');
   d.querySelector('[data-profile-view="table"]').click();assert.ok(d.querySelector('#profileBars table'));
   d.getElementById('configureReportModules').click();
   d.querySelector('input[value="experimentBalance"]').checked=false;

@@ -51,7 +51,8 @@
     const current=data();if(!current){status('请先选择并加载任务');return;}
     const id=current.analysisTask?.id||current.task.id,chosen=current.analysisTask?.modules||moduleOptions.map(m=>m.id);
     dialog('配置分析模块','<p>选择当前任务中显示的模块，线上配置会保存到账号；导出报告沿用此配置。</p><form id="moduleForm">'+['pre','monitor'].map(phase=>'<fieldset class="module-config-group"><legend>'+({pre:'投放前 · 人群洞察',monitor:'投放中/后 · 效果优化'}[phase])+'</legend>'+moduleOptions.filter(m=>m.phase===phase).map(m=>'<label><input type="checkbox" name="module" value="'+esc(m.id)+'" '+(chosen.includes(m.id)?'checked':'')+'>'+esc(m.label)+'</label>').join('')+'</fieldset>').join('')+'<p class="report-form-feedback" id="reportFormFeedback" role="status"></p><button class="primary-button full-button" id="saveReportModules" type="submit">保存模块配置</button></form>');
-    $('moduleForm').onsubmit=async event=>{
+    const form=$('moduleForm'),activeForm=()=>$('infoDialog').open&&$('moduleForm')===form;
+    form.onsubmit=async event=>{
       event.preventDefault();const modules=all('#moduleForm input:checked').map(n=>n.value);
       if(!modules.length){feedback('至少保留一个分析模块');return;}
       const button=$('saveReportModules');button.disabled=true;
@@ -59,8 +60,8 @@
         const item=offline?{...current.analysisTask,modules}:(await request('tasks/'+encodeURIComponent(id),{modules},'PATCH')).item;
         if(data()?.analysisTask?.id===id||(!data()?.analysisTask&&data()?.task.id===id)){data().analysisTask=item;applyModules();}
         if(offline)offline.analysisTask=item;
-        $('infoDialog').close();status(offline?'已调整此离线报告的显示模块':'模块配置已保存');
-      }catch(e){feedback(e.message);}finally{button.disabled=false;}
+        if(activeForm())$('infoDialog').close();status(offline?'已调整此离线报告的显示模块':'模块配置已保存');
+      }catch(e){if(activeForm())feedback(e.message);else status(e.message);}finally{button.disabled=false;}
     };
   }
   async function createTask(){
@@ -74,13 +75,16 @@
     $('newTaskSource').value=selected?.sourceId||sources[0]?.id||'';
     $('newTaskPurpose').value=selected?.purpose||'召回';
     $('newTaskName').focus();
-    $('newAnalysisTaskForm').onsubmit=async event=>{
+    const form=$('newAnalysisTaskForm'),activeForm=()=>$('infoDialog').open&&$('newAnalysisTaskForm')===form;
+    form.onsubmit=async event=>{
       event.preventDefault();const button=$('confirmCreateTask');if(button.disabled)return;button.disabled=true;
+      const previousSelection=JSON.stringify(live.selection());
       try{
         const result=await request('tasks',{name:$('newTaskName').value.trim(),purpose:$('newTaskPurpose').value,sourceId:$('newTaskSource').value});
-        $('infoDialog').close();await loadCatalog();await live.load({taskId:result.item.id});status('已创建任务：'+result.item.name);
-        document.querySelector('[data-analysis-task="'+result.item.id+'"]')?.focus();
-      }catch(e){if($('reportFormFeedback'))feedback(e.message);else status(e.message);}finally{button.disabled=false;}
+        const shouldOpen=activeForm();if(shouldOpen)$('infoDialog').close();await loadCatalog();
+        if(shouldOpen&&!$('infoDialog').open&&previousSelection===JSON.stringify(live.selection())){await live.load({taskId:result.item.id});document.querySelector('[data-analysis-task="'+result.item.id+'"]')?.focus();}
+        status('已创建任务：'+result.item.name);
+      }catch(e){if(activeForm())feedback(e.message);else status(e.message);}finally{button.disabled=false;}
     };
   }
   async function refresh(resume=false){
