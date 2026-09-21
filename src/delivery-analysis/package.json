@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server/index.mjs",
     "test": "node --test test/*.test.mjs",
-    "check": "node --check server/index.mjs && node --check server/snapshot.mjs && node --check app/original-live.js && node --check app/report-runtime.js && node --check app/agent-bridge.js"
+    "check": "node --check server/index.mjs && node --check server/snapshot.mjs && node --check app/original-live.js && node --check app/report-runtime.js && node --check app/agent-bridge.js && node --check app/agent-widget.js"
   },
   "engines": {
     "node": ">=22"

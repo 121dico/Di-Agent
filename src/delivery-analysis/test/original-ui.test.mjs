@@ -91,7 +91,7 @@ test('无数据仍保留原漏斗、均衡条形、趋势图和表格骨架',asy
  assert.doesNotMatch(d.querySelector('#funnelVisual').textContent,/214,084|176,470|82.4%/);
  dom.window.close();
 });
-test('真实 Agent 桥接的历史抽屉关闭时隐藏，不散落在页尾',async(t)=>{
+test('投放悬浮问答默认收起，展开关闭保留草稿并恢复焦点',async(t)=>{
  const dom=await page(data),d=dom.window.document;
  const observers=[],Observer=dom.window.MutationObserver;
  dom.window.MutationObserver=class extends Observer{constructor(callback){super(callback);observers.push(this);}};
@@ -101,13 +101,16 @@ test('真实 Agent 桥接的历史抽屉关闭时隐藏，不散落在页尾',as
  }
  dom.window.fetch=async()=>({ok:true,json:async()=>({data:[]})});
  dom.window.eval(await readFile(new URL('agent-bridge.js',root),'utf8'));
- const drawer=d.querySelector('.ai-memory-drawer');
+ dom.window.eval(await readFile(new URL('agent-widget.js',root),'utf8'));
+ const drawer=d.querySelector('.delivery-agent-panel');
  assert.ok(drawer);
  assert.equal(dom.window.getComputedStyle(drawer).position,'fixed');
  assert.equal(dom.window.getComputedStyle(drawer).display,'none');
- d.querySelector('.ask-detail-btn').click();
+ d.querySelector('.delivery-agent-launcher').click();
  assert.notEqual(dom.window.getComputedStyle(drawer).display,'none');
- d.querySelector('.ai-memory-drawer-close').click();
+ const input=d.querySelector('.delivery-agent-input');input.value='下次追问';
+ d.querySelector('.delivery-agent-close').click();
+ assert.equal(input.value,'下次追问');assert.equal(d.activeElement,d.querySelector('.delivery-agent-launcher'));
  assert.equal(dom.window.getComputedStyle(drawer).display,'none');
 });
 

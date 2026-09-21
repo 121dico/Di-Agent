@@ -772,7 +772,8 @@ dialog { width: min(510px, calc(100vw - 28px)); max-height: 84vh; overflow-y: au
 .empty-reference-icon{display:flex;align-items:center;justify-content:center;width:42px;height:42px;background:#eff6ff;border-radius:10px;color:#2563eb}
 .daily-funnel-switch{display:flex;gap:4px}.daily-funnel-switch button{min-height:27px;padding:0 9px;border:1px solid #dbe2ea;background:#fff;border-radius:4px;color:#6b7280;font-size:10px}.daily-funnel-switch button.active{border-color:#2563eb;background:#eff6ff;color:#1d4ed8}
 .daily-breakdown-tabs{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}.daily-breakdown-tabs button{min-height:27px;padding:0 9px;border:1px solid #dbe2ea;background:#fff;border-radius:4px;color:#6b7280;font-size:10px}.daily-breakdown-tabs button.active{border-color:#2563eb;background:#eff6ff;color:#1d4ed8}</style><style>.phase-view { visibility:hidden } html[data-live-ready] .phase-view { visibility:visible }</style>
-<link href="report-theme.css" rel="stylesheet"/></head>
+<link href="report-theme.css" rel="stylesheet"/><link rel="stylesheet" href="agent-widget.css"/>
+</head>
 <body class="axc-audience-task">
 <header class="topbar">
 <div class="brand-lockup">
@@ -1014,4 +1015,4 @@ dialog { width: min(510px, calc(100vw - 28px)); max-height: 84vh; overflow-y: au
 </aside>
 <dialog id="infoDialog"><div class="dialog-heading"><div><span class="section-kicker">说明</span><h3 id="dialogTitle">数据范围</h3></div><button aria-label="关闭" class="icon-button" id="closeDialog" title="关闭" type="button"><svg aria-hidden="true" class="lucide lucide-x" data-lucide="x" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div><div class="dialog-body" id="dialogBody"></div></dialog>
 <div class="toast" id="toast" role="status"></div>
-<script src="report-runtime.js"></script><script src="original-live.js"></script><script src="agent-bridge.js"></script></body></html>
+<script src="report-runtime.js"></script><script src="original-live.js"></script><script src="agent-bridge.js"></script><script src="agent-widget.js"></script></body></html>

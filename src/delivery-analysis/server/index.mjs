@@ -8,7 +8,7 @@ import { SnapshotStore } from './store.mjs';
 import { buildSnapshot, selectTask } from './snapshot.mjs';
 
 const ROOT=dirname(dirname(fileURLToPath(import.meta.url)));
-const files=new Map(['index.html','original-live.js','report-runtime.js','agent-theme.css','report-theme.css','agent-bridge.js'].map(name=>['/'+name,name]));
+const files=new Map(['index.html','original-live.js','report-runtime.js','agent-theme.css','report-theme.css','agent-bridge.js','agent-widget.js','agent-widget.css'].map(name=>['/'+name,name]));
 const mime={html:'text/html; charset=utf-8',js:'application/javascript; charset=utf-8',css:'text/css; charset=utf-8'};
 function json(res,status,data) {
   const gzip=(res.req.headers['accept-encoding']||'').split(',').some(part=>{const [name,...params]=part.trim().split(';');const quality=params.find(p=>p.trim().startsWith('q='));return name==='gzip'&&(!quality||Number(quality.trim().slice(2))>0);});
