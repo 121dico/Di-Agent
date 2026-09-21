@@ -1,3 +1,4 @@
+import {deploymentReference} from './deployment-reference.mjs';
 import {crowdReferences} from './crowd-reference.mjs';
 import {experimentReference} from './experiment-reference.mjs';
 import {buildCumulative, selectCumulative} from './cumulative.mjs';
@@ -200,7 +201,7 @@ export function selectTask(snapshot,id,{date,group='all',dimension='charge_life_
     partition:audience.partition,summary:summarize('audience',audience.rows.filter(r=>group==='all'||r.group_type===group)),
     orderCoverage:Object.fromEntries(Object.entries(audience.orderCoverage||{}).map(([name,values])=>[name,summarize('audience',values.filter(r=>group==='all'||r.group_type===group)).users])),
   }:null;
-  return {...metadata,crowdReferences:crowdReferences(task),groupPortrait:groupPortrait(task,selectedDate),experimentReference:experimentReference(task),cumulative:selectCumulative(cumulative,{group:cumulativeGroup,dimension:cumulativeDimension}),audienceFacts,fieldCoverage:snapshot.fieldCoverage || [],portraitDimension:portraitKey,
+  return {...metadata,deploymentReference:deploymentReference(task),crowdReferences:crowdReferences(task),groupPortrait:groupPortrait(task,selectedDate),experimentReference:experimentReference(task),cumulative:selectCumulative(cumulative,{group:cumulativeGroup,dimension:cumulativeDimension}),audienceFacts,fieldCoverage:snapshot.fieldCoverage || [],portraitDimension:portraitKey,
     portraitDimensionOptions:Object.fromEntries(Object.keys(portraitDimensions).map(key=>[key,({...DIMENSIONS,...AUDIENCE_DIMENSIONS,activity_cycle:'流失周期'})[key] || key])),selectedDate,selectedGroup:group,dimension,dimensionOptions:{...DIMENSIONS,...(task.kind==='coupon'?{activity_cycle:'流失周期'}:{})},groups,
     groupDistribution:groups.map(g=>({group:g,rows:comparisonValues.map(value=>({value,...summarize(task.kind,comparisonRows.filter(r=>r.value===value && r.group_type===g))}))})),
     summary,distribution,portrait,portraitPartition:audience?.partition || task.partition,

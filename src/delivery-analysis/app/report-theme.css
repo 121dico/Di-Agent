@@ -173,3 +173,11 @@ button[data-unavailable], input[data-unavailable], #baselineButtons button:disab
 .ditag-crowd-row:hover { background: var(--blue-soft); }
 
 #audiencePackageMeta .package-meta-row strong { min-width: 0; overflow-wrap: anywhere; }
+
+.boss-reference { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; line-height: 1.6; }
+.boss-reference > strong { color: var(--ink); }
+.boss-reference p { margin: 6px 0; overflow-wrap: anywhere; }
+.boss-reference summary { cursor: pointer; color: var(--ink); }
+.deployment-table { overflow-x: auto; }
+.deployment-table table { min-width: 500px; }
+.boss-reference[hidden] { display: none; }

@@ -128,3 +128,16 @@ test('PRD三个Ditag包保留当前值与投放前规则版本，不改变漏斗
  assert.equal(result.summary.users,10);assert.equal(pack.historical.users,null);
  task.kind='effect';assert.deepEqual(selectTask(snapshot,'coupon').crowdReferences,[]);
 });
+
+test('六条BOSS配置按包和组关联，时间与红包ID保真且不污染统计',async()=>{
+ const {selectTask}=await import('../server/snapshot.mjs');
+ const rows=[{date:'2026-08-24',group_type:'control_group',users:10}];
+ const task={id:'coupon',kind:'coupon',sourceTaskId:'184765378',dates:['2026-08-24'],rows,dimensions:{charge_life_cycle:rows.map(r=>({...r,value:'老用户'}))}};
+ const snapshot={queries:[],tasks:[task]},result=selectTask(snapshot,'coupon');
+ const ref=result.deploymentReference;assert.ok(ref);assert.equal(ref.records.length,6);
+ assert.deepEqual(ref.records.filter(r=>r.crowdId==='1011337415').map(r=>[r.group,r.redPacketId]),[['control_group','1533894165925072896'],['treatment_group','1531349257259610112']]);
+ assert.equal(ref.records[0].createdAt,'2026-08-12 17:34:05');assert.equal(ref.records[0].offlineAt,'2026-08-24 15:56:02');
+ assert.equal(ref.schedule.end,'2026-12-31 23:59:59');assert.equal(ref.records[0].resourceId,null);
+ assert.equal(ref.cities.length,100);assert.equal(ref.channels.length,7);assert.equal(ref.businessTarget,null);
+ assert.equal(result.summary.users,10);task.kind='effect';assert.equal(selectTask(snapshot,'coupon').deploymentReference,null);
+});

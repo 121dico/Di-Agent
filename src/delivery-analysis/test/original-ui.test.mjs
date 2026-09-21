@@ -250,3 +250,24 @@ test('Ditag三个人群在原目录展示并打开详情，不套用任务全量
  assert.doesNotMatch(d.querySelector('#audiencePackageMeta').textContent,/2,458,957|1011337400/);assert.equal(button.disabled,true);
  dom.window.close();
 });
+
+test('BOSS配置在原漏斗及包详情可见，组别过滤与错误清理不污染效果',async()=>{
+ const {deploymentReference}=await import('../server/deployment-reference.mjs');
+ const {crowdReferences}=await import('../server/crowd-reference.mjs');
+ const live=structuredClone(data);live.task.deploymentReference=deploymentReference(live.task);live.task.crowdReferences=crowdReferences(live.task);
+ const dom=await page(live),d=dom.window.document;
+ dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true;};dom.window.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ assert.match(d.querySelector('#dailyFunnelPanel .boss-reference').textContent,/6 条/);
+ assert.match(d.querySelector('#dailyFunnelPanel .boss-reference').textContent,/2026-12-31.*2026-08-24/s);
+ assert.match(d.querySelector('#dailyFunnelPanel .boss-reference').textContent,/5折5元.*8折5元/s);
+ d.querySelector('[data-task-group="recall"] .audience-option').click();
+ assert.match(d.querySelector('#dialogBody').textContent,/1533893795547197440/);assert.match(d.querySelector('#dialogBody').textContent,/1531348692446228480/);
+ assert.doesNotMatch(d.querySelector('#dialogBody').textContent,/1533894165925072896/);
+ d.querySelector('#closeDialog').click();
+ live.task.selectedGroup='treatment_group';d.querySelector('#refreshAnalysis').click();await new Promise(resolve=>setTimeout(resolve,30));
+ assert.match(d.querySelector('#dailyFunnelPanel .boss-reference').textContent,/3 条/);assert.doesNotMatch(d.querySelector('#dailyFunnelPanel .boss-reference').textContent,/1533893795547197440/);
+ assert.match(d.querySelector('#dailyMetrics').textContent,/25.00%/);
+ dom.window.fetch=async()=>({ok:false,json:async()=>({error:'读取失败'})});d.querySelector('#refreshAnalysis').click();await new Promise(resolve=>setTimeout(resolve,30));
+ assert.equal(d.querySelector('#dailyFunnelPanel .boss-reference').hidden,true);assert.doesNotMatch(d.querySelector('#dailyFunnelPanel').textContent,/1531348692446228480/);
+ dom.window.close();
+});

@@ -64,9 +64,22 @@
       row.querySelector('strong').textContent = values[row.querySelector(':scope > span').textContent] || '—';
     });
   }
-  function crowdDetails(crowd) {
+  function deploymentDetails(ref,records=ref.records) {
+    const rows=records.map(r=>[r.cycle+'天 / '+portraitGroupName(r.group,'coupon'),r.redPacketId,r.offlineAt]);
+    return '<strong>BOSS 投放配置 · '+records.length+' 条</strong><p>'+esc(ref.captureMode+'；录入日期 '+ref.observedOn)+'</p><p>配置投放期：'+esc(ref.schedule.start+' → '+ref.schedule.end)+'；'+esc(ref.schedule.period+'，'+ref.schedule.hours)+'</p><p>自动发券 · 屏蔽新人 · 人群不反选 · '+ref.frequency.days+'天内最多投放'+ref.frequency.max+'次 · '+ref.cities.length+'个城市 / '+ref.channels.length+'个投放端</p><div class="deployment-table">'+table(['人群周期 / 组别','天降红包 ID','下线操作记录'],rows)+'</div><details><summary>查看完整配置、创建记录与投放范围</summary>'+records.map(r=>'<h4>'+esc(r.name)+'</h4>'+table(['字段','来源值'],[['人群包ID',r.crowdId],['实验接入 / 组别',ref.toggle+' / '+r.group],['红包名称',r.redPacketName],['红包ID',r.redPacketId],['资源记录ID','未提供'],['券批次ID','未提供'],['创建记录',r.createdAt+' · '+r.operator],['下线记录',r.offlineAt+' · '+r.operator]])).join('')+'<p>业务线：'+esc(ref.business)+'；团队：'+esc(ref.team)+'；资源位：'+esc(ref.placeholderName+'（'+ref.placeholderId+'）')+'；区块限制：'+esc(ref.blockRestriction)+'；提示文案：'+esc(ref.prompt)+'</p><p>投放端：'+esc(ref.channels.join('、'))+'</p><p>投放城市：'+esc(ref.cities.join('、'))+'</p><p><a href="'+esc(ref.proposalURL)+'" target="_blank" rel="noopener noreferrer">查看关联望岳提报</a></p></details><p>对照组红包名称为“单5折5元”，与Apollo“一张8折5元券”描述不同，实际券配置待核验。</p><details><summary>配置与效果数据的区别</summary>'+ref.notes.map(n=>'<p>'+esc(n)+'</p>').join('')+'</details>';
+  }
+  function renderDeploymentReference(task,mode) {
+    const panel=$(mode==='daily'?'dailyFunnelPanel':'resourceFunnelPanel');
+    let node=panel.querySelector('.boss-reference');if(!node){node=document.createElement('div');node.className='boss-reference';panel.appendChild(node);}
+    const ref=task.deploymentReference;
+    node.hidden=!ref || (mode==='daily'&&!selectedRows(task).some(r=>r.date===task.selectedDate));
+    if(node.hidden){node.replaceChildren();return;}
+    const group=mode==='daily'?task.selectedGroup:task.cumulative?.selectedGroup||'all';
+    node.innerHTML=deploymentDetails(ref,ref.records.filter(r=>group==='all'||r.group===group));
+  }
+  function crowdDetails(crowd,deployments) {
     const rows=[['PRD关联',crowd.prdLabel],['Ditag当前名称',crowd.name],['人群包 ID',crowd.id],['当前人数',num(crowd.currentUsers)+' 人'],['人数更新时间',crowd.updatedAt],['人群状态 / 类型',crowd.status+' / '+crowd.type],['有效时间',crowd.validFrom+' → '+crowd.validUntil],['当前规则版本',crowd.version+' · '+crowd.versionAt],['平台实体 / 创建人', '页面未标注 / 尚未核验']];
-    return '<p>'+esc(crowd.captureMode+'；采集日期 '+crowd.observedOn)+'。</p>'+table(['项目','来源记录'],rows)+'<h4>当前规则</h4><ul>'+crowd.rules.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul>'+(crowd.whitelistCount?'<p>页面另列白名单 '+num(crowd.whitelistCount)+' 个 ID（未读取个人ID）。</p>':'')+'<h4>投放前规则版本 '+esc(crowd.historical.version)+'</h4><p>'+esc(crowd.historical.name+' · '+crowd.historical.versionAt)+'</p><ul>'+crowd.historical.rules.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul><p>该历史版本未显示人数和分组画像；当前人数不可回填历史。</p><p>'+esc(crowd.note)+'</p><p>当前报表仍为任务全量，未按这个包筛选效果。</p><a target="_blank" rel="noopener noreferrer" href="'+esc(crowd.sourceURL)+'">打开 Ditag 原始人群页</a>';
+    return '<p>'+esc(crowd.captureMode+'；采集日期 '+crowd.observedOn)+'。</p>'+table(['项目','来源记录'],rows)+'<h4>当前规则</h4><ul>'+crowd.rules.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul>'+(crowd.whitelistCount?'<p>页面另列白名单 '+num(crowd.whitelistCount)+' 个 ID（未读取个人ID）。</p>':'')+'<h4>投放前规则版本 '+esc(crowd.historical.version)+'</h4><p>'+esc(crowd.historical.name+' · '+crowd.historical.versionAt)+'</p><ul>'+crowd.historical.rules.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul><p>该历史版本未显示人数和分组画像；当前人数不可回填历史。</p><p>'+esc(crowd.note)+'</p><p>当前报表仍为任务全量，未按这个包筛选效果。</p><a target="_blank" rel="noopener noreferrer" href="'+esc(crowd.sourceURL)+'">打开 Ditag 原始人群页</a>'+(deployments?'<div class="boss-reference">'+deploymentDetails(deployments,deployments.records.filter(r=>r.crowdId===crowd.id))+'</div>':'');
   }
   function crowdDirectory(task) {
     let node=$('ditagCrowdDirectory');
@@ -80,6 +93,7 @@
       if(c){button.dataset.liveCrowd=c.id;delete button.dataset.unavailable;button.title='查看 Ditag 包信息；不筛选任务效果';}
       else{delete button.dataset.liveCrowd;button.title='包内效果组合筛选尚未接入；选择召回任务可查看已核验包信息';}
     });
+    if(task?.deploymentReference)node.insertAdjacentHTML('beforeend','<button type="button" class="link-button" data-live-deployment="all">查看6条BOSS投放配置</button>');
     text('[data-task-group="recall"] .branch-label',references.length?'Ditag 人群包 · 查看资料':'人群分析');
   }
   function emptyGaps() {
@@ -99,7 +113,7 @@
     text('.realtime-trend-panel .movement-line-legend','—');
   }
   function clearData(message) {
-    all('.apollo-reference').forEach(n=>{n.hidden=true;n.replaceChildren();});
+    all('.apollo-reference,.boss-reference').forEach(n=>{n.hidden=true;n.replaceChildren();});
     for (const id of ['preMetrics','effectMetrics','dailyMetrics','realtimeMetrics']) metric(id,[]);
     for (const id of ['preOverview','effectOverview','movementOverview']) banner(id,'数据尚未就绪',message);
     for (const id of emptyMarkup.keys()) emptyVisual(id,'暂无数据');
@@ -168,6 +182,7 @@
     }
   }
   function renderExperimentReference(task,mode) {
+    renderDeploymentReference(task,mode);
     const panel=$(mode==='daily'?'dailyFunnelPanel':'resourceFunnelPanel');
     let node=panel.querySelector('.apollo-reference');
     if(!node){node=document.createElement('div');node.className='apollo-reference';panel.appendChild(node);}
@@ -183,7 +198,7 @@
     const latestLabel=mode==='daily'?'所选日期分流样本':'最后观测日分流样本（非累计）';
     node.innerHTML='<strong>Apollo 分流参考 · '+esc(ref.name)+'</strong><p>实验 '+esc(ref.experimentId)+' · '+esc(ref.toggle)+' · '+esc(ref.status)+' · 按 '+esc(ref.unit)+' 分流</p><p>'+groups.map(g=>esc(g.name)+' '+pct(g.allocation)+'：'+esc(g.strategy)).join('；')+'</p><p>'+esc(latestLabel)+'</p>'+(latest?table(headers,values([latest])):'<p>所选日期暂无已采集的 Apollo 分流记录</p>')+
       (mode==='daily'?'':'<details><summary>查看全部 '+records.length+' 个观测日</summary>'+table(headers,values(records))+'</details>')+
-      '<p>'+esc(ref.scopeNote)+'</p><p class="apollo-source">采集日期 '+esc(ref.observedOn)+' · '+esc(ref.captureMode)+' · <a href="'+esc(ref.monitoringURL)+'" target="_blank" rel="noopener noreferrer">查看来源</a></p><details><summary>查看关联核对说明</summary><p>'+esc(ref.identityNote)+'</p><p>实验与三个召回人群包、BOSS配置的关联仍待核对；分流样本不等于领券或复购人数。</p></details>';
+      '<p>'+esc(ref.scopeNote)+'</p><p class="apollo-source">采集日期 '+esc(ref.observedOn)+' · '+esc(ref.captureMode)+' · <a href="'+esc(ref.monitoringURL)+'" target="_blank" rel="noopener noreferrer">查看来源</a></p><details><summary>查看关联核对说明</summary><p>'+esc(ref.identityNote)+'</p><p>'+esc(task.deploymentReference?'BOSS配置已明确三个包分别绑定实验组与对照组；API成员映射仍待核验，分流样本不等于领券或复购人数。':'实验与三个召回人群包、BOSS配置的关联仍待核对；分流样本不等于领券或复购人数。')+'</p></details>';
   }
   function selectedRows(task) {
     const period = $('dailyPeriodSelect').value;
@@ -339,7 +354,7 @@
     text('#contextTaskName',group.querySelector('.task-node').dataset.taskName);
     text('#contextInputName',node.dataset.audience||'任务全量');
   }
-  window.deliveryContext=()=>state.data?JSON.stringify({task:state.data.task.sourceTaskId,date:state.data.task.selectedDate,dimension:state.data.task.dimension,portraitDimension:state.data.task.portraitDimension,portrait:state.data.task.portrait.slice(0,50),portraitRowsTotal:state.data.task.portrait.length,audienceFacts:state.data.task.audienceFacts,summary:state.data.task.summary,cumulative:state.data.task.cumulative,experimentReference:state.data.task.experimentReference,groupPortrait:state.data.task.groupPortrait,crowdReferences:state.data.task.crowdReferences,notes:state.data.task.notes}):'当前未选择已接入的数据';
+  window.deliveryContext=()=>state.data?JSON.stringify({task:state.data.task.sourceTaskId,date:state.data.task.selectedDate,dimension:state.data.task.dimension,portraitDimension:state.data.task.portraitDimension,portrait:state.data.task.portrait.slice(0,50),portraitRowsTotal:state.data.task.portrait.length,audienceFacts:state.data.task.audienceFacts,summary:state.data.task.summary,cumulative:state.data.task.cumulative,experimentReference:state.data.task.experimentReference,groupPortrait:state.data.task.groupPortrait,crowdReferences:state.data.task.crowdReferences,deploymentReference:state.data.task.deploymentReference,notes:state.data.task.notes}):'当前未选择已接入的数据';
   window.askAi=async question=>{state.ai={question,answer:{title:'分析暂不可用',answer:'当前没有可用 Agent，请先连接 Agent 后重试。'}};window.render();};
   function exportData(){if(!state.data)return;const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(state.data,null,2)],{type:'application/json'}));a.href=url;a.download='投放分析-'+state.data.task.id+'.json';a.click();URL.revokeObjectURL(url);}
   function fieldDetails(task) {
@@ -384,7 +399,8 @@
     document.addEventListener('click',event=>{
       const n=event.target.closest('button,[data-live-date]');if(!n)return;
       if(n.classList.contains('funnel-stage')){event.stopImmediatePropagation();text('#dialogTitle',n.querySelector('span').textContent);$('dialogBody').innerHTML='<p>人数：'+esc(n.querySelector('strong').textContent)+'；占首阶段比例：'+esc(n.querySelector('em').textContent)+'</p><p>'+esc(n.closest('section').querySelector('.funnel-definition-note')?.textContent||'当前所选日期与人群范围')+'</p><p>基于源表阶段标记按 DUID 去重；此处展示集合关系，不代表新增订单或因果增量。</p>';$('infoDialog').showModal();return;}
-      if(n.dataset.liveCrowd){event.stopImmediatePropagation();const crowd=state.data?.task.crowdReferences?.find(c=>c.id===n.dataset.liveCrowd);if(crowd){text('#dialogTitle',crowd.prdLabel+' · Ditag详情');$('dialogBody').innerHTML=crowdDetails(crowd);$('infoDialog').showModal();}return;}
+      if(n.dataset.liveDeployment&&state.data?.task.deploymentReference){event.stopImmediatePropagation();text('#dialogTitle','BOSS投放配置');$('dialogBody').innerHTML=deploymentDetails(state.data.task.deploymentReference);$('infoDialog').showModal();return;}
+      if(n.dataset.liveCrowd){event.stopImmediatePropagation();const crowd=state.data?.task.crowdReferences?.find(c=>c.id===n.dataset.liveCrowd);if(crowd){text('#dialogTitle',crowd.prdLabel+' · Ditag详情');$('dialogBody').innerHTML=crowdDetails(crowd,state.data.task.deploymentReference);$('infoDialog').showModal();}return;}
       if(n.dataset.task){event.stopImmediatePropagation();selectTree(n);const id={summer:'effect',recall:'coupon'}[n.dataset.task];if(id)load({taskId:id});else{unsupported('该任务尚未接入真实数据');text('#contextTaskName',n.dataset.taskName);}return;}
       if(n.classList.contains('audience-option')){event.stopImmediatePropagation();selectTree(n);if(n.closest('.task-group').dataset.taskGroup==='summer')load({taskId:'effect'});else{unsupported('该人群的组合筛选尚未接入，点击召回任务名称可查看任务全量数据。');text('#contextInputName',n.dataset.audience);}return;}
       if(n.dataset.profileDimension||n.dataset.dailyBreakdown){if(state.data)load({...selection,...(n.dataset.profileDimension?{portraitDimension:dimensions[n.dataset.profileDimension]}:{dimension:dimensions[n.dataset.dailyBreakdown]})});}
@@ -434,10 +450,10 @@
           ['召回复购发券漏斗','已接入任务全量；分层人群组合暂无数据'],
           ['实验分组均衡','当前分组画像已接入；投放前快照与均衡结论仍待核验'],['累计效果','跨日按DUID独立去重；支持分组、标签及真实漏斗'],['整体活动目标、大盘与历史基准','缺少对应配置或数据；源表个人目标不能替代'],
           ['资源位曝光、点击','暂无数据'],['历史活动对比、下次投放建议','暂无数据'],
-          ['数据来源标识','已使用 crowd_id / source_task_id 限定数据；源标识见下方'],['人群包管理状态、有效期、创建人','暂无数据']
+          ['数据来源标识','已使用 crowd_id / source_task_id 限定数据；源标识见下方'],['Ditag人群包资料','召回3包的ID、状态、人数、有效期、规则已录入；创建人及通用管理接口待补'],['BOSS活动配置','召回6条配置已录入，按人群包/实验组关联；资源记录ID、券批次映射及整体目标值待补']
         ])+'<p>'+esc(task?'当前来源：'+task.sourceName+'；分区：'+task.partition+'。 '+task.notes.join(' '):'当前选择暂无已接入数据。')+'</p>';
         $('dialogBody').insertAdjacentHTML('beforeend','<h4>PRD 尚缺的6类数据/配置</h4>'+table(['类别','影响'],[
-          ['人群包目录与管理信息','搜索人群、任务关联、包状态/有效期、修改删除'],['实验与活动配置','AB映射、稳定分组、整体目标、投放起止与节奏'],['投放前标签快照','实验均衡与前置画像'],['同口径大盘基准','大盘效果及差异'],['曝光点击事件','资源位曝光/点击漏斗与指标'],['可比历史活动','历史验证、变化差、历史基准']
+          ['人群包目录与管理信息','搜索人群、任务关联、包状态/有效期、修改删除'],['实验与活动配置剩余缺口','包与实验组配置关系、配置日期和下线记录已知；实际成员、稳定分组、券批次及整体目标仍待核验'],['投放前标签快照','实验均衡与前置画像'],['同口径大盘基准','大盘效果及差异'],['曝光点击事件','资源位曝光/点击漏斗与指标'],['可比历史活动','历史验证、变化差、历史基准']
         ])+'<p>组合下钻、自然语言加维度、日报、模块配置还缺实现。暂不可用入口已标明原因；置灰不代表需求已完成。投放期新增订单/收入另需增量订单口径。</p>');
         if(task)$('dialogBody').insertAdjacentHTML('beforeend',fieldDetails(task));
         $('infoDialog').showModal();return;
