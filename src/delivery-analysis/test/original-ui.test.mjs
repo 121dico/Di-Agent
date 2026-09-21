@@ -190,3 +190,22 @@ test('自定义空日期范围清空全部分日结果，累计数据不受影�
  assert.match(d.getElementById('dailyFunnelNote').textContent,/范围暂无数据/);
  dom.window.close();
 });
+
+test('原漏斗内展示Apollo历史参考，日期与空范围联动但不加入转化阶段',async()=>{
+ const {experimentReference}=await import('../server/experiment-reference.mjs');
+ const value=structuredClone(data);value.task.experimentReference=experimentReference(value.task);
+ const dom=await page(value),d=dom.window.document;
+ assert.match(d.querySelector('#dailyFunnelPanel .apollo-reference').textContent,/117,098/);
+ assert.match(d.querySelector('#dailyFunnelPanel .apollo-reference').textContent,/2026-09-21.*非自动同步/s);
+ assert.doesNotMatch(d.getElementById('dailyFunnelVisual').textContent,/117,098/);
+ assert.equal(d.querySelectorAll('#dailyFunnelVisual .funnel-stage').length,3);
+ value.task.selectedDate='2026-08-12';value.task.daily.unshift({date:'2026-08-12',...summary});
+ d.getElementById('refreshAnalysis').click();await new Promise(r=>setTimeout(r,30));
+ assert.match(d.querySelector('#dailyFunnelPanel .apollo-reference').textContent,/152,823/);
+ assert.doesNotMatch(d.querySelector('#dailyFunnelPanel .apollo-reference').textContent,/117,098/);
+ const period=d.getElementById('dailyPeriodSelect');period.value='custom';period.dispatchEvent(new dom.window.Event('change'));
+ const dates=d.querySelectorAll('#customDateRange input');dates[0].value='2025-01-01';dates[1].value='2025-01-02';dates[1].dispatchEvent(new dom.window.Event('change'));
+ await new Promise(r=>setTimeout(r,30));
+ assert.equal(d.querySelector('#dailyFunnelPanel .apollo-reference').hidden,true);
+ dom.window.close();
+});

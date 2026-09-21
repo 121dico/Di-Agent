@@ -71,3 +71,17 @@ test('旧快照缺少新增效果字段时不伪装为零覆盖',()=>{
   assert.equal(old.personalTarget,null);
   assert.equal(old.personalRateMean,null);
 });
+
+test('召回可读取人工核验分流参考，但不改变漏斗统计或冒充其他任务数据',async()=>{
+  const {selectTask}=await import('../server/snapshot.mjs');
+  const rows=[{date:'2026-08-24',group_type:'control_group',users:10,records:10,coupon:8,coupon_repurchase:4}];
+  const task={id:'coupon',kind:'coupon',sourceTaskId:'184765378',sourceId:'coupon',dates:['2026-08-24'],rows,dimensions:{charge_life_cycle:rows.map(r=>({...r,value:'老用户'}))}};
+  const snapshot={queries:[],tasks:[task]};
+  const actual=selectTask(snapshot,'coupon');
+  assert.equal(actual.experimentReference.experimentId,'501026732376065');
+  assert.equal(actual.experimentReference.observedOn,'2026-09-21');
+  assert.equal(actual.experimentReference.records.at(-1).control_group,117098);
+  assert.equal(actual.experimentReference.records.at(-1).treatment_group,117218);
+  assert.equal(actual.summary.users,10);assert.equal(actual.summary.rate,.5);
+  task.sourceTaskId='unrelated';assert.equal(selectTask(snapshot,'coupon').experimentReference,null);
+});

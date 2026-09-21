@@ -141,3 +141,12 @@ body.ai-memory-drawer-open { overflow: hidden; }
 
 /* 未接入入口保留位置并明确不可用，避免点击只有占位反馈。 */
 button[data-unavailable], input[data-unavailable], #baselineButtons button:disabled { opacity: .48; cursor: not-allowed; }
+
+/* 历史分流参考沿用原面板，和业务转化阶段分别说明口径。 */
+.apollo-reference { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; line-height: 1.6; overflow-x: auto; }
+.apollo-reference > strong { color: var(--ink); }
+.apollo-reference p { margin: 6px 0; }
+.apollo-reference summary { cursor: pointer; color: var(--ink); padding: 6px 0; }
+.apollo-reference .profile-table { min-width: 300px; }
+.apollo-reference .apollo-source { font-size: 10px; }
+.apollo-reference[hidden] { display: none; }

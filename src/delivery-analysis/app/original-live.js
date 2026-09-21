@@ -79,6 +79,7 @@
     text('.realtime-trend-panel .movement-line-legend','—');
   }
   function clearData(message) {
+    all('.apollo-reference').forEach(n=>{n.hidden=true;n.replaceChildren();});
     for (const id of ['preMetrics','effectMetrics','dailyMetrics','realtimeMetrics']) metric(id,[]);
     for (const id of ['preOverview','effectOverview','movementOverview']) banner(id,'数据尚未就绪',message);
     for (const id of emptyMarkup.keys()) emptyVisual(id,'暂无数据');
@@ -122,6 +123,24 @@
       $('profileBars').innerHTML = '<div class="profile-pie-grid"><div class="profile-pie-chart"><svg class="profile-pie-ring" viewBox="0 0 160 160" aria-label="'+esc(label)+'占比结构"><circle class="profile-pie-track" cx="80" cy="80" r="54"></circle>'+segments+'</svg><div class="profile-pie-detail" aria-live="polite"></div></div><div class="profile-pie-legend">'+pie.map((r,i)=>'<div class="profile-pie-item" tabindex="0"><i class="profile-pie-swatch" style="background:'+colors[i]+'"></i><strong>'+esc(r.value)+'</strong><small>'+num(r.users)+' · '+pct(total?r.users/total:null)+'</small></div>').join('')+'</div></div>';
     }
   }
+  function renderExperimentReference(task,mode) {
+    const panel=$(mode==='daily'?'dailyFunnelPanel':'resourceFunnelPanel');
+    let node=panel.querySelector('.apollo-reference');
+    if(!node){node=document.createElement('div');node.className='apollo-reference';panel.appendChild(node);}
+    const ref=task.experimentReference;
+    node.hidden=!ref || task.kind!=='coupon' || (mode==='daily'&&!selectedRows(task).some(r=>r.date===task.selectedDate));
+    if(node.hidden){node.replaceChildren();return;}
+    const group=mode==='daily'?task.selectedGroup:task.cumulative?.selectedGroup||'all';
+    const groups=ref.groups.filter(g=>group==='all'||g.key===group);
+    const records=mode==='daily'?ref.records.filter(r=>r.date===task.selectedDate):ref.records;
+    const latest=records.at(-1);
+    const headers=['日期',...groups.map(g=>g.name+'分流样本')];
+    const values=rows=>rows.map(r=>[r.date,...groups.map(g=>num(r[g.key]))]);
+    const latestLabel=mode==='daily'?'所选日期分流样本':'最后观测日分流样本（非累计）';
+    node.innerHTML='<strong>Apollo 分流参考 · '+esc(ref.name)+'</strong><p>实验 '+esc(ref.experimentId)+' · '+esc(ref.toggle)+' · '+esc(ref.status)+' · 按 '+esc(ref.unit)+' 分流</p><p>'+groups.map(g=>esc(g.name)+' '+pct(g.allocation)+'：'+esc(g.strategy)).join('；')+'</p><p>'+esc(latestLabel)+'</p>'+(latest?table(headers,values([latest])):'<p>所选日期暂无已采集的 Apollo 分流记录</p>')+
+      (mode==='daily'?'':'<details><summary>查看全部 '+records.length+' 个观测日</summary>'+table(headers,values(records))+'</details>')+
+      '<p>'+esc(ref.scopeNote)+'</p><p class="apollo-source">采集日期 '+esc(ref.observedOn)+' · '+esc(ref.captureMode)+' · <a href="'+esc(ref.monitoringURL)+'" target="_blank" rel="noopener noreferrer">查看来源</a></p><details><summary>查看关联核对说明</summary><p>'+esc(ref.identityNote)+'</p><p>实验与三个召回人群包、BOSS配置的关联仍待核对；分流样本不等于领券或复购人数。</p></details>';
+  }
   function selectedRows(task) {
     const period = $('dailyPeriodSelect').value;
     if (period !== 'custom') return task.daily.slice(-Number(period || 7));
@@ -131,6 +150,7 @@
   function daily(task) {
     const rows = selectedRows(task), s=task.summary, coupon=task.kind==='coupon', reach=$('dailyMetricSelect').value==='dailyReach';
     const metricName = reach ? '样本人数' : task.metric;
+    renderExperimentReference(task,'daily');
     banner('movementOverview',rows.length+' 个数据日 · '+metricName,task.notes.join(' '));
     if(!rows.some(r=>r.date===task.selectedDate)) {
       metric('dailyMetrics',[]);
@@ -183,6 +203,7 @@
   }
   function cumulative(task) {
     const c=task.cumulative;if(!c)return;
+    renderExperimentReference(task,'cumulative');
     const s=c.summary,coupon=task.kind==='coupon',label=task.dimensionOptions[c.dimension],rows=c.distribution;
     const range=c.startDate+' → '+c.endDate,selected=c.selectedGroup==='all'?'整体':groupName(c.selectedGroup,task.kind);
     const treatment=c.groupSummary.find(g=>/treatment|experiment/.test(g.group)),control=c.groupSummary.find(g=>g.group==='control'||g.group==='control_group');
@@ -274,7 +295,7 @@
     text('#contextTaskName',group.querySelector('.task-node').dataset.taskName);
     text('#contextInputName',node.dataset.audience||'任务全量');
   }
-  window.deliveryContext=()=>state.data?JSON.stringify({task:state.data.task.sourceTaskId,date:state.data.task.selectedDate,dimension:state.data.task.dimension,portraitDimension:state.data.task.portraitDimension,portrait:state.data.task.portrait.slice(0,50),portraitRowsTotal:state.data.task.portrait.length,audienceFacts:state.data.task.audienceFacts,summary:state.data.task.summary,cumulative:state.data.task.cumulative,notes:state.data.task.notes}):'当前未选择已接入的数据';
+  window.deliveryContext=()=>state.data?JSON.stringify({task:state.data.task.sourceTaskId,date:state.data.task.selectedDate,dimension:state.data.task.dimension,portraitDimension:state.data.task.portraitDimension,portrait:state.data.task.portrait.slice(0,50),portraitRowsTotal:state.data.task.portrait.length,audienceFacts:state.data.task.audienceFacts,summary:state.data.task.summary,cumulative:state.data.task.cumulative,experimentReference:state.data.task.experimentReference,notes:state.data.task.notes}):'当前未选择已接入的数据';
   window.askAi=async question=>{state.ai={question,answer:{title:'分析暂不可用',answer:'当前没有可用 Agent，请先连接 Agent 后重试。'}};window.render();};
   function exportData(){if(!state.data)return;const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(state.data,null,2)],{type:'application/json'}));a.href=url;a.download='投放分析-'+state.data.task.id+'.json';a.click();URL.revokeObjectURL(url);}
   function fieldDetails(task) {
