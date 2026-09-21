@@ -213,3 +213,7 @@ button[data-unavailable], input[data-unavailable], #baselineButtons button:disab
 #profileBars .profile-pie-segment { cursor:pointer; }
 #profileFeedback { color:var(--muted); font-size:11px; line-height:1.5; }
 @media(max-width:720px) { .cross-bar-row { grid-template-columns:minmax(110px,1fr) minmax(80px,1fr) 52px; } }
+
+/* 画像范围紧随人数，避免将单日召回误认为完整圈选人群。 */
+.profile-scope { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; color:var(--muted); font-size:13px; padding:0 0 16px; }
+.profile-scope:empty { display:none; }

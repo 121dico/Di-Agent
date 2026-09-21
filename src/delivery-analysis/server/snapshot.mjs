@@ -1,4 +1,4 @@
-import {buildProfileCube,selectProfile} from './profile.mjs';
+import {buildProfileCube,buildAllGroupPortrait,groupProfileSource,selectProfile} from './profile.mjs';
 import {deploymentReference} from './deployment-reference.mjs';
 import {crowdReferences} from './crowd-reference.mjs';
 import {experimentReference} from './experiment-reference.mjs';
@@ -134,7 +134,8 @@ export async function buildSnapshot(gateway) {
     const profileCube=kind==='coupon'?await buildProfileCube({query,kind,conditions,source:{rows,dimensions},keys:Object.keys(dimensions),day}):null;
     const cumulative=await buildCumulative({query,kind,conditions,dimensions:Object.keys(dimensions),dates});
     cumulative.observedThrough=partitions[kind];
-    tasks.push({profileCube,cumulative,id:kind,name:kind==='coupon'?'召回复购发券实验':'安心充低频人群分析',kind,
+    const allGroupPortrait=kind==='coupon'?await buildAllGroupPortrait({query,kind,conditions,source:{rows,dimensions,profileCube},keys:Object.keys(dimensions),day}):null;
+    tasks.push({allGroupPortrait,profileCube,cumulative,id:kind,name:kind==='coupon'?'召回复购发券实验':'安心充低频人群分析',kind,
       metric:kind==='coupon'?'发券后 7 日复购率':'近 30 天订单渗透率',
       sourceId:sources[kind].source_id,sourceName:sources[kind].name,partition:partitions[kind],
       sourceTaskId:kind==='coupon'?'184765378':'crowd_axc_low_freq',dates,rows,dimensions,
@@ -151,6 +152,7 @@ export async function buildSnapshot(gateway) {
     if(summarize('audience',audience.dimensions[dimension]).users!==summarize('audience',audience.rows).users)throw new Error('audience total mismatch');
   }
   audience.profileCube=await buildProfileCube({query,kind:'audience',conditions:audienceConditions,source:audience,keys:Object.keys(DIMENSIONS)});
+  audience.allGroupPortrait=await buildAllGroupPortrait({query,kind:'audience',conditions:audienceConditions,source:audience,keys:Object.keys(DIMENSIONS)});
   audience.orderCoverage={};
   for(const name of ['first_axc_order_id','last_axc_order_id']) {
     audience.orderCoverage[name]=(await query('audience',['group_type'],[...audienceConditions,{name,operator:'NOT_NULL'},{name,operator:'NEQ',value:''}],counts)).map(r=>normalize('audience',r));
@@ -198,15 +200,27 @@ export function selectTask(snapshot,id,{date,group='all',dimension='charge_life_
   const comparisonRows=task.dimensions[dimension].filter(r=>r.date===selectedDate);
   const comparisonValues=[...new Set(comparisonRows.map(r=>r.value))];
   const distribution=[...new Set(dimensionRows.map(r=>r.value))].map(value=>({value,...summarize(task.kind,dimensionRows.filter(r=>r.value===value))})).sort((a,b)=>b.users-a.users);
-  const audienceRows=task.audience?portraitDimensions[portraitKey]?.filter(r=>group==='all'||r.group_type===group):scoped(portraitDimensions[portraitKey]);
+  const portraitSourceData=groupProfileSource(task.audience||task,group);
+  const selectedPortraitDimensions=portraitSourceData?.dimensions||{};
+  const audienceRows=task.audience?(selectedPortraitDimensions[portraitKey]||[]).filter(r=>group==='all'||r.group_type===group):scoped(selectedPortraitDimensions[portraitKey]||[]);
   const portrait=audienceRows?[...new Set(audienceRows.map(r=>r.value))].map(value=>({value,...summarize('audience',audienceRows.filter(r=>r.value===value))})).sort((a,b)=>b.users-a.users):distribution;
   const profileAnalysis=selectProfile(task.audience||task,{dimensions:selectedProfile||[portraitKey],group,date:selectedDate,hasAudience:!!task.audience});
-  const {rows,dimensions,audience,cumulative,profileCube,...metadata}=task;
+  const {rows,dimensions,audience,cumulative,profileCube,allGroupPortrait,...metadata}=task;
   const audienceFacts=audience?.orderCoverage && audience.rows.every(r=>Object.hasOwn(r,'axc') && Object.hasOwn(r,'charge'))?{
     partition:audience.partition,summary:summarize('audience',audience.rows.filter(r=>group==='all'||r.group_type===group)),
     orderCoverage:Object.fromEntries(Object.entries(audience.orderCoverage||{}).map(([name,values])=>[name,summarize('audience',values.filter(r=>group==='all'||r.group_type===group)).users])),
   }:null;
-  return {...metadata,profileAnalysis,profileCrossDimensions:(task.audience||task).profileCube?.keys||[],deploymentReference:deploymentReference(task),crowdReferences:crowdReferences(task),groupPortrait:groupPortrait(task,selectedDate),experimentReference:experimentReference(task),cumulative:selectCumulative(cumulative,{group:cumulativeGroup,dimension:cumulativeDimension}),audienceFacts,fieldCoverage:snapshot.fieldCoverage || [],portraitDimension:portraitKey,
+  const portraitSource={
+    sourceName:audience?.sourceName||task.sourceName,sourceId:audience?.sourceId||task.sourceId,
+    builtAt:(task.audience?.allGroupPortrait||task.allGroupPortrait)?.builtAt||snapshot.builtAt,
+    partition:audience?.partition||task.partition,scope:audience?'crowd_snapshot':'entry_day',group,
+    fields:selectedProfile||[portraitKey],
+    overlapUsers:(task.audience?.allGroupPortrait||task.allGroupPortrait)?.rows.filter(r=>task.audience||r.date===selectedDate).reduce((n,r)=>n+r.overlapUsers,0)??null,
+    filters:[{name:'dt',value:audience?.partition||task.partition},
+      {name:audience?'crowd_id':'source_task_id',value:task.sourceTaskId},
+      ...(!audience?[{name:'entry_dt',value:selectedDate}]:[]),...(group!=='all'?[{name:'group_type',value:group}]:[])],
+  };
+  return {...metadata,portraitSource,profileAnalysis,profileCrossDimensions:(task.audience||task).profileCube?.keys||[],deploymentReference:deploymentReference(task),crowdReferences:crowdReferences(task),groupPortrait:groupPortrait(task,selectedDate),experimentReference:experimentReference(task),cumulative:selectCumulative(cumulative,{group:cumulativeGroup,dimension:cumulativeDimension}),audienceFacts,fieldCoverage:snapshot.fieldCoverage || [],portraitDimension:portraitKey,
     portraitDimensionOptions:Object.fromEntries(Object.keys(portraitDimensions).map(key=>[key,({...DIMENSIONS,...AUDIENCE_DIMENSIONS,activity_cycle:'流失周期'})[key] || key])),selectedDate,selectedGroup:group,dimension,dimensionOptions:{...DIMENSIONS,...(task.kind==='coupon'?{activity_cycle:'流失周期'}:{})},groups,
     groupDistribution:groups.map(g=>({group:g,rows:comparisonValues.map(value=>({value,...summarize(task.kind,comparisonRows.filter(r=>r.value===value && r.group_type===g))}))})),
     summary,distribution,portrait,portraitPartition:audience?.partition || task.partition,

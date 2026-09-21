@@ -247,7 +247,7 @@ test('Ditag三个人群在原目录展示并打开详情，不套用任务全量
  assert.equal(button.disabled,false);button.click();
  assert.equal(d.querySelector('#infoDialog').open,true);assert.match(d.querySelector('#dialogBody').textContent,/1011337400/);
  assert.match(d.querySelector('#dialogBody').textContent,/V3|2026-08-11/);assert.match(d.querySelector('#dialogBody').textContent,/非自动同步/);
- assert.equal(dom.window.state.data.task.summary.users,100);assert.match(d.querySelector('#contextInputName').textContent,/任务全量/);
+ assert.equal(dom.window.state.data.task.summary.users,100);assert.match(d.querySelector('#contextInputName').textContent,/进组日 2026-08-24.*任务 184765378/);
  d.querySelector('#closeDialog').click();
  dom.window.fetch=async()=>({ok:false,json:async()=>({error:'数据不可用'})});d.querySelector('#refreshAnalysis').click();await new Promise(resolve=>setTimeout(resolve,30));
  assert.doesNotMatch(d.querySelector('#audiencePackageMeta').textContent,/2,458,957|1011337400/);assert.equal(button.disabled,true);
@@ -332,5 +332,24 @@ test('切换任务恢复各自画像路径，配置弹窗保留分日所有维�
  d.querySelector('[data-task="summer"]').click();await new Promise(r=>setTimeout(r,20));
  d.querySelector('[data-task="recall"]').click();await new Promise(r=>setTimeout(r,20));
  assert.equal(urls.at(-1).get('profileDimensions'),'city_name');assert.equal(d.querySelector('#dimensionTabs .active').textContent,'城市');
+ dom.window.close();
+});
+
+test('画像清楚区分召回单日和安心充人群，保留Demo维度说明与来源核对入口',async()=>{
+ const fixture=structuredClone(data);
+ fixture.task.portraitDimension='charge_freq_type';
+ fixture.task.portraitDimensionOptions={charge_life_cycle:'生命周期',charge_freq_type:'充电频次'};
+ fixture.task.portrait=[{value:'近30日未下单用户',users:100}];
+ fixture.task.portraitSource={sourceName:'epower_platform.ads_delivery_coupon_funnel_di',sourceId:'coupon-source',partition:'2026-09-16',filters:[{name:'dt',value:'2026-09-16'},{name:'source_task_id',value:'184765378'},{name:'entry_dt',value:'2026-08-24'}],fields:['charge_freq_type'],scope:'entry_day',group:'all'};
+ const dom=await page(fixture),d=dom.window.document;
+ dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true;};
+ assert.match(d.querySelector('#profileScope').textContent,/进组日 2026-08-24/);
+ assert.match(d.querySelector('#profileDimensionDefinition').textContent,/总充电频次/);
+ assert.match(d.querySelector('#profileInsight').textContent,/进组日/);
+ d.querySelector('#profileSourceDetails').click();
+ assert.match(d.querySelector('#dialogBody').textContent,/ads_delivery_coupon_funnel_di/);
+ assert.match(d.querySelector('#dialogBody').textContent,/charge_freq_type/);
+ assert.match(d.querySelector('#dialogBody').textContent,/2026-08-24/);
+ assert.doesNotMatch(d.querySelector('#profileBars').textContent,/214,084|端内网约车/);
  dom.window.close();
 });

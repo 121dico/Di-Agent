@@ -11,7 +11,7 @@
   state.request = 0;
   let selection = {taskId:'effect'}, chart = 'pie', funnel = 'funnel', resourceFunnel = 'funnel', initialized = false;
   const dimensions = {lifecycle:'charge_life_cycle',orders:'charge_freq_type',frequency:'charge_freq_type',identity:'charge_duid_role_name_v2_type',membership:'member_status',member:'member_status',cityFrame:'city_fenkuang',warZone:'charge_region',city:'city_name'};
-  const colors = ['#2563eb','#14b8a6','#f59e0b','#8b5cf6','#f97316','#64748b'];
+  const colors = ['#2563eb','#14b8a6','#f59e0b','#94a3b8','#c24136','#7c3aed'];
   const groupName = (group, kind) => kind === 'coupon' ? (group === 'treatment_group' ? '实验组' : '对照组') : '来源 ' + group + ' 组';
   function text(selector, value) { const node = one(selector); if (node) node.textContent = value; }
   function notice(message) { $('phaseAvailabilityNote').textContent = message; $('phaseAvailabilityNote').classList.remove('hidden'); }
@@ -56,7 +56,7 @@
   }
   const emptyStages = [['进组',null],['曝光',null],['点击',null],['达成效果',null]];
   function packageMeta(task) {
-    text('#audiencePackageMeta .package-heading strong', task ? (task.kind === 'coupon' ? '任务全量 · '+task.sourceTaskId : '近30天安心充低频购买用户') : '暂无数据');
+    text('#audiencePackageMeta .package-heading strong', task ? (task.kind === 'coupon' ? '任务 '+task.sourceTaskId+' · 进组日 '+task.selectedDate : '近30天安心充低频购买用户') : '暂无数据');
     const values = task ? {'分析类型':'来源分组统计','分析实体':'DUID','快照日期':task.portraitPartition,'人群时效性':'来源日快照'} : {};
     const crowds=task?.crowdReferences||[];
     if(crowds.length)Object.assign(values,{'整体人群包 ID':'PRD关联：'+crowds.map(c=>c.id).join(' / '),'人群包状态':crowds.map(c=>c.status).every(v=>v===crowds[0].status)?'关联包均'+crowds[0].status:'见各包详情','有效期结束':crowds.every(c=>c.validUntil===crowds[0].validUntil)?crowds[0].validUntil:'见各包详情'});
@@ -122,7 +122,7 @@
     text('.audience-summary > strong','—'); text('.audience-summary .soft-tag','等待数据');
     text('#breakdownVisualDefinition','累计标签拆解暂未接入');
     text('.realtime-trend-panel .data-note','小时级数据暂未接入');
-    text('#profileInsight',message); text('#profileVisualCaption','等待数据');text('#profileDrillPath','等待数据');
+    text('#profileInsight',message); text('#profileVisualCaption','等待数据');text('#profileDrillPath','等待数据');$('profileScope')?.replaceChildren();
     text('#experimentBalance .status-pill','尚未接入');text('#experimentBalance .section-kicker','实验前检查');$('recheckBalance').disabled=true;
     text('#experimentBalance .balance-insight p','缺少投放前快照和已核验分流配置，暂不输出均衡结论。');
     text('#experimentBalance .balance-summary strong','均衡检查暂未接入');
@@ -147,7 +147,7 @@
     text('#experimentBalance .balance-insight p','当前来源标签可比较两组分布；这些不是投放前快照，暂不判断实验前是否均衡。');
     text('#experimentBalance .balance-summary strong',data.groups.map(g=>portraitGroupName(g.group,task.kind)+' '+num(g.users)+' 人').join(' / ')||'当前来源暂无分组人数');
     text('#experimentBalance .balance-summary p','快照分区 '+data.partition+(data.cohortDate?' · 进组日 '+data.cohortDate:' · 当前人群包快照')+'；展开查看人数和组内占比，比较始终保留全部来源组。');
-    text('#experimentBalance .balance-note p','分布差异仅作描述，不能据此认定随机分流或均衡通过。'+(task.experimentReference?'关联 Apollo 配置已核实为50%/50%，与当前人群的映射仍待核对。':'投放前标签及随机分流配置仍待核验。'));
+    text('#experimentBalance .balance-note p',(task.portraitSource?.overlapUsers>0?'检测到跨组重复 '+num(task.portraitSource.overlapUsers)+' 人，两组并非互斥。':'')+'分布差异仅作描述，不能据此认定随机分流或均衡通过。'+(task.experimentReference?'关联 Apollo 配置已核实为50%/50%，与当前人群的映射仍待核对。':'投放前标签及随机分流配置仍待核验。'));
     const keys=['charge_life_cycle','charge_freq_type','charge_duid_role_name_v2_type','member_status'];
     all('#balanceDimensions details').forEach((node,i)=>{
       const entry=data.dimensions.find(d=>d.key===keys[i]),summary=node.querySelector('summary');
@@ -164,7 +164,32 @@
   }
   let profilePreferences={};
   try{profilePreferences=JSON.parse(sessionStorage.getItem('deliveryProfilePreferences')||'{}');}catch{}
-  const profileOptions=task=>task.portraitDimensionOptions||task.dimensionOptions;
+  const profileOptions=task=>{
+    const options=task.portraitDimensionOptions||task.dimensionOptions;
+    const order=['charge_life_cycle','charge_freq_type','charge_duid_role_name_v2_type','member_status','city_fenkuang','charge_region','city_name'];
+    return Object.fromEntries([...order,...Object.keys(options)].filter((k,i,a)=>Object.hasOwn(options,k)&&a.indexOf(k)===i).map(k=>[k,options[k]]));
+  };
+  const profileDefinitions={
+    charge_life_cycle:'按业务生命周期标签分组；与流失天数分组不同',
+    charge_freq_type:'按总充电频次标签分组；与安心充购买频次不同',
+    charge_duid_role_name_v2_type:'按来源中的车辆身份分类展示；端内／端外分类仅在来源有值时展示',
+    member_status:'按会员状态分组；状态未知单独保留，不并入非会员',
+    city_fenkuang:'按来源城市分框分组',charge_region:'按来源战区分组',city_name:'按来源高频订单城市分组，与投放城市范围不同',
+    activity_cycle:'按召回来源的流失周期分组，与业务生命周期不同',
+    ds_freq_type:'按安心充购买频次分层，与总充电频次不同',
+  };
+  function profileScopeLabel(task){return task.kind==='coupon'?'召回复购 · 进组日 '+task.selectedDate:'安心充低频购买人群 · 快照 '+task.portraitPartition;}
+  function renderProfileScope(task){
+    let node=$('profileScope');if(!node){node=document.createElement('div');node.id='profileScope';node.className='profile-scope';one('#audienceProfile .audience-summary').insertAdjacentElement('afterend',node);}
+    node.innerHTML='<span>'+esc(profileScopeLabel(task)+' · '+(task.selectedGroup==='all'?'全部组':portraitGroupName(task.selectedGroup,task.kind))+(task.portraitSource?.overlapUsers>0?' · 跨组重复 '+num(task.portraitSource.overlapUsers)+' 人，整体已去重':''))+'</span><button type="button" class="link-button" id="profileSourceDetails">查看数据来源与口径</button>';
+  }
+  function showProfileSource(){
+    const task=state.data?.task;if(!task)return;
+    const source=task.portraitSource,fields=profilePath(task),options=profileOptions(task);
+    text('#dialogTitle','画像数据来源与统计口径');
+    $('dialogBody').innerHTML='<p>'+esc(profileScopeLabel(task))+'</p>'+table(['项目','当前取值'],[['来源表',source?.sourceName||'来源信息待更新'],['快照分区',task.portraitPartition],['统计范围',task.kind==='coupon'?'所选单个进组日，不是任务累计或Ditag包全量':'所选人群包当前快照，独立于分日效果日期'],['去重实体','DUID；人数来自源表聚合'],['画像生成时间',source?.builtAt||state.data.builtAt]])+(source?.overlapUsers>0?'<p>检测到跨组重复 '+num(source.overlapUsers)+' 人；全部组画像已跨组独立去重，两组人数不能相加。</p>':'')+'<h4>维度字段</h4>'+table(['页面维度','来源字段'],fields.map(k=>[options[k],k]))+'<h4>实际筛选条件</h4>'+table(['字段','等于'],(source?.filters||[]).map(f=>[f.name,f.value]))+'<p>标签名称沿用源表原值；未出现的类别不补成人数，未知状态不当作非会员。高低频阈值与生命周期规则需以源表生产定义为准。</p><p>Demo画像参考的是2026-08-26的安心充低频购买人群214,084人。当前任务、日期或人群不同，人数和分类不能直接对比。</p><p>当前标签不代表投放前状态；上游数据缺失不会用Demo数字替代。</p>';
+    $('infoDialog').showModal();
+  }
   const profilePath=task=>task.profileAnalysis?.dimensions||[task.portraitDimension||task.dimension];
   function configuredDimensions(task){
     const options=profileOptions(task),saved=profilePreferences[task.id]?.dimensions;
@@ -186,13 +211,13 @@
   }
   function profileControls(task){
     const options=profileOptions(task),path=profilePath(task),chosen=configuredDimensions(task);
-    $('dimensionTabs').innerHTML=chosen.map(k=>'<button type="button" class="'+(k===path[0]?'active':'')+'" data-profile-dimension="'+esc(Object.keys(dimensions).find(name=>dimensions[name]===k)||k)+'" aria-pressed="'+(k===path[0])+'">'+esc(options[k])+'</button>').join('');
+    $('dimensionTabs').innerHTML=chosen.map(k=>'<button type="button" class="'+(k===path[0]?'active':'')+'" data-profile-dimension="'+esc(Object.keys(dimensions).find(name=>dimensions[name]===k)||k)+'" aria-pressed="'+(k===path[0])+'">'+esc(k==='member_status'?'是否会员':options[k])+'</button>').join('');
     text('#profileDrillPath',path.map(k=>options[k]).join(' × '));
     $('addProfileDrill').disabled=path.length>=3||!task.profileCrossDimensions?.includes(path[0]);
     $('addProfileDrill').title=path.length>=3?'最多支持三级维度拆分':!task.profileCrossDimensions?.includes(path[0])?'该维度联合快照暂未准备完成':'增加下一级维度';
     $('resetProfileDrill').classList.toggle('hidden',path.length<2);$('resetProfileDrill').disabled=false;
     $('dimensionPrompt').disabled=false;$('addDimensionPrompt').disabled=false;
-    $('dimensionPrompt').placeholder='例如：生命周期 × 充电频次 × 城市；或再看看城市分框和战区';
+    $('dimensionPrompt').placeholder='用自然语言补充维度，例如：再看看城市分框和战区';
     $('profileViewSwitch').classList.remove('hidden');
     const primaryView=one('[data-profile-view="pie"]');if(primaryView)primaryView.lastChild.textContent=path.length>1?' 交叉矩阵':' 饼图';
     all('[data-profile-view]').forEach(n=>{n.classList.toggle('active',n.dataset.profileView===chart);n.setAttribute('aria-selected',String(n.dataset.profileView===chart));});
@@ -249,14 +274,16 @@
   }
 
   function profile(task) {
-    profileControls(task);
+    profileControls(task);renderProfileScope(task);
     const rows = task.portrait, total = rows.reduce((s,r)=>s+r.users,0), label = (task.portraitDimensionOptions||task.dimensionOptions)[task.portraitDimension||task.dimension];
-    text('.audience-summary > strong',num(rows.length?total:null)); text('.audience-summary > span','DUID · 当前来源快照');
+    text('.audience-summary > strong',num(rows.length?total:null)); text('.audience-summary > span',task.kind==='coupon'?'DUID · 当前进组日人群':'DUID · 当前圈选人群');
     text('.audience-summary .soft-tag','分区 '+task.portraitPartition);
     text('#profileDimensionTitle',label);
-    text('#profileDimensionDefinition','来源快照标签；不代表投放前状态');
+    text('#profileDimensionDefinition',profileDefinitions[task.portraitDimension||task.dimension]||'按来源标签分组');
     text('#profileVisualCaption',chart === 'table' ? '人数与占比' : '占比结构');
-    text('#profileInsight',rows.length ? rows[0].value+'占比 '+pct(total ? rows[0].users/total : null)+'，共 '+num(rows[0].users)+' 人。' : '所选范围暂无画像数据');
+    const scope=task.kind==='coupon'?'当前进组日人群中，':'当前圈选人群中，';
+    const frequencyNote=(task.portraitDimension||task.dimension)==='charge_freq_type'?(task.kind==='effect'?'圈选条件是安心充购买频次，图中是总充电频次，二者口径不同。':'此处为召回人群的总充电频次标签。'):'';
+    text('#profileInsight',rows.length ? scope+rows[0].value+'占比 '+pct(total ? rows[0].users/total : null)+'，共 '+num(rows[0].users)+' 人。'+frequencyNote : '所选范围暂无画像数据');
     if(task.profileAnalysis?.dimensions.length>1){renderProfileCross(task);return;}
     if (!rows.length) {emptyProfile();return;}
     $('profileBars').removeAttribute('data-empty-visual');
@@ -397,7 +424,7 @@
     all('.audience-option').forEach(n=>n.classList.toggle('active',t.id==='effect'&&n.closest('.task-group').dataset.taskGroup==='summer'));
     all('.audience-option svg[data-lucide="check"]').forEach(n=>n.style.display=n.closest('.audience-option').classList.contains('active')?'':'none');
     text('#contextTaskName',one('[data-task="'+originalId+'"]').dataset.taskName);
-    text('#contextInputName',t.id==='effect'?'近30天安心充低频购买用户':'任务全量 · '+t.sourceTaskId);
+    text('#contextInputName',t.id==='effect'?'近30天安心充低频购买用户':'进组日 '+t.selectedDate+' · 任务 '+t.sourceTaskId);
     text('#contextStatus','真实数据 · '+t.selectedDate);
     text('.mock-badge','服务器真实数据');text('.sync-status','快照 '+new Date(d.builtAt).toLocaleString('zh-CN',{hour12:false}));
     packageMeta(t);crowdDirectory(t);emptyGaps();
@@ -563,6 +590,7 @@
         if(task)$('dialogBody').insertAdjacentHTML('beforeend',fieldDetails(task));
         $('infoDialog').showModal();return;
       }
+      if(n.id==='profileSourceDetails'){event.stopImmediatePropagation();showProfileSource();return;}
       if(n.id==='closeDialog'){$('infoDialog').close();return;}
       const evidence=['showConclusionEvidence','showMovementEvidence','showMonitorEvidence'];
       if(evidence.includes(n.id)){event.stopImmediatePropagation();notice(state.data?'来源 '+state.data.task.sourceName+'；分区 '+state.data.task.partition+'；'+state.data.task.evidence.length+' 次聚合查询，完整查询依据随导出保存。':'当前暂无查询依据');}

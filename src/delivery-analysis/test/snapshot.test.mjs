@@ -160,3 +160,51 @@ test('三级画像来自联合计数，保留真实相关性并受日期与组�
  delete task.profileCube;
  assert.equal(selectTask(snapshot,'coupon',{profileDimensions:['charge_life_cycle','city_name']}).profileAnalysis.status,'missing');
 });
+
+test('画像来源契约给出真实表与过滤条件，安心充不混入效果选日',async()=>{
+ const {selectTask}=await import('../server/snapshot.mjs');
+ const rows=[{date:'2026-08-24',group_type:'control',users:10,records:10}];
+ const dims={charge_life_cycle:rows.map(r=>({...r,value:'老用户'}))};
+ const coupon={id:'coupon',kind:'coupon',sourceName:'coupon_table',sourceId:'c',sourceTaskId:'184765378',partition:'2026-09-16',dates:['2026-08-24'],rows,dimensions:dims};
+ const source=selectTask({queries:[],tasks:[coupon]},'coupon',{group:'control'}).portraitSource;
+ assert.equal(source.scope,'entry_day');assert.equal(source.sourceName,'coupon_table');
+ assert.deepEqual(source.filters,[{name:'dt',value:'2026-09-16'},{name:'source_task_id',value:'184765378'},{name:'entry_dt',value:'2026-08-24'},{name:'group_type',value:'control'}]);
+ const effect={...coupon,id:'effect',kind:'effect',sourceTaskId:'crowd_axc_low_freq',audience:{sourceName:'audience_table',sourceId:'a',partition:'2026-09-20',rows,dimensions:dims}};
+ const other=selectTask({queries:[],tasks:[effect]},'effect').portraitSource;
+ assert.equal(other.scope,'crowd_snapshot');assert.equal(other.sourceName,'audience_table');
+ assert.deepEqual(other.filters,[{name:'dt',value:'2026-09-20'},{name:'crowd_id',value:'crowd_axc_low_freq'}]);
+});
+
+test('全部组画像使用跨组独立去重桶，不能相加含重叠DUID的分组人数',async()=>{
+ const {selectTask}=await import('../server/snapshot.mjs');
+ const rows=[{date:'2026-08-24',group_type:'control',users:5,records:5},{date:'2026-08-24',group_type:'treatment',users:4,records:4}];
+ const dims={charge_life_cycle:rows.map(r=>({...r,value:'老用户'}))};
+ const all={rows:[{date:'2026-08-24',users:8,records:9,overlapUsers:1}],dimensions:{charge_life_cycle:[{date:'2026-08-24',value:'老用户',users:8}]},profileCube:{keys:['charge_life_cycle'],rows:[]}};
+ const task={id:'coupon',kind:'coupon',sourceTaskId:'184765378',dates:['2026-08-24'],rows,dimensions:dims,allGroupPortrait:all};
+ const result=selectTask({queries:[],tasks:[task]},'coupon');
+ assert.equal(result.portrait[0].users,8);assert.equal(result.profileAnalysis.total,8);
+ assert.equal(result.portraitSource.overlapUsers,1);assert.equal(result.allGroupPortrait,undefined);
+ assert.equal(selectTask({queries:[],tasks:[task]},'coupon',{group:'control'}).portrait[0].users,5);
+ delete task.allGroupPortrait;
+ const missing=selectTask({queries:[],tasks:[task]},'coupon');assert.deepEqual(missing.portrait,[]);assert.equal(missing.profileAnalysis.status,'missing');
+});
+
+test('构建跨组画像查独立去重数据，拒绝同DUID跨标签导致的重复合计',async()=>{
+ const {buildAllGroupPortrait}=await import('../server/profile.mjs');
+ const source={rows:[{date:'d',group_type:'A',users:5},{date:'d',group_type:'B',users:4}],dimensions:{charge_life_cycle:[{date:'d',group_type:'A',value:'老用户',users:5},{date:'d',group_type:'B',value:'老用户',users:4}]},profileCube:{keys:['charge_life_cycle'],rows:[]}};
+ let seen=0;
+ const query=async(kind,groups,filters)=>{assert.ok(!filters.some(f=>f.name==='group_type'));seen++;return groups[0]==='entry_dt'?[{entry_dt:'d',users:8,records:9}]:[{charge_life_cycle:'老用户',users:8,records:9}];};
+ const result=await buildAllGroupPortrait({query,kind:'coupon',conditions:[],source,keys:['charge_life_cycle'],day:'entry_dt'});
+ assert.equal(result.rows[0].users,8);assert.equal(result.rows[0].overlapUsers,1);assert.equal(result.profileCube.rows[0].users,8);assert.equal(seen,3);
+ await assert.rejects(buildAllGroupPortrait({query:async(kind,groups,filters)=>groups[0]==='entry_dt'?[{entry_dt:'d',users:8,records:9}]:[{charge_life_cycle:'老用户',users:9,records:9}],kind:'coupon',conditions:[],source,keys:['charge_life_cycle'],day:'entry_dt'}),/all-group labels overlap/);
+});
+
+
+test('全部组控制查询缺失或重复日期时拒绝发布，不把缺失当零人',async()=>{
+ const {buildAllGroupPortrait}=await import('../server/profile.mjs');
+ const source={rows:[{date:'d1',users:1},{date:'d2',users:1}],dimensions:{},profileCube:{keys:[],rows:[]}};
+ for(const controls of [[{entry_dt:'d1',users:1,records:1}],[{entry_dt:'d1',users:1,records:1},{entry_dt:'d1',users:1,records:1}]]){
+  await assert.rejects(buildAllGroupPortrait({query:async()=>controls,kind:'coupon',conditions:[],source,keys:[],day:'entry_dt'}),/date coverage mismatch/);
+ }
+ await assert.rejects(buildAllGroupPortrait({query:async()=>[{dt:'wrong',users:1,records:1}],kind:'audience',conditions:[{name:'dt',operator:'EQ',value:'expected'}],source,keys:[]}),/date coverage mismatch/);
+});
