@@ -28,6 +28,10 @@ test('离线HTML不依赖网络，切换日期、表格与模块后数据仍正�
   d.querySelector('input[value="experimentBalance"]').checked=false;
   d.getElementById('moduleForm').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
   await new Promise(r=>setTimeout(r,10));assert.ok(d.getElementById('experimentBalance').classList.contains('report-module-hidden'));
+  d.querySelector('[data-live-select-crowd="1011337400"]').click();await new Promise(r=>setTimeout(r,20));
+  assert.equal(dom.window.deliveryLive.selection().crowdId,'1011337400');
+  assert.ok(dom.window.state.data.task.scopeUnavailable);assert.equal(dom.window.state.data.task.summary.users,undefined);
+  assert.doesNotMatch(d.getElementById('dailyMetrics').textContent,/35.00%/);
   assert.equal(errors.length,0,errors.map(e=>e.message).join('\n'));
  }finally{dom.window.close();}
 });

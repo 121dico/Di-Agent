@@ -223,3 +223,6 @@ button[data-unavailable], input[data-unavailable], #baselineButtons button:disab
 /* 画像范围紧随人数，避免将单日召回误认为完整圈选人群。 */
 .profile-scope { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; color:var(--muted); font-size:13px; padding:0 0 16px; }
 .profile-scope:empty { display:none; }
+
+/* 查询依据在原弹窗中换行，保留长字段和筛选值。 */
+.analysis-query { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.6; }

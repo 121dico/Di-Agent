@@ -183,9 +183,20 @@ function groupPortrait(task,selectedDate) {
   return {basis:'current_snapshot',conclusion:null,partition:source.partition,sourceName:source.sourceName,cohortDate:task.audience?null:selectedDate,groups,dimensions};
 }
 
-export function selectTask(snapshot,id,{date,group='all',dimension='charge_life_cycle',portraitDimension,profileDimensions,cumulativeGroup='all',cumulativeDimension='charge_life_cycle'}={}) {
+export function selectTask(snapshot,id,{date,group='all',dimension='charge_life_cycle',portraitDimension,profileDimensions,cumulativeGroup='all',cumulativeDimension='charge_life_cycle',crowdId}={}) {
   const task=snapshot.tasks.find(t=>t.id===id);
   if(!task)return null;
+  if(crowdId){
+    const references=crowdReferences(task),crowd=references.find(c=>c.id===crowdId);
+    if(!crowd)throw new Error('invalid crowd selection');
+    // 来源表没有可核验的包成员映射，不能把任务全量当成某个Ditag包的效果。
+    return {id:task.id,kind:task.kind,name:task.name,sourceTaskId:task.sourceTaskId,sourceId:task.sourceId,sourceName:task.sourceName,
+      partition:task.partition,metric:task.metric,selectedCrowd:crowd,crowdReferences:references,
+      scopeUnavailable:'尚缺 Ditag 人群包 '+crowd.id+' 与投放记录的成员关联，包内画像、分组和效果尚不能计算。',
+      selectedDate:null,selectedGroup:'all',dimension:'charge_life_cycle',dimensionOptions:DIMENSIONS,
+      summary:{},distribution:[],portrait:[],daily:[],groupDaily:[],groupSummary:[],groupPortrait:null,cumulative:null,
+      notes:['Ditag当前人数为人工核验资料，不是投放期进组人数。'],evidence:[],fieldCoverage:[]};
+  }
   const selectedDate=date || task.dates.at(-1);
   const selectedProfile=typeof profileDimensions==='string'?profileDimensions.split(','):profileDimensions;
   const portraitKey=selectedProfile?.[0] || portraitDimension || dimension;

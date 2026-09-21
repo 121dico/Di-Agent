@@ -102,22 +102,23 @@
     }catch(e){status(e.message+'；当前已发布结果保留，可再次点击重新分析。');}
     finally{refreshing=false;$('refreshAnalysis').disabled=false;label.textContent='重新分析';$('refreshAnalysis').removeAttribute('aria-busy');}
   }
-  async function download(){
-    if(exporting||!data())return;exporting=true;$('exportReport').disabled=true;
+  async function download(dailyReport=false){
+    if(exporting||!data())return;exporting=true;$('exportReport').disabled=true;$('exportDailyReport').disabled=true;
     const current=data(),selection=live.selection(),view=live.view();
+    if(dailyReport){view.phase='monitor';view.effect='daily';}
     try{
       status('正在生成离线交互 HTML…');
       const response=await request('export',{selection,view,builtAt:current.builtAt},'POST',true);
-      const url=URL.createObjectURL(await response.blob()),a=document.createElement('a');a.href=url;a.download='投放分析-'+(current.analysisTask?.name||current.task.name||current.task.id).replace(/[\\/:*?"<>|]/g,'-')+'.html';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
-      status('HTML 已导出，可直接打开并离线交互。');
-    }catch(e){status(e.message);}finally{exporting=false;$('exportReport').disabled=!data();}
+      const url=URL.createObjectURL(await response.blob()),a=document.createElement('a');a.href=url;a.download=(dailyReport?'投放日报-'+current.task.selectedDate+'-':'投放分析-')+(current.analysisTask?.name||current.task.name||current.task.id).replace(/[\\/:*?"<>|]/g,'-')+'.html';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+      status(dailyReport?'日报已生成，保留当前日期、指标和周期，可离线打开核验。':'HTML 已导出，可直接打开并离线交互。');
+    }catch(e){status(e.message);}finally{exporting=false;$('exportReport').disabled=!data();$('exportDailyReport').disabled=!data();}
   }
   function init(){
     if(initialized)return;initialized=true;
     const message=document.createElement('div');message.id='reportActionStatus';message.className='report-action-status';message.setAttribute('role','status');$('stageTabs').before(message);
     document.addEventListener('click',event=>{
       const button=event.target.closest('button');if(!button)return;
-      const handlers={configureReportModules:configure,createTask,refreshAnalysis:refresh,exportReport:download};
+      const handlers={configureReportModules:configure,createTask,refreshAnalysis:refresh,exportReport:download,exportDailyReport:()=>download(true)};
       if(handlers[button.id]){event.stopImmediatePropagation();if(!button.disabled)handlers[button.id]();}
       if(button.dataset.analysisTask){event.stopImmediatePropagation();live.load({taskId:button.dataset.analysisTask});}
     },true);
@@ -129,7 +130,7 @@
     window.addEventListener('delivery:data',update);
     if(offline){
       document.body.classList.add('report-offline');
-      for(const id of ['refreshAnalysis','exportReport','createTask','changeTask','openHelp']){const n=$(id);if(n){n.hidden=true;n.disabled=true;}};
+      for(const id of ['refreshAnalysis','exportReport','exportDailyReport','createTask','changeTask','openHelp']){const n=$(id);if(n){n.hidden=true;n.disabled=true;}};
       // 保留原按钮数据绑定所需节点，但彻底关闭在线交互和账户入口。
       all('form[action],iframe').forEach(n=>n.remove());
       status('离线交互报告 · 数据快照 '+new Date(offline.snapshot.builtAt).toLocaleString('zh-CN')+' · 筛选仅使用文件内聚合数据');

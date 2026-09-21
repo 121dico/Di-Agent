@@ -39,6 +39,28 @@ for(const operation of ['save','create'])test(operation+' 迟到提交只保存�
   assert.equal(d.getElementById('infoDialog').open,true);assert.equal(d.getElementById(replacement.id),replacement);assert.equal(navigations,0);
  }finally{dom.window.close();}
 });
+
+
+test('生成日报沿用真实快照导出，保留周期和日期并打开分日视图',async()=>{
+ const dom=new JSDOM(await readFile(new URL('index.html',root),'utf8'),{url:'http://localhost',runScripts:'outside-only'}),w=dom.window,d=w.document;
+ const task={id:'coupon',sourceId:'coupon',name:'召回',purpose:'召回',builtin:true,modules:MODULES.map(m=>m.id)};
+ let payload,filename;
+ w.state={data:{builtAt:'snapshot-1',analysisTask:task,task:{id:'coupon',selectedDate:'2026-08-24'},moduleOptions:MODULES,status:{}}};
+ w.deliveryLive={selection:()=>({taskId:'coupon',date:'2026-08-24',group:'control_group'}),view:()=>({phase:'pre',effect:'cumulative',period:'3',metric:'dailyReach'})};
+ w.URL.createObjectURL=()=> 'blob:test';w.URL.revokeObjectURL=()=>{};
+ w.HTMLAnchorElement.prototype.click=function(){filename=this.download;};
+ w.fetch=async(path,opts)=>{
+  if(path==='/api/export'){payload=JSON.parse(opts.body);return {ok:true,blob:async()=>new w.Blob(['report'])};}
+  return {ok:true,json:async()=>({items:[task],sources:[{id:'coupon',name:'召回源'}],modules:MODULES})};
+ };
+ try{
+  w.eval(await readFile(new URL('report-actions.js',root),'utf8'));d.dispatchEvent(new w.Event('DOMContentLoaded'));await new Promise(r=>setTimeout(r,5));
+  d.getElementById('exportDailyReport').click();await new Promise(r=>setTimeout(r,5));
+  assert.equal(payload.view.phase,'monitor');assert.equal(payload.view.effect,'daily');assert.equal(payload.view.period,'3');
+  assert.equal(payload.selection.date,'2026-08-24');assert.equal(payload.selection.group,'control_group');assert.equal(payload.builtAt,'snapshot-1');
+  assert.equal(filename,'投放日报-2026-08-24-召回.html');assert.match(d.getElementById('reportActionStatus').textContent,/日报已生成/);
+ }finally{dom.window.close();}
+});
 test('同任务重新打开配置时，上一份保存完成前不允许再次提交',async()=>{
  const dom=new JSDOM(await readFile(new URL('index.html',root),'utf8'),{url:'http://localhost',runScripts:'outside-only'}),w=dom.window,d=w.document;
  const task={id:'coupon',sourceId:'coupon',name:'召回',modules:MODULES.map(m=>m.id)};

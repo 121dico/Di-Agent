@@ -14,7 +14,7 @@ export function crowdReferences(task) {
   validFrom:'2026-03-05 00:00:00',validUntil:'2026-12-31 23:59:59',
   sourceURL:'https://ditag.intra.xiaojukeji.com/new-system/#/application/crowdDetail?id='+record.id+'&crowdUserType=normal&view=filter',
   rules:[commonRules[0],record.dayRule,commonRules[1],'历史至今未过期绑券量 = 0'],
-  historical:{...record.historical,rules:[commonRules[0],record.dayRule,commonRules[1]],whitelistCount:record.whitelistCount},
+  historical:{...record.historical,rules:[],whitelistCount:null},
   note:'PRD按包ID关联；当前名称和规则可能已变更。当前人数不是8月投放人数，不参与漏斗、分组占比或均衡检验；API明细与具体包成员映射仍待核验。',
  }));
 }
