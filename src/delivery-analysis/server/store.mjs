@@ -27,7 +27,7 @@ export class SnapshotStore {
       } catch(error) {
         // 上游错误可能携带认证细节，不输出原始错误信息。
         this.status.lastError='最新数据准备失败，保留上次成功快照';
-        console.error('delivery.snapshot.failed',error.code || error.name);
+        console.error('delivery.snapshot.failed',error.code || error.name,error.cause?.code || '',String(error.stack||'').split('\n').slice(1,4).join(' | '));
       } finally {this.status.refreshing=false;this.pending=null;}
     })();
     return this.pending;

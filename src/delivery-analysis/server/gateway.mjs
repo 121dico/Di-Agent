@@ -5,6 +5,17 @@ export class Gateway {
     this.baseURL=baseURL;this.tokenFile=tokenFile;this.fetcher=fetcher;this.evidence=[];
   }
   async request(path,body,authorization) {
+    // 聚合查询没有写入副作用；仅恢复瞬时传输故障，不重试鉴权或数据校验错误。
+    const readonly=['/mcp/report-data/query','/mcp/report-data/contracts'].includes(path);
+    for(let attempt=0;;attempt++){
+      try{return await this.requestOnce(path,body,authorization);}catch(error){
+        const transient=(error instanceof TypeError&&error.message==='fetch failed')||error.name==='TimeoutError'||[429,502,503,504].includes(error.code);
+        if(!readonly||!transient||attempt>=2)throw error;
+        await new Promise(resolve=>setTimeout(resolve,500*2**attempt));
+      }
+    }
+  }
+  async requestOnce(path,body,authorization) {
     const response=await this.fetcher(this.baseURL+path,{
       method:body===undefined?'GET':'POST',
       headers:{Authorization:authorization,'Content-Type':'application/json'},

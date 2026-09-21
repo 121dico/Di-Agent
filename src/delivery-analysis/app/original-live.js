@@ -9,7 +9,7 @@
   const pct = value => Number.isFinite(value) ? (100 * value).toFixed(2) + '%' : '—';
   const state = window.state;
   state.request = 0;
-  let selection = {taskId:'effect'}, chart = 'pie', funnel = 'funnel', resourceFunnel = 'funnel', initialized = false;
+  let selection = window.deliveryOffline?.selection || {taskId:'effect'}, chart = window.deliveryOffline?.view.chart || 'pie', funnel = window.deliveryOffline?.view.funnel || 'funnel', resourceFunnel = window.deliveryOffline?.view.resourceFunnel || 'funnel', initialized = false;
   const dimensions = {lifecycle:'charge_life_cycle',orders:'charge_freq_type',frequency:'charge_freq_type',identity:'charge_duid_role_name_v2_type',membership:'member_status',member:'member_status',cityFrame:'city_fenkuang',warZone:'charge_region',city:'city_name'};
   const colors = ['#2563eb','#14b8a6','#f59e0b','#94a3b8','#c24136','#7c3aed'];
   const groupName = (group, kind) => kind === 'coupon' ? (group === 'treatment_group' ? '实验组' : '对照组') : '来源 ' + group + ' 组';
@@ -163,7 +163,7 @@
     $('recheckBalance').disabled=false;
   }
   let profilePreferences={};
-  try{profilePreferences=JSON.parse(sessionStorage.getItem('deliveryProfilePreferences')||'{}');}catch{}
+  try{profilePreferences=window.deliveryOffline?.view.profilePreferences||JSON.parse(sessionStorage.getItem('deliveryProfilePreferences')||'{}');}catch{}
   const profileOptions=task=>{
     const options=task.portraitDimensionOptions||task.dimensionOptions;
     const order=['charge_life_cycle','charge_freq_type','charge_duid_role_name_v2_type','member_status','city_fenkuang','charge_region','city_name'];
@@ -198,7 +198,7 @@
   }
   function saveProfilePreferences(task,changes){
     profilePreferences[task.id]={...profilePreferences[task.id],...changes};
-    try{sessionStorage.setItem('deliveryProfilePreferences',JSON.stringify(profilePreferences));}catch{}
+    try{if(!window.deliveryOffline)sessionStorage.setItem('deliveryProfilePreferences',JSON.stringify(profilePreferences));}catch{}
   }
   function profileFeedback(message){
     let node=$('profileFeedback');if(!node){node=document.createElement('p');node.id='profileFeedback';node.setAttribute('role','status');$('dimensionPrompt').closest('.ask-bar,.dimension-prompt')?.insertAdjacentElement('afterend',node);if(!node.isConnected)$('audienceProfile').appendChild(node);}
@@ -318,7 +318,12 @@
   }
   function selectedRows(task) {
     const period = $('dailyPeriodSelect').value;
-    if (period !== 'custom') return task.daily.slice(-Number(period || 7));
+    if (period !== 'custom') {
+      const end=task.daily.at(-1)?.date;if(!end)return [];
+      const start=new Date(end+'T00:00:00Z');start.setUTCDate(start.getUTCDate()-(Number(period||7)-1));
+      const first=start.toISOString().slice(0,10);
+      return task.daily.filter(r=>r.date>=first&&r.date<=end);
+    }
     const dates = all('#customDateRange input').map(n=>n.value);
     return task.daily.filter(r=>r.date>=dates[0] && r.date<=dates[1]);
   }
@@ -334,7 +339,13 @@
       for(const selector of ['#dailyFunnelNote','#dailyFunnelPanel .funnel-footnote','#dailyBreakdownPanel .data-note','#dailyInvalidDate'])text(selector,'所选日期范围暂无数据');
       return;
     }
-    metric('dailyMetrics',[[coupon?'所选进组日人数':'所选统计日人数',num(s.users),task.selectedDate],[task.metric,pct(s.rate),coupon?num(s.coupon_repurchase)+' / '+num(s.coupon):num(s.axc)+' / '+num(s.charge)],[coupon?'领券人数':'个人达标人数',num(coupon?s.coupon:s.achieved),coupon?'同一日期口径':'个人目标 '+pct(s.personalTarget)],[coupon?'领券未复购人数':'个人未达标人数',num(s.unmet),coupon?'来源真实统计':'个人渗透率均值 '+pct(s.personalRateMean)]]);
+    // 日均卡跟随周期，点击趋势日期只联动下方明细；缺测日不能当作零。
+    const rates=rows.map(r=>r.rate).filter(Number.isFinite);
+    const averageUsers=rows.length&&rows.every(r=>Number.isFinite(r.users))?rows.reduce((n,r)=>n+r.users,0)/rows.length:null;
+    const averageRate=rates.length?rates.reduce((n,r)=>n+r,0)/rates.length:null;
+    const target=state.data?.analysisTask?.targetRate;
+    const delta=Number.isFinite(target)&&Number.isFinite(averageRate)?((averageRate-target)*100).toFixed(2)+'pp':'—';
+    metric('dailyMetrics',[[coupon?'日均进组人数':'日均覆盖人数',num(averageUsers),'按 '+rows.length+' 个有数据日计算；不是跨日去重人数'],['日均目标指标',pct(averageRate),task.metric+' · '+rates.length+' 个有效日算术平均'],['与目标差异',delta,Number.isFinite(target)?'活动目标 '+pct(target):'活动整体目标尚未配置'],['有数据日期',num(rows.length),rows.length?rows[0].date+' → '+rows.at(-1).date:'所选周期暂无数据']]);
     text('#dailyChartTitle',metricName+'趋势');
     text('#movementTrend .movement-line-legend','各来源组独立统计 · 点击日期联动下方模块');
     const series = task.groupDaily?.length ? task.groupDaily : [{group:'整体',rows:task.daily}];
@@ -423,10 +434,10 @@
     all('.task-group').forEach(n=>n.classList.toggle('active',n.dataset.taskGroup===originalId));
     all('.audience-option').forEach(n=>n.classList.toggle('active',t.id==='effect'&&n.closest('.task-group').dataset.taskGroup==='summer'));
     all('.audience-option svg[data-lucide="check"]').forEach(n=>n.style.display=n.closest('.audience-option').classList.contains('active')?'':'none');
-    text('#contextTaskName',one('[data-task="'+originalId+'"]').dataset.taskName);
+    text('#contextTaskName',d.analysisTask?.name || one('[data-task="'+originalId+'"]').dataset.taskName);
     text('#contextInputName',t.id==='effect'?'近30天安心充低频购买用户':'进组日 '+t.selectedDate+' · 任务 '+t.sourceTaskId);
     text('#contextStatus','真实数据 · '+t.selectedDate);
-    text('.mock-badge','服务器真实数据');text('.sync-status','快照 '+new Date(d.builtAt).toLocaleString('zh-CN',{hour12:false}));
+    text('.mock-badge',window.deliveryOffline?'离线交互报告':'服务器真实数据');text('.sync-status','快照 '+new Date(d.builtAt).toLocaleString('zh-CN',{hour12:false}));
     packageMeta(t);crowdDirectory(t);emptyGaps();
     text('#historyReference .data-note','当前目标：'+t.metric);
     notice((d.status.lastError?d.status.lastError+'；保留上次快照。':'')+t.notes.join(' '));
@@ -438,6 +449,7 @@
     banner('effectOverview','跨日累计暂未接入','各日人数及滚动订单不可直接累加；请在原“分日效果”页签查看真实数据。');
     text('#effectSettings .baseline-label','累计口径');text('#baselineSelection','累计基准暂未接入');
     $('configureFunnel').disabled=!t.cumulative;balance(t);profile(t);daily(t);cumulative(t);$('exportReport').disabled=false;
+    window.dispatchEvent(new CustomEvent('delivery:data'));
     for(const attr of ['profile-dimension','daily-breakdown'])all('[data-'+attr+']').forEach(n=>n.classList.toggle('active',(dimensions[n.getAttribute('data-'+attr)]||n.getAttribute('data-'+attr))===(attr==='profile-dimension'?(t.portraitDimension||t.dimension):t.dimension)));
   }
   async function load(next=selection) {
@@ -446,11 +458,10 @@
     if(changedTask){const saved=profilePreferences[next.taskId];const path=saved?.path||saved?.dimensions?.slice(0,1);if(path?.length)next={...next,portraitDimension:path[0],profileDimensions:path.join(',')};chart=saved?.chart||'pie';all('#customDateRange input').forEach(n=>delete n.dataset.initialized);$('dailyPeriodSelect').value='7';$('customDateRange').classList.add('hidden');}
     const version=++state.request;selection=next;state.data=null;clearData('正在读取真实数据…');notice('正在读取真实数据…');
     try {
-      const response=await fetch('/api/bootstrap?'+new URLSearchParams(next),{headers:{Authorization:'Bearer '+(localStorage.getItem('di_agent_token')||'')}});
-      const data=await response.json();if(!response.ok)throw new Error(data.error||'读取失败');
+      const data=window.deliveryAPI?await window.deliveryAPI.bootstrap(next):await (async()=>{const response=await fetch('/api/bootstrap?'+new URLSearchParams(next),{headers:{Authorization:'Bearer '+(localStorage.getItem('di_agent_token')||'')}});const data=await response.json();if(!response.ok)throw new Error(data.error||'读取失败');return data;})();
       if(version!==state.request)return;if(data.env!=='live')throw new Error('接口未返回真实数据');
-      state.data=data;selection={taskId:data.task.id,date:data.task.selectedDate,group:data.task.selectedGroup,dimension:data.task.dimension,...(data.task.cumulative?{cumulativeGroup:data.task.cumulative.selectedGroup,cumulativeDimension:data.task.cumulative.dimension}:{}),...(data.task.portraitDimension?{portraitDimension:data.task.portraitDimension}:{}),...(data.task.profileAnalysis?{profileDimensions:data.task.profileAnalysis.dimensions.join(',')}:{})};
-      try{sessionStorage.setItem('deliveryOriginalSelection',JSON.stringify(selection));}catch{}
+      state.data=data;selection={taskId:data.analysisTask?.id||data.task.id,date:data.task.selectedDate,group:data.task.selectedGroup,dimension:data.task.dimension,...(data.task.cumulative?{cumulativeGroup:data.task.cumulative.selectedGroup,cumulativeDimension:data.task.cumulative.dimension}:{}),...(data.task.portraitDimension?{portraitDimension:data.task.portraitDimension}:{}),...(data.task.profileAnalysis?{profileDimensions:data.task.profileAnalysis.dimensions.join(',')}:{})};
+      try{if(!window.deliveryOffline)sessionStorage.setItem('deliveryOriginalSelection',JSON.stringify(selection));}catch{}
       text('#dailyMetricSelect option[value="firstOrderRate"]',data.task.metric);
       const dates=all('#customDateRange input');if(dates[0]&&data.task.daily.length&&!dates[0].dataset.initialized){dates[0].value=data.task.daily[0].date;dates[1].value=data.task.daily.at(-1).date;dates.forEach(n=>n.dataset.initialized='true');}
       chart=profilePreferences[data.task.id]?.chart||chart;
@@ -459,7 +470,7 @@
   }
   function unsupported(message) {
     ++state.request;selection={unsupported:message,unknownTask:one('.task-node.active')?.dataset.task,unknownAudience:one('.audience-option.active')?.dataset.audience};state.data=null;
-    try{sessionStorage.setItem('deliveryOriginalSelection',JSON.stringify(selection));}catch{}
+    try{if(!window.deliveryOffline)sessionStorage.setItem('deliveryOriginalSelection',JSON.stringify(selection));}catch{}
     clearData('暂无数据');notice(message);
   }
   function selectTree(node) {
@@ -473,7 +484,6 @@
   }
   window.deliveryContext=()=>state.data?JSON.stringify({task:state.data.task.sourceTaskId,taskName:state.data.task.name,kind:state.data.task.kind,builtAt:state.data.builtAt,partition:state.data.task.partition,selectedGroup:state.data.task.selectedGroup,profileAnalysis:state.data.task.profileAnalysis,distribution:state.data.task.distribution,groupSummary:state.data.task.groupSummary,evidence:state.data.task.evidence,date:state.data.task.selectedDate,dimension:state.data.task.dimension,portraitDimension:state.data.task.portraitDimension,portrait:state.data.task.portrait.slice(0,50),portraitRowsTotal:state.data.task.portrait.length,portraitUsers:state.data.task.portrait.reduce((sum,row)=>sum+row.users,0),audienceFacts:state.data.task.audienceFacts,summary:state.data.task.summary,cumulative:state.data.task.cumulative,experimentReference:state.data.task.experimentReference,groupPortrait:state.data.task.groupPortrait,crowdReferences:state.data.task.crowdReferences,deploymentReference:state.data.task.deploymentReference,notes:state.data.task.notes}):'当前未选择已接入的数据';
   window.askAi=async question=>{state.ai={question,answer:{title:'分析暂不可用',answer:'当前没有可用 Agent，请先连接 Agent 后重试。'}};window.render();};
-  function exportData(){if(!state.data)return;const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(state.data,null,2)],{type:'application/json'}));a.href=url;a.download='投放分析-'+state.data.task.id+'.json';a.click();URL.revokeObjectURL(url);}
   function fieldDetails(task) {
     const s=task.summary;
     let html='<h4>数据来源标识</h4><p>'+esc(task.sourceTaskId)+' · '+esc(task.partition)+'</p>';
@@ -495,10 +505,9 @@
   }
   function markUnavailable() {
     const pending=[
-      ['#createTask,[data-add-audience-task],.audience-actions button','缺少任务/人群管理接口，见数据范围'],
-      ['#configureReportModules','模块配置尚未实现'],
+      ['[data-add-audience-task],.audience-actions button','缺少任务/人群管理接口，见数据范围'],
       ['#selectHistoryActivity,#changeHistoryActivity,#viewHistoryMatch,#viewHistoryBreakdown,#historyFilter,#runHistory,#createCandidate,#viewSnapshot','缺少可比历史活动数据'],
-      ['#exportDailyReport','日报格式与生成流程尚未实现；可导出当前聚合 JSON'],
+      ['#exportDailyReport','日报格式与生成流程尚未实现；可导出交互 HTML 报告'],
       ['[data-task="activation"],[data-task-group="activation"] .audience-option','尚未接入该任务的数据'],
       ['[data-task-group="recall"] .audience-option','指定人群包的组合筛选尚未接入；可选任务全量和流失周期拆解'],
     ];
@@ -571,8 +580,8 @@
         text('#dialogTitle','当前分组画像口径');
         $('dialogBody').innerHTML='<p>当前标签不是投放前快照，不输出均衡通过、显著性或因果结论。</p><p>组内占比 = 该组该标签人数 / 该组总人数；最大组内占比差 = 各枚举在两组中占比绝对差的最大值，单位为百分点。零分母显示 —；缺失或不守恒的维度不计算。</p><p>'+esc(data?'来源：'+data.sourceName+'；分区：'+data.partition+(data.cohortDate?'；进组日：'+data.cohortDate:'；当前人群包快照'):'当前尚未加载画像')+'</p><p>本模块始终比较全部来源组；刷新读取服务器最近已发布快照，不触发上游任务重算。</p>';$('infoDialog').showModal();return;
       }
-      if(n.id==='refreshAnalysis'){event.stopImmediatePropagation();load();}
-      if(n.id==='exportReport'){event.stopImmediatePropagation();exportData();}
+      if(n.id==='refreshAnalysis'&&!window.deliveryActions){event.stopImmediatePropagation();load();}
+      if(n.id==='exportReport'&&!window.deliveryActions){event.stopImmediatePropagation();notice('导出组件未加载，请刷新页面重试');}
       if(['openApiGuide','openDataNote','openHelp'].includes(n.id)) {
         event.stopImmediatePropagation();
         text('#dialogTitle',n.textContent.trim());
@@ -586,7 +595,7 @@
         ])+'<p>'+esc(task?'当前来源：'+task.sourceName+'；分区：'+task.partition+'。 '+task.notes.join(' '):'当前选择暂无已接入数据。')+'</p>';
         $('dialogBody').insertAdjacentHTML('beforeend','<h4>PRD 尚缺的6类数据/配置</h4>'+table(['类别','影响'],[
           ['人群包目录与管理信息','搜索人群、任务关联、包状态/有效期、修改删除'],['实验与活动配置剩余缺口','包与实验组配置关系、配置日期和下线记录已知；实际成员、稳定分组、券批次及整体目标仍待核验'],['投放前标签快照','实验均衡与前置画像'],['同口径大盘基准','大盘效果及差异'],['曝光点击事件','资源位曝光/点击漏斗与指标'],['可比历史活动','历史验证、变化差、历史基准']
-        ])+'<p>画像支持三级联合拆分与自然语言选维度；效果组合下钻、日报、模块配置仍缺实现。暂不可用入口已标明原因；置灰不代表需求已完成。投放期新增订单/收入另需增量订单口径。</p>');
+        ])+'<p>画像支持三级联合拆分与自然语言选维度；效果组合下钻、日报仍缺实现。暂不可用入口已标明原因；置灰不代表需求已完成。投放期新增订单/收入另需增量订单口径。</p>');
         if(task)$('dialogBody').insertAdjacentHTML('beforeend',fieldDetails(task));
         $('infoDialog').showModal();return;
       }
@@ -624,7 +633,7 @@
     text('#historyReferenceEmpty strong','暂无数据 · 历史活动尚未接入');
     text('#effectSelectedHistoryName','暂无数据');
     banner('effectHistoryComparison','历史活动暂未接入','等待历史数据后在原模块展示。');
-    try{selection=JSON.parse(sessionStorage.getItem('deliveryOriginalSelection')||'null')||selection;}catch{}
+    if(!window.deliveryOffline)try{selection=JSON.parse(sessionStorage.getItem('deliveryOriginalSelection')||'null')||selection;}catch{}
     if(selection.unsupported){
       const group=all('.task-group').find(n=>n.dataset.taskGroup===selection.unknownTask);
       const node=group&&(Array.from(group.querySelectorAll('.audience-option')).find(n=>n.dataset.audience===selection.unknownAudience)||group.querySelector('.task-node'));
@@ -632,5 +641,6 @@
     }
     load();
   }
+  window.deliveryLive={load,selection:()=>({...selection}),view:()=>({chart,funnel,resourceFunnel,phase:one('#stageTabs .active')?.dataset.phase,effect:one('#effectViewTabs .active')?.dataset.effectView,period:$('dailyPeriodSelect').value,metric:$('dailyMetricSelect').value,dates:all('#customDateRange input').map(n=>n.value),profilePreferences}),restoreView(view){profilePreferences=view.profilePreferences||profilePreferences;chart=view.chart||chart;funnel=view.funnel||funnel;resourceFunnel=view.resourceFunnel||resourceFunnel;$('dailyPeriodSelect').value=view.period||'7';if(view.metric)$('dailyMetricSelect').value=view.metric;all('#customDateRange input').forEach((n,i)=>{if(view.dates?.[i])n.value=view.dates[i];});$('customDateRange').classList.toggle('hidden',$('dailyPeriodSelect').value!=='custom');renderData();}};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();

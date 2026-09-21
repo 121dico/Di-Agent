@@ -6,12 +6,14 @@
   "scripts": {
     "start": "node server/index.mjs",
     "test": "node --test test/*.test.mjs",
-    "check": "node --check server/index.mjs && node --check server/snapshot.mjs && node --check app/original-live.js && node --check app/report-runtime.js && node --check app/agent-bridge.js && node --check app/agent-widget.js"
+    "check": "node --check server/index.mjs && node --check server/snapshot.mjs && node --check app/original-live.js && node --check app/report-runtime.js && node --check app/agent-bridge.js && node --check app/agent-widget.js && node --check app/report-actions.js && node --check server/analysis-tasks.mjs && node --check server/export-report.mjs",
+    "build": "node scripts/build-offline.mjs"
   },
   "engines": {
     "node": ">=22"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "jsdom": "^29.1.1"
   }
 }

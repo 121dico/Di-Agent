@@ -1,0 +1,28 @@
+# 投放分析：任务、模块、重新分析与交互导出
+
+用户入口为投放分析左侧“新建任务”及顶部三个操作。保留原工作台和真实聚合口径。
+
+- 新建分析任务填写名称、目的并选择已接入数据源（默认当前来源）。这是分析工作区，不创建上游投放活动。按平台账号保存，名称去重；当前目录提供召回和安心充两个已接入来源。
+- 模块按阶段多选，至少保留一项。按账号与任务独立持久化；关闭整个阶段显示空态，累计工具条一起隐藏。
+- 重新分析触发后台聚合快照构建，并发点击复用在途构建。展示运行/成功/失败，保留旧发布快照；刷新页面可恢复观察进度。只读聚合网络瞬断最多重试两次；鉴权/数据校验失败不重试。
+- 导出下载 .html：内置当前来源完整聚合快照、查询依据、CSS、交互脚本；日期/分组/维度/图形切换在本地执行相同 selectTask 逻辑。沿用模块配置和视图状态，不含平台账号、token、Agent 会话或用户明细。文件包含该来源所有可选聚合筛选，数据范围在文件中说明。无 CDN、无在线依赖，CSP 禁止网络连接。模块隐藏是展示设置，不是数据脱敏。
+
+## 实现与接口
+
+Node 数据工作台新增 AnalysisTasks（runtime/analysis-tasks.json），串行变更、原子 rename、写入成功后发布内存；原 snapshot 文件不混入个人配置。
+
+- GET /api/tasks：当前账号任务、可选来源和模块目录。
+- POST /api/tasks：name、purpose、sourceId；201 返回已保存 item。
+- PATCH /api/tasks/:id：modules；返回权威 item。
+- POST /api/refresh：202 开始/复用快照构建；GET 同路径读取状态和 builtAt。
+- POST /api/export：selection、view、builtAt；返回 text/html 附件，快照变更返回 409。
+
+以上接口全部沿用 Bearer 登录，平台代理路径 /api/delivery-analysis/。npm run build 通过 esbuild 将共享筛选器编译到 offline-model.js；产物随发布，无生产 npm 依赖。
+
+## 验证与发布
+
+HTTP 回归覆盖创建/重启持久化、跨账号不可读改、非法配置、并发保存、刷新合并、失败旧快照、过期导出与无效筛选。离线 HTML 测试覆盖脚本注入、无网络、日期与表格、全阶段关闭、脚本加载次序及晚到目录不覆盖弹窗。
+
+真实路径已创建“九月召回复盘 · 功能验证”、保存模块、下载29.4MB HTML，并在 Safari 直接打开切换效果/日期；验收发现首次离线筛选跳回初始页签已修复，复测及后台完整构建结果继续记录在 Trellis 任务。
+
+部署仅影响 delivery-insight-ai 服务，备份 /root/delivery_insight_ai.before-actions-20260921。回滚代码时保留 runtime/analysis-tasks.json 与最新已发布快照。
