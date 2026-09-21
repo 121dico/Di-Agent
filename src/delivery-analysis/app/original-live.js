@@ -86,7 +86,7 @@
     if(!node){node=document.createElement('div');node.id='ditagCrowdDirectory';$('audiencePackageMeta').appendChild(node);}
     const references=task?.crowdReferences||[];
     node.hidden=!references.length;
-    node.innerHTML=references.length?'<strong>PRD 关联 Ditag 人群包</strong><p>当前人数 · 人工核验，非自动同步；点击查看规则及历史版本。</p>'+references.map(c=>'<button type="button" class="ditag-crowd-row" data-live-crowd="'+esc(c.id)+'"><span>'+esc(c.prdLabel)+'<small>ID '+esc(c.id)+' · '+esc(c.version)+' · '+esc(c.status)+'</small></span><strong>'+num(c.currentUsers)+' 人</strong></button>').join(''):'';
+    node.innerHTML=references.length?'<strong>PRD 关联 Ditag 人群包</strong><p>关联包资料，不是右侧统计范围。当前人数为人工核验，非自动同步；点击查看规则及历史版本。</p>'+references.map(c=>'<button type="button" class="ditag-crowd-row" data-live-crowd="'+esc(c.id)+'"><span>'+esc(c.prdLabel)+'<small>ID '+esc(c.id)+' · '+esc(c.version)+' · '+esc(c.status)+'</small></span><strong>'+num(c.currentUsers)+' 人</strong></button>').join(''):'';
     all('[data-task-group="recall"] .audience-option').forEach(button=>{
       const c=references.find(c=>c.prdLabel===button.dataset.audience.replaceAll(' ',''));
       button.disabled=!c;
@@ -187,7 +187,7 @@
     const task=state.data?.task;if(!task)return;
     const source=task.portraitSource,fields=profilePath(task),options=profileOptions(task);
     text('#dialogTitle','画像数据来源与统计口径');
-    $('dialogBody').innerHTML='<p>'+esc(profileScopeLabel(task))+'</p>'+table(['项目','当前取值'],[['来源表',source?.sourceName||'来源信息待更新'],['快照分区',task.portraitPartition],['统计范围',task.kind==='coupon'?'所选单个进组日，不是任务累计或Ditag包全量':'所选人群包当前快照，独立于分日效果日期'],['去重实体','DUID；人数来自源表聚合'],['画像生成时间',source?.builtAt||state.data.builtAt]])+(source?.overlapUsers>0?'<p>检测到跨组重复 '+num(source.overlapUsers)+' 人；全部组画像已跨组独立去重，两组人数不能相加。</p>':'')+'<h4>维度字段</h4>'+table(['页面维度','来源字段'],fields.map(k=>[options[k],k]))+'<h4>实际筛选条件</h4>'+table(['字段','等于'],(source?.filters||[]).map(f=>[f.name,f.value]))+'<p>标签名称沿用源表原值；未出现的类别不补成人数，未知状态不当作非会员。高低频阈值与生命周期规则需以源表生产定义为准。</p><p>Demo画像参考的是2026-08-26的安心充低频购买人群214,084人。当前任务、日期或人群不同，人数和分类不能直接对比。</p><p>当前标签不代表投放前状态；上游数据缺失不会用Demo数字替代。</p>';
+    $('dialogBody').innerHTML='<p>'+esc(profileScopeLabel(task))+'</p>'+table(['项目','当前取值'],[['来源表',source?.sourceName||'来源信息待更新'],['快照分区',task.portraitPartition],['统计范围',task.kind==='coupon'?'来源任务所选单个进组日；未按左侧Ditag包筛选，不是任务累计或Ditag包全量':'所选人群包当前快照，独立于分日效果日期'],['去重实体','DUID；人数来自源表聚合'],['画像生成时间',source?.builtAt||state.data.builtAt]])+(source?.overlapUsers>0?'<p>检测到跨组重复 '+num(source.overlapUsers)+' 人；全部组画像已跨组独立去重，两组人数不能相加。</p>':'')+'<h4>维度字段</h4>'+table(['页面维度','来源字段'],fields.map(k=>[options[k],k]))+'<h4>实际筛选条件</h4>'+table(['字段','等于'],(source?.filters||[]).map(f=>[f.name,f.value]))+(task.kind==='coupon'?'<p>生命周期读取 charge_life_cycle（老用户、成长期用户等）；流失周期读取 activity_cycle（30–60天、60–90天、90–180天等）。两者是不同分类，不互相替代。来源任务与左侧三个私家车包的成员映射尚未核验，不能把当前结果视作这些包的画像。</p>':'')+'<p>标签名称沿用源表原值；未出现的类别不补成人数，未知状态不当作非会员。高低频阈值与生命周期规则需以源表生产定义为准。</p><p>Demo画像参考的是2026-08-26的安心充低频购买人群214,084人。当前任务、日期或人群不同，人数和分类不能直接对比。</p><p>当前标签不代表投放前状态；上游数据缺失不会用Demo数字替代。</p>';
     $('infoDialog').showModal();
   }
   const profilePath=task=>task.profileAnalysis?.dimensions||[task.portraitDimension||task.dimension];

@@ -167,12 +167,18 @@ button[data-unavailable], input[data-unavailable], #baselineButtons button:disab
 #ditagCrowdDirectory { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 12px; }
 #ditagCrowdDirectory > strong { font-size: 12px; color: var(--ink); }
 #ditagCrowdDirectory p { margin: 6px 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
-.ditag-crowd-row { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 0; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--ink); text-align: left; font-size: 11px; cursor: pointer; }
+.ditag-crowd-row { display: flex; flex-wrap: wrap; width: 100%; align-items: center; justify-content: space-between; gap: 6px 8px; padding: 9px 0; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--ink); text-align: left; font-size: 11px; cursor: pointer; }
+.ditag-crowd-row > span { flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; }
 .ditag-crowd-row small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
-.ditag-crowd-row > strong { white-space: nowrap; }
+.ditag-crowd-row > strong { margin-left: auto; max-width: 100%; overflow-wrap: anywhere; }
 .ditag-crowd-row:hover { background: var(--blue-soft); }
 
+/* 隐式 grid 的最小内容宽度会被标题和人数撑大，继而被侧栏裁切；约束轨道并让完整字段换行。 */
+#audiencePackageMeta { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+#audiencePackageMeta > * { min-width: 0; }
+#audiencePackageMeta .package-heading > strong { white-space: normal; overflow-wrap: anywhere; }
 #audiencePackageMeta .package-meta-row strong { min-width: 0; overflow-wrap: anywhere; }
+#ditagCrowdDirectory .link-button { max-width: 100%; white-space: normal; text-align: left; }
 
 .boss-reference { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; line-height: 1.6; }
 .boss-reference > strong { color: var(--ink); }
