@@ -16,6 +16,7 @@
   function text(selector, value) { const node = one(selector); if (node) node.textContent = value; }
   function notice(message) { $('phaseAvailabilityNote').textContent = message; $('phaseAvailabilityNote').classList.remove('hidden'); }
   function metric(id, cards) {
+    const container=$(id);if(!container)return;while(container.querySelectorAll('.metric-card').length<cards.length){const card=document.createElement('article');card.className='metric-card';card.innerHTML='<div class="metric-top"><span></span></div><strong></strong><small></small>';container.appendChild(card);}
     all('#'+id+' .metric-card').forEach((node,index) => {
       const card = cards[index];
       if (card) node.querySelector('.metric-top span').textContent = card[0];
@@ -293,7 +294,7 @@
       const pie = rows.slice(0,5);
       if (rows.length > 5) pie.push({value:'其他',users:rows.slice(5).reduce((s,r)=>s+r.users,0)});
       let offset = 0;
-      const segments = pie.map((r,i)=>{const ratio = total ? 100*r.users/total : 0, start=offset; offset+=ratio;return '<circle data-profile-index="'+i+'" class="profile-pie-segment" cx="80" cy="80" r="54" pathLength="100" stroke="'+colors[i]+'" stroke-dasharray="'+ratio+' '+(100-ratio)+'" stroke-dashoffset="'+(-start)+'"><title>'+esc(r.value)+' '+num(r.users)+' 人</title></circle>';}).join('');
+      const segments = pie.map((r,i)=>{const ratio = total ? 100*r.users/total : 0, start=offset; offset+=ratio;return '<circle data-profile-index="'+i+'" class="profile-pie-segment" cx="80" cy="80" r="54" pathLength="100" stroke="'+colors[i]+'" stroke-dasharray="'+ratio+' '+(100-ratio)+'" stroke-dashoffset="'+(-start)+'"><title>'+esc(r.value)+' '+num(r.users)+' 人 · '+pct(total?r.users/total:null)+'</title></circle>';}).join('');
       $('profileBars').innerHTML = '<div class="profile-pie-grid"><div class="profile-pie-chart"><svg class="profile-pie-ring" viewBox="0 0 160 160" aria-label="'+esc(label)+'占比结构"><circle class="profile-pie-track" cx="80" cy="80" r="54"></circle>'+segments+'</svg><div class="profile-pie-detail" aria-live="polite"></div></div><div class="profile-pie-legend">'+pie.map((r,i)=>'<div class="profile-pie-item" role="button" aria-label="'+esc(r.value+'，'+num(r.users)+'人，点击选择下一级维度')+'" tabindex="0" data-profile-index="'+i+'"><i class="profile-pie-swatch" style="background:'+colors[i]+'"></i><strong>'+esc(r.value)+'</strong><small>'+num(r.users)+' · '+pct(total?r.users/total:null)+'</small></div>').join('')+'</div></div>';
     }
   }
@@ -346,7 +347,8 @@
     const rates=rows.map(r=>r.rate).filter(Number.isFinite);
     const averageUsers=rows.length&&rows.every(r=>Number.isFinite(r.users))?rows.reduce((n,r)=>n+r.users,0)/rows.length:null;
     const averageRate=rates.length?rates.reduce((n,r)=>n+r,0)/rates.length:null;
-    const target=state.data?.analysisTask?.targetRate;
+    const config=state.data?.analysisTask?.effect;
+    const target=config?.metric===(coupon?'coupon_repurchase_rate':'order_penetration_rate')&&config.startDate<=selectedPeriod(task).start?config.targetRate:null;
     const delta=Number.isFinite(target)&&Number.isFinite(averageRate)?((averageRate-target)*100).toFixed(2)+'pp':'—';
     metric('dailyMetrics',[[coupon?'日均进组人数':'日均覆盖人数',num(averageUsers),'按 '+rows.length+' 个有数据日计算；不是跨日去重人数'],['日均目标指标',pct(averageRate),task.metric+' · '+rates.length+' 个有效日算术平均'],['与目标差异',delta,Number.isFinite(target)?'活动目标 '+pct(target):'活动整体目标尚未配置'],['有数据日期',num(rows.length),rows.length?rows[0].date+' → '+rows.at(-1).date:'所选周期暂无数据']]);
     text('#dailyChartTitle',metricName+'趋势');
@@ -389,11 +391,14 @@
     text('#dailyInvalidTitle',coupon?'所选日领券未复购画像':'所选日未达标画像'); text('#dailyInvalidDate',task.selectedDate);
     $('dailyInvalidList').removeAttribute('data-empty-visual');
     $('dailyInvalidList').innerHTML=breakdown.filter(r=>r.unmet>0).sort((a,b)=>b.unmet-a.unmet).map((r,i)=>'<div class="cause-row"><span class="cause-index">'+String(i+1).padStart(2,'0')+'</span><span><strong>'+esc(r.value)+'</strong><small>'+num(r.unmet)+' 人 · '+pct(s.unmet?r.unmet/s.unmet:null)+'</small></span></div>').join('') || '所选范围暂无未达成人群';
-    text('#dailyFunnelPanel .section-kicker',coupon?'发券复购漏斗':'覆盖与个人达标');
-    text('#dailyFunnelNote',task.selectedDate+' · '+(coupon?'进组 → 领券 → 领券且复购；观察入组后第 1–7 天':'样本覆盖 → 当日个人达标；不是曝光点击行为漏斗'));
-    text('#dailyFunnelPanel .funnel-footnote',coupon?'完整发券 '+num(s.full)+' 人，其中复购 '+num(s.full_repurchase)+' 人；独立子集，不拼入主漏斗。':'达标人数沿用当日源标记，订单指标为近30天滚动值；未提供曝光、点击。');
-    const stages=coupon?[['进组',s.users],['领券',s.coupon],['领券且 7 日复购',s.coupon_repurchase]]:[['当日样本覆盖',s.users],['当日个人达标',s.achieved??null]];
-    renderFunnel('dailyFunnelVisual',stages.length?stages:emptyStages,funnel);
+    text('#dailyFunnelPanel .section-kicker',coupon?'所选周期 · 发券复购漏斗':'所选周期 · 覆盖与个人达标');
+    const available=task.periodFunnels?.dates.filter(date=>date>=period.start&&date<=period.end)||[];
+    const periodKey=available.length?available[0]+'/'+available.at(-1):'';
+    const interval=task.periodFunnels?.periods[periodKey]?.find(item=>item.group===task.selectedGroup)?.summary;
+    text('#dailyFunnelNote',period.start+' → '+period.end+' · '+(interval?'周期内独立去重；点击趋势日期不改变此漏斗':'周期聚合尚未准备完成，保留空值'));
+    text('#dailyFunnelPanel .funnel-footnote',interval?(coupon?'完整发券 '+num(interval.full)+' 人，其中复购 '+num(interval.full_repurchase)+' 人；完整发券是独立子集，不拼入主漏斗。':'期间任一日个人达标；不等于活动新增订单。')+' 未提供曝光、点击事件。':'此处需要周期独立去重结果，不用单日数据或分日相加代替。');
+    const stages=interval?(coupon?[['周期进组',interval.users],['周期领券',interval.coupon],['领券且 7 日复购',interval.coupon_repurchase]]:[['期间覆盖',interval.users],['期间曾达标',interval.achieved]]):emptyStages;
+    renderFunnel('dailyFunnelVisual',stages,funnel);
   }
   function cumulative(task) {
     const c=task.cumulative;if(!c)return;
@@ -404,6 +409,8 @@
     const difference=Number.isFinite(treatment?.rate)&&Number.isFinite(control?.rate)?((treatment.rate-control.rate)*100).toFixed(2)+'pp':'—';
     const overlap=c.groupOverlap>0?'各组人数合计比整体去重多 '+num(c.groupOverlap)+'，存在跨组重叠；仅作描述性比较。':'来源分组用于描述性比较。';
     banner('effectOverview',range+' · '+selected+'累计去重 '+num(s.users)+' 人',c.note+' '+overlap);
+    const config=state.data?.analysisTask?.effect;
+    const target=config?.metric===(coupon?'coupon_repurchase_rate':'achievement_rate')&&config.startDate===c.startDate?config.targetRate:null;
     metric('effectMetrics',[
       [coupon?'累计去重进组人数':'期间去重覆盖人数',num(s.users),range],
       [c.metric,pct(s.rate),num(s.success)+' / '+num(s.eligible)],
@@ -411,6 +418,8 @@
       [coupon?'领券后未复购人数':'期间从未达标人数',num(s.unmet),'当前范围内集合差'],
       [treatment?groupName(treatment.group,task.kind)+'累计效果':'来源组累计效果',pct(treatment?.rate),num(treatment?.users)+' 人'],
       [control?groupName(control.group,task.kind)+'累计效果':'另一来源组累计效果',pct(control?.rate),'前组减后组 '+difference],
+      ['活动目标',pct(target),Number.isFinite(target)?'用户配置 · 与当前累计指标和起始日一致':config?'配置指标或起始日与累计范围不一致':'尚未配置活动目标'],
+      ['目标达成率',pct(Number.isFinite(target)&&target>0&&Number.isFinite(s.rate)?s.rate/target:null),Number.isFinite(target)&&Number.isFinite(s.rate)?'实际效果减目标 '+((s.rate-target)*100).toFixed(2)+'pp':'等待同口径目标'],
     ]);
     text('#effectSettings .baseline-label','累计对比');text('#baselineSelection',selected+' · '+range+' · 统计截至 '+c.observedThrough);
     all('#baselineButtons button').forEach(b=>{b.disabled=b.dataset.baseline!=='control';b.classList.toggle('active',b.dataset.baseline==='control');b.title=b.disabled?'缺少对应基准数据，见数据范围说明':'';});
@@ -539,7 +548,7 @@
       ['来源表',task.sourceName],['来源任务 / 人群标识',task.sourceTaskId],['数据分区',task.partition],['生成时间',current.builtAt],
       ['分析周期',range],['当前组别',group==='all'?'整体':groupName(group,task.kind)],['画像 / 明细所选日期',dailyMode?(valid?task.selectedDate:'所选范围暂无数据'):'整个累计周期'],
       ['效果指标',dailyMode?task.metric:scope?.metric],['成功分子',num(numerator)],['分母 · '+denominatorLabel,num(denominator)],
-      ['当前效果',pct(summary?.rate)],['活动整体目标',Number.isFinite(current.analysisTask?.targetRate)?pct(current.analysisTask.targetRate):'尚未配置'],
+      ['当前效果',pct(summary?.rate)],['配置目标（不一定适用于当前范围）',Number.isFinite(current.analysisTask?.effect?.targetRate)?pct(current.analysisTask.effect.targetRate)+' · '+({coupon_repurchase_rate:'发券后7日复购率',order_penetration_rate:'近30天订单渗透率',achievement_rate:'累计个人达标率'}[current.analysisTask.effect.metric])+' · 起始 '+current.analysisTask.effect.startDate+'；仅在指标与时间口径一致时比较':'尚未配置'],
       ['对比基准','仅已接入来源组；大盘与可比历史活动未接入'],
     ])+'<p>'+esc(dailyMode?'上方日均卡按周期内有效日期算术平均；本表效果及下方画像为当前选中日期，不能当作累计效果。':scope?.note||'累计数据未接入')+'</p><p>'+esc(task.notes.join(' '))+'</p><h4>标签及未达成人群依据</h4>'+table(['标签','人数','未达成'],(dailyMode?(valid?task.distribution:[]):scope?.distribution||[]).map(r=>[r.value,num(r.users),num(r.unmet)]))+'<h4>来源聚合查询 · '+queries.length+' 条</h4><p>这些是构建已发布快照的查询；页面筛选读取快照，不在点击时重新扫描源表。此处展示前50条，完整依据保留在导出快照。</p>'+queries.slice(0,50).map(q=>'<details><summary>'+esc(q.queryId||'来源查询')+' · '+esc(q.durationMs??'—')+' ms</summary><pre class="analysis-query">'+esc(JSON.stringify(q.query,null,2))+'</pre></details>').join('');
     $('infoDialog').showModal();

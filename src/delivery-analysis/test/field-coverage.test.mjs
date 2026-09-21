@@ -13,6 +13,7 @@ function gateway() {
       for(const field of query.fields)assert.ok(!['duid','first_axc_order_id','last_axc_order_id'].includes(field.name)||field.aggregation,'不能选择原始用户/订单 ID');
       if(query.fields.length===1&&query.group_by.length===1&&query.group_by[0]==='dt')return [{dt:'2026-09-19'}];
       const values={dt:'2026-09-19',group_type:'A',entry_dt:'2026-08-24',stat_dt:'2026-09-19',users:2,records:2,axc:1,charge:10,achieved:1,unmet:1,target_min:.12,target_max:.12,target_count:2,rate_sum:.3,rate_count:2,rate_min:.1,rate_max:.2,is_entry:1,is_coupon:1,is_full_coupon:1,is_repurchase_7d:1,is_full_coupon_repurchase_7d:0};
+      if(query.filters.some(f=>f.operator==='EQ'&&f.name==='is_full_coupon_repurchase_7d'&&f.value===1))return [];
       return [Object.fromEntries(query.fields.map(f=>[f.alias||f.name,values[f.alias||f.name]??'已知']))];
     },
   };

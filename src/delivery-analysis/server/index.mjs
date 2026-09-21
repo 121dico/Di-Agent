@@ -7,6 +7,8 @@ import { Gateway } from './gateway.mjs';
 import { SnapshotStore } from './store.mjs';
 import {exportReport} from './export-report.mjs';
 import {AnalysisTasks,MODULES} from './analysis-tasks.mjs';
+import {selectAnalysis} from './analysis-selection.mjs';
+import {crowdCatalog,METRICS,OBSERVED} from './analysis-config.mjs';
 import { buildSnapshot, selectTask } from './snapshot.mjs';
 
 const ROOT=dirname(dirname(fileURLToPath(import.meta.url)));
@@ -41,6 +43,13 @@ export function createServer({gateway,store,appDirectory=join(ROOT,'app'),tasks}
           if(req.method==='GET')return json(res,200,{status:store.status,builtAt:store.snapshot?.builtAt});
         }
         if(tasks && url.pathname==='/api/tasks' && req.method==='POST')return json(res,201,{item:await tasks.create(user.id,await readBody(req),store.snapshot)});
+        const audiencePath=url.pathname.match(/^\/api\/tasks\/([^/]+)\/audiences$/);
+        if(tasks && audiencePath && req.method==='POST')return json(res,201,{item:await tasks.createAudience(user.id,decodeURIComponent(audiencePath[1]),await readBody(req),store.snapshot)});
+        if(tasks && /^\/api\/tasks\/[^/]+$/.test(url.pathname) && req.method==='DELETE')return json(res,200,await tasks.remove(user.id,decodeURIComponent(url.pathname.slice(11)),store.snapshot));
+        if(url.pathname==='/api/crowds' && req.method==='GET'){
+          const query=(url.searchParams.get('q')||'').trim().toLowerCase();
+          return json(res,200,{items:crowdCatalog(store.snapshot).filter(c=>!query||c.id.includes(query)||c.name.toLowerCase().includes(query)),note:'已核验的关联包目录；暂未接通 Ditag 全站搜索。可录入其他包 ID 保存待核验关联。'});
+        }
         if(tasks && url.pathname.startsWith('/api/tasks/') && req.method==='PATCH')return json(res,200,{item:await tasks.update(user.id,decodeURIComponent(url.pathname.slice(11)),await readBody(req),store.snapshot)});
         if(tasks && url.pathname==='/api/export' && req.method==='POST'){
           const input=await readBody(req);
@@ -55,13 +64,13 @@ export function createServer({gateway,store,appDirectory=join(ROOT,'app'),tasks}
         const snapshot=store.snapshot;
         const sources=snapshot.tasks.map(t=>({id:t.id,name:t.name,kind:t.kind,partition:t.partition}));
         const items=tasks?tasks.list(user.id,snapshot):sources;
-        if(url.pathname==='/api/tasks')return json(res,200,{items,sources,modules:MODULES});
+        if(url.pathname==='/api/tasks')return json(res,200,{items,sources,modules:MODULES,metrics:METRICS,observedMetrics:OBSERVED});
         const id=url.searchParams.get('taskId') || sources[0].id;
         const analysisTask=tasks?tasks.get(user.id,id,snapshot):null;
         if(tasks&&!analysisTask)return json(res,404,{error:'任务不存在'});
         const sourceId=analysisTask?.sourceId||id;
         let task;
-        try {task=selectTask(snapshot,sourceId,{crowdId:url.searchParams.get('crowdId'),date:url.searchParams.get('date'),group:url.searchParams.get('group')||'all',dimension:url.searchParams.get('dimension')||'charge_life_cycle',portraitDimension:url.searchParams.get('portraitDimension')||undefined,profileDimensions:url.searchParams.get('profileDimensions')||undefined,cumulativeGroup:url.searchParams.get('cumulativeGroup')||'all',cumulativeDimension:url.searchParams.get('cumulativeDimension')||'charge_life_cycle'});} catch {
+        try {task=selectAnalysis(snapshot,analysisTask||{sourceId},{crowdId:url.searchParams.get('crowdId'),date:url.searchParams.get('date'),group:url.searchParams.get('group')||'all',dimension:url.searchParams.get('dimension')||'charge_life_cycle',portraitDimension:url.searchParams.get('portraitDimension')||undefined,profileDimensions:url.searchParams.get('profileDimensions')||undefined,cumulativeGroup:url.searchParams.get('cumulativeGroup')||'all',cumulativeDimension:url.searchParams.get('cumulativeDimension')||'charge_life_cycle'});} catch {
           return json(res,400,{error:'日期、分组或维度不在当前数据范围内'});
         }
         if(!task)return json(res,404,{error:'该任务尚未接入真实数据'});

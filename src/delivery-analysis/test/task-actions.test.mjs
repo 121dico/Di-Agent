@@ -55,3 +55,51 @@ test('刷新合并并发请求，失败后原快照仍可读取',async()=>{
   assert.equal((await(await fetch(base+'/api/bootstrap?taskId=coupon')).json()).task.summary.users,10);
  }finally{server.closeAllConnections();await new Promise(r=>server.close(r));await rm(dir,{recursive:true,force:true});}
 });
+
+test('人群分析配置隔离保存，分组至少两个，删除只移除分析',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'audience-analysis-'));let id;
+ const input={name:'私家车召回分析',crowdId:'1011337400',effect:{metric:'coupon_repurchase_rate',observedMetrics:['users','coupon'],targetRate:0.2,startDate:'2026-08-12'},experiment:{enabled:true,groups:[{name:'对照组',crowdId:'20001'},{name:'实验组',crowdId:'20002'}]}};
+ try{
+  await serve(dir,async call=>{
+   assert.equal((await call('/api/tasks/coupon/audiences',{...input,experiment:{enabled:true,groups:input.experiment.groups.slice(0,1)}})).status,400);
+   const response=await call('/api/tasks/coupon/audiences',input);assert.equal(response.status,201);id=(await response.json()).item.id;
+   const selected=await(await call('/api/bootstrap?taskId='+id)).json();
+   assert.equal(selected.analysisTask.effect.targetRate,0.2);assert.equal(selected.task.selectedCrowd.id,'1011337400');assert.ok(selected.task.scopeUnavailable);assert.deepEqual(selected.task.summary,{});
+   assert.equal((await call('/api/tasks/'+id,undefined,'bob','DELETE')).status,404);
+   assert.equal((await call('/api/tasks/'+id,{...input,name:'修改后的分析'},'alice','PATCH')).status,200);
+  });
+  await serve(dir,async call=>{
+   assert.equal((await(await call('/api/bootstrap?taskId='+id)).json()).analysisTask.name,'修改后的分析');
+   assert.equal((await call('/api/tasks/'+id,undefined,'alice','DELETE')).status,200);
+   assert.equal((await call('/api/bootstrap?taskId='+id)).status,404);
+   assert.equal((await(await call('/api/bootstrap?taskId=coupon')).json()).task.summary.users,10);
+  });
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+test('根任务配置整体实验包后不能继续显示来源全量',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'analysis-root-scope-'));
+ try{await serve(dir,async call=>{
+  const response=await call('/api/tasks/coupon',{name:'召回任务',crowdId:'1011337400',effect:{metric:'coupon_repurchase_rate',observedMetrics:['users'],targetRate:.2,startDate:'2026-08-12'},experiment:{enabled:true,groups:[{name:'对照',crowdId:'20001'},{name:'实验',crowdId:'20002'}]}},'alice','PATCH');assert.equal(response.status,200);
+  const selected=await(await call('/api/bootstrap?taskId=coupon')).json();assert.equal(selected.task.selectedCrowd.id,'1011337400');assert.deepEqual(selected.task.summary,{});assert.ok(selected.task.scopeUnavailable);
+ });}finally{await rm(dir,{recursive:true,force:true});}
+});
+
+test('根任务整体人群范围不随实验开关丢失，非数字ID拒绝保存',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'analysis-root-crowd-'));
+ const input={name:'召回任务',crowdId:'1011337400',effect:{metric:'coupon_repurchase_rate',observedMetrics:['users'],targetRate:null,startDate:'2026-08-12'},experiment:{enabled:false,groups:[]}};
+ try{await serve(dir,async call=>{
+  assert.equal((await call('/api/tasks/coupon',input,'alice','PATCH')).status,200);
+  assert.equal((await(await call('/api/bootstrap?taskId=coupon')).json()).task.selectedCrowd.id,'1011337400');
+  assert.equal((await call('/api/tasks/coupon',{...input,crowdId:'invalid'},'alice','PATCH')).status,400);
+ });}finally{await rm(dir,{recursive:true,force:true});}
+});
+
+test('内置任务分日子模块配置保存版本，单选子模块自动包含分日容器',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'daily-modules-'));
+ try{await serve(dir,async call=>{
+  assert.equal((await call('/api/tasks/coupon',{modules:['movementTrend']},'alice','PATCH')).status,200);
+  const selected=await(await call('/api/bootstrap?taskId=coupon')).json();
+  assert.equal(selected.analysisTask.moduleVersion,2);assert.deepEqual(selected.analysisTask.modules,['movementTrend','subview-movement']);
+ });}finally{await rm(dir,{recursive:true,force:true});}
+});

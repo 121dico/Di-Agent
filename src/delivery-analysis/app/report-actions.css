@@ -19,3 +19,21 @@ body.report-offline .shell { grid-template-columns: minmax(0,1fr); }
 @media(max-width:640px){.module-config-group{grid-template-columns:1fr;}}
 
 .two-col:has(> .report-module-hidden) { grid-template-columns: minmax(0,1fr); }
+
+/* 复用原任务树和表单层级；长人群名在侧栏内部换行。 */
+.managed-audience-tree { padding-left: 10px; min-width: 0; }
+.analysis-child { border: 0; background: transparent; text-align: left; min-width: 0; flex: 1; padding: 10px 6px; color: var(--ink); cursor: pointer; }
+.analysis-child span, .analysis-child small { display: block; overflow-wrap: anywhere; }
+.analysis-child small { color: var(--muted); margin-top: 4px; }
+.analysis-child.active { background: var(--blue-soft, #eff6ff); color: var(--blue, #2563eb); }
+.analysis-group-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; margin-bottom: 12px; }
+.report-form .analysis-check { display: flex; flex-direction: row; align-items: center; }
+.report-form .analysis-check input { width: auto; }
+#analysisGroups[hidden] { display: none; }
+#analysisCrowdResults { display: flex; flex-wrap: wrap; gap: 8px; }
+#analysisCrowdResults p { flex-basis: 100%; }
+@media (max-width: 640px) { .analysis-group-row { grid-template-columns: 1fr; } }
+.report-config-summary { margin: 12px 0; padding: 10px 12px; background: var(--blue-soft, #eff6ff); color: var(--ink); font-size: 12px; overflow-wrap: anywhere; }
+.managed-audience-tree .audience-row { display: grid; grid-template-columns: minmax(0,1fr); gap: 0; }
+.managed-audience-tree .audience-actions { display: flex; justify-content: flex-end; gap: 12px; padding: 0 6px 8px; }
+.managed-audience-tree .audience-actions button { white-space: nowrap; min-width: 28px; }

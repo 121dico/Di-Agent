@@ -6,7 +6,7 @@ import {exportReport} from '../server/export-report.mjs';
 import {MODULES} from '../server/analysis-tasks.mjs';
 const row={date:'2026-08-12',group_type:'treatment_group',users:10,records:10,coupon:6,coupon_repurchase:3};
 const later={...row,date:'2026-08-13',users:20,coupon:10,coupon_repurchase:2};
-const snapshot={version:1,builtAt:'2026-09-21T00:00:00Z',queries:[],tasks:[{id:'coupon',name:'召回任务',kind:'coupon',notes:['真实口径'],sourceName:'召回源',sourceId:'recall',sourceTaskId:'184765378',partition:'2026-09-16',metric:'复购率',dates:['2026-08-12','2026-08-13'],rows:[row,later],dimensions:{charge_life_cycle:[{...row,value:'老用户'},{...later,value:'新用户'}]}}]};
+const snapshot={version:1,builtAt:'2026-09-21T00:00:00Z',queries:[],tasks:[{id:'coupon',name:'召回任务',kind:'coupon',notes:['真实口径'],sourceName:'召回源',sourceId:'recall',sourceTaskId:'184765378',partition:'2026-09-16',metric:'复购率',dates:['2026-08-12','2026-08-13'],rows:[row,later],periodFunnels:{dates:['2026-08-12','2026-08-13'],periods:{'2026-08-12/2026-08-13':[{group:'all',summary:{users:25,coupon:12,coupon_repurchase:4}}]}},dimensions:{charge_life_cycle:[{...row,value:'老用户'},{...later,value:'新用户'}]}}]};
 const report={id:'report-id',sourceId:'coupon',name:'九月报告 </script><script>window.injected=1</script>',purpose:'召回',modules:MODULES.map(m=>m.id)};
 const appDirectory=fileURLToPath(new URL('../app',import.meta.url));
 test('离线HTML不依赖网络，切换日期、表格与模块后数据仍正确',async()=>{
@@ -18,11 +18,11 @@ test('离线HTML不依赖网络，切换日期、表格与模块后数据仍正�
   await new Promise(r=>setTimeout(r,50));const d=dom.window.document;
   assert.equal(dom.window.injected,undefined);
   assert.match(d.getElementById('dailyMetrics').textContent,/35.00%/);
-  assert.equal(d.querySelector('#dailyFunnelVisual .funnel-stage:last-child strong').textContent,'3');
+  assert.equal(d.querySelector('#dailyFunnelVisual .funnel-stage:last-child strong').textContent,'4');
   assert.equal(d.getElementById('contextTaskName').textContent,report.name);
   d.querySelector('[data-live-date="2026-08-13"]').dispatchEvent(new dom.window.MouseEvent('click',{bubbles:true}));await new Promise(r=>setTimeout(r,20));
   assert.match(d.getElementById('dailyMetrics').textContent,/35.00%/);
-  assert.equal(d.querySelector('#dailyFunnelVisual .funnel-stage:last-child strong').textContent,'2');
+  assert.equal(d.querySelector('#dailyFunnelVisual .funnel-stage:last-child strong').textContent,'4');
   d.querySelector('[data-profile-view="table"]').click();assert.ok(d.querySelector('#profileBars table'));
   d.getElementById('configureReportModules').click();
   d.querySelector('input[value="experimentBalance"]').checked=false;

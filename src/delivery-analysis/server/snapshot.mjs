@@ -1,3 +1,4 @@
+import {buildDailyUnion,buildPeriodFunnels} from './daily.mjs';
 import {buildProfileCube,buildAllGroupPortrait,groupProfileSource,selectProfile} from './profile.mjs';
 import {deploymentReference} from './deployment-reference.mjs';
 import {crowdReferences} from './crowd-reference.mjs';
@@ -135,7 +136,9 @@ export async function buildSnapshot(gateway) {
     const cumulative=await buildCumulative({query,kind,conditions,dimensions:Object.keys(dimensions),dates});
     cumulative.observedThrough=partitions[kind];
     const allGroupPortrait=kind==='coupon'?await buildAllGroupPortrait({query,kind,conditions,source:{rows,dimensions,profileCube},keys:Object.keys(dimensions),day}):null;
-    tasks.push({allGroupPortrait,profileCube,cumulative,id:kind,name:kind==='coupon'?'召回复购发券实验':'安心充低频人群分析',kind,
+    const dailyUnion=await buildDailyUnion({query,kind,conditions,dimensions:Object.keys(dimensions),day,source:{rows,dimensions},control:allGroupPortrait});
+    const periodFunnels=await buildPeriodFunnels({query,kind,conditions,dates,cumulative,day});
+    tasks.push({periodFunnels,dailyUnion,allGroupPortrait,profileCube,cumulative,id:kind,name:kind==='coupon'?'召回复购发券实验':'安心充低频人群分析',kind,
       metric:kind==='coupon'?'发券后 7 日复购率':'近 30 天订单渗透率',
       sourceId:sources[kind].source_id,sourceName:sources[kind].name,partition:partitions[kind],
       sourceTaskId:kind==='coupon'?'184765378':'crowd_axc_low_freq',dates,rows,dimensions,
@@ -183,6 +186,15 @@ function groupPortrait(task,selectedDate) {
   return {basis:'current_snapshot',conclusion:null,partition:source.partition,sourceName:source.sourceName,cohortDate:task.audience?null:selectedDate,groups,dimensions};
 }
 
+export function unavailableCrowd(task,crowd,references=[]){
+  return {id:task.id,kind:task.kind,name:task.name,sourceTaskId:task.sourceTaskId,sourceId:task.sourceId,sourceName:task.sourceName,
+      partition:task.partition,metric:task.metric,selectedCrowd:crowd,crowdReferences:references,
+      scopeUnavailable:'尚缺 Ditag 人群包 '+crowd.id+' 与投放记录的成员关联，包内画像、分组和效果尚不能计算。',
+      selectedDate:null,selectedGroup:'all',dimension:'charge_life_cycle',dimensionOptions:DIMENSIONS,
+      summary:{},distribution:[],portrait:[],daily:[],groupDaily:[],groupSummary:[],groupPortrait:null,cumulative:null,
+      notes:['Ditag当前人数为人工核验资料，不是投放期进组人数。'],evidence:[],fieldCoverage:[]};
+}
+
 export function selectTask(snapshot,id,{date,group='all',dimension='charge_life_cycle',portraitDimension,profileDimensions,cumulativeGroup='all',cumulativeDimension='charge_life_cycle',crowdId}={}) {
   const task=snapshot.tasks.find(t=>t.id===id);
   if(!task)return null;
@@ -190,12 +202,7 @@ export function selectTask(snapshot,id,{date,group='all',dimension='charge_life_
     const references=crowdReferences(task),crowd=references.find(c=>c.id===crowdId);
     if(!crowd)throw new Error('invalid crowd selection');
     // 来源表没有可核验的包成员映射，不能把任务全量当成某个Ditag包的效果。
-    return {id:task.id,kind:task.kind,name:task.name,sourceTaskId:task.sourceTaskId,sourceId:task.sourceId,sourceName:task.sourceName,
-      partition:task.partition,metric:task.metric,selectedCrowd:crowd,crowdReferences:references,
-      scopeUnavailable:'尚缺 Ditag 人群包 '+crowd.id+' 与投放记录的成员关联，包内画像、分组和效果尚不能计算。',
-      selectedDate:null,selectedGroup:'all',dimension:'charge_life_cycle',dimensionOptions:DIMENSIONS,
-      summary:{},distribution:[],portrait:[],daily:[],groupDaily:[],groupSummary:[],groupPortrait:null,cumulative:null,
-      notes:['Ditag当前人数为人工核验资料，不是投放期进组人数。'],evidence:[],fieldCoverage:[]};
+    return unavailableCrowd(task,crowd,references);
   }
   const selectedDate=date || task.dates.at(-1);
   const selectedProfile=typeof profileDimensions==='string'?profileDimensions.split(','):profileDimensions;
@@ -206,17 +213,17 @@ export function selectTask(snapshot,id,{date,group='all',dimension='charge_life_
   const groups=[...new Set(task.rows.map(r=>r.group_type))];
   if(group!=='all' && !groups.includes(group))throw new Error('invalid group');
   const scoped=rows=>rows.filter(r=>r.date===selectedDate && (group==='all'||r.group_type===group));
-  const summary=summarize(task.kind,scoped(task.rows));
+  const summary=group==='all'&&task.dailyUnion?task.dailyUnion.rows.find(r=>r.date===selectedDate):summarize(task.kind,scoped(task.rows));
   const dimensionRows=scoped(task.dimensions[dimension]);
   const comparisonRows=task.dimensions[dimension].filter(r=>r.date===selectedDate);
   const comparisonValues=[...new Set(comparisonRows.map(r=>r.value))];
-  const distribution=[...new Set(dimensionRows.map(r=>r.value))].map(value=>({value,...summarize(task.kind,dimensionRows.filter(r=>r.value===value))})).sort((a,b)=>b.users-a.users);
+  const distribution=group==='all'&&task.dailyUnion?task.dailyUnion.dimensions[dimension].rows.filter(r=>r.date===selectedDate).slice().sort((a,b)=>b.users-a.users):[...new Set(dimensionRows.map(r=>r.value))].map(value=>({value,...summarize(task.kind,dimensionRows.filter(r=>r.value===value))})).sort((a,b)=>b.users-a.users);
   const portraitSourceData=groupProfileSource(task.audience||task,group);
   const selectedPortraitDimensions=portraitSourceData?.dimensions||{};
   const audienceRows=task.audience?(selectedPortraitDimensions[portraitKey]||[]).filter(r=>group==='all'||r.group_type===group):scoped(selectedPortraitDimensions[portraitKey]||[]);
   const portrait=audienceRows?[...new Set(audienceRows.map(r=>r.value))].map(value=>({value,...summarize('audience',audienceRows.filter(r=>r.value===value))})).sort((a,b)=>b.users-a.users):distribution;
   const profileAnalysis=selectProfile(task.audience||task,{dimensions:selectedProfile||[portraitKey],group,date:selectedDate,hasAudience:!!task.audience});
-  const {rows,dimensions,audience,cumulative,profileCube,allGroupPortrait,...metadata}=task;
+  const {rows,dimensions,audience,cumulative,profileCube,allGroupPortrait,dailyUnion,...metadata}=task;
   const audienceFacts=audience?.orderCoverage && audience.rows.every(r=>Object.hasOwn(r,'axc') && Object.hasOwn(r,'charge'))?{
     partition:audience.partition,summary:summarize('audience',audience.rows.filter(r=>group==='all'||r.group_type===group)),
     orderCoverage:Object.fromEntries(Object.entries(audience.orderCoverage||{}).map(([name,values])=>[name,summarize('audience',values.filter(r=>group==='all'||r.group_type===group)).users])),
@@ -238,7 +245,7 @@ export function selectTask(snapshot,id,{date,group='all',dimension='charge_life_
     portraitGroups:groups.map(g=>({group:g,...summarize('audience',audience?audience.rows.filter(r=>r.group_type===g):task.rows.filter(r=>r.date===selectedDate && r.group_type===g))})),
     groupSummary:groups.map(g=>({group:g,...summarize(task.kind,task.rows.filter(r=>r.date===selectedDate && r.group_type===g))})),
     groupDaily:groups.map(g=>({group:g,rows:task.dates.map(d=>({date:d,...summarize(task.kind,task.rows.filter(r=>r.date===d && r.group_type===g))}))})),
-    daily:task.dates.map(d=>({date:d,...summarize(task.kind,task.rows.filter(r=>r.date===d && (group==='all'||r.group_type===group)))})),
+    daily:group==='all'&&task.dailyUnion?task.dailyUnion.rows:task.dates.map(d=>({date:d,...summarize(task.kind,task.rows.filter(r=>r.date===d && (group==='all'||r.group_type===group)))})),
     evidence:snapshot.queries.filter(q=>q.sourceId===task.sourceId || q.sourceId===audience?.sourceId),
   };
 }

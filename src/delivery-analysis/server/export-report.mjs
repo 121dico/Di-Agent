@@ -1,6 +1,6 @@
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
-import {selectTask} from './snapshot.mjs';
+import {selectAnalysis} from './analysis-selection.mjs';
 import {MODULES} from './analysis-tasks.mjs';
 const jsonScript=value=>JSON.stringify(value).replace(/</g,'\\u003c').replace(/>/g,'\\u003e').replace(/&/g,'\\u0026').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');
 const inlineScript=source=>'<script>'+source.replace(/<\/script/gi,'<\\/script')+'</script>';
@@ -8,7 +8,7 @@ export async function exportReport({snapshot,analysisTask,input,appDirectory}){
   if(!snapshot)throw Object.assign(new Error('真实数据尚未就绪'),{code:409});
   if(input.builtAt!==snapshot.builtAt)throw Object.assign(new Error('服务器快照已更新，请重新加载后导出'),{code:409});
   const selection=input.selection||{};
-  let selected;try{selected=selectTask(snapshot,analysisTask.sourceId,selection);}catch{throw Object.assign(new Error('日期、分组或维度不在当前数据范围内'),{code:400});}
+  let selected;try{selected=selectAnalysis(snapshot,analysisTask,selection);}catch{throw Object.assign(new Error('日期、分组或维度不在当前数据范围内'),{code:400});}
   if(selected?.scopeUnavailable)throw Object.assign(new Error(selected.scopeUnavailable),{code:409});
   if(!selected)throw Object.assign(new Error('任务数据尚未就绪'),{code:409});
   // 只包含当前任务聚合与查询依据，不序列化服务对象、用户身份或其它任务。

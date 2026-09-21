@@ -20,7 +20,7 @@ function finalize(kind,row) {
   return result;
 }
 
-function validatePartition(kind,rows,total) {
+export function validatePartition(kind,rows,total) {
   const exclusive=rows.reduce((sum,r)=>sum+r.users,0)===total.users;
   for(const metric of Object.keys(stages[kind])) {
     const sum=rows.reduce((value,r)=>value+r[metric],0);
@@ -29,9 +29,7 @@ function validatePartition(kind,rows,total) {
   return exclusive;
 }
 
-// 每个阶段在源表直接去重；总量独立查询，不能将日期、分组或变化标签的桶直接相加。
-export async function buildCumulative({query,kind,conditions,dimensions,dates}) {
-  async function buckets(groups) {
+export async function stageBuckets(query,kind,conditions,groups) {
     const result=new Map();
     for(const [metric,filters] of Object.entries(stages[kind])) {
       const rows=await query(kind,groups,[...conditions,...filters],count);
@@ -46,6 +44,10 @@ export async function buildCumulative({query,kind,conditions,dimensions,dates}) 
     if(!groups.length && !result.size)return [finalize(kind,{})];
     return [...result.values()].map(row=>finalize(kind,row));
   }
+
+// 每个阶段在源表直接去重；总量独立查询，不能将日期、分组或变化标签的桶直接相加。
+export async function buildCumulative({query,kind,conditions,dimensions,dates}) {
+  const buckets=groups=>stageBuckets(query,kind,conditions,groups);
   const overall=(await buckets([]))[0],groupRows=await buckets(['group_type']);
   validatePartition(kind,groupRows,overall);
   const scopes=[{group:'all',summary:overall,dimensions:{}},...groupRows.map(row=>({group:row.group_type,summary:row,dimensions:{}}))];
