@@ -43,6 +43,7 @@ afterEach(() => { act(() => root.unmount()); container.remove(); });
 describe('报表浮窗对话', () => {
   it('隐藏时初始化不抢焦点，重新打开聚焦输入，切换报表保留现有焦点', async () => {
     await act(async () => { root.render(<MemoryRouter><ReportAgentChat active={false} context={context} onClose={() => {}} /></MemoryRouter>); });
+    expect(container.textContent).not.toContain('陪你读懂每一份报表');
     const input = container.querySelector('textarea')!;
     expect(document.activeElement).not.toBe(input);
     act(() => { root.render(<MemoryRouter><ReportAgentChat active context={context} onClose={() => {}} /></MemoryRouter>); });
