@@ -28,6 +28,7 @@ type Deps struct {
 	AgentHandler               *handler.AgentHandler
 	AgentRuntimeHandler        *handler.AgentRuntimeHandler
 	ReportHandler              *handler.ReportHandler
+	DeliveryAnalysisHandler    *handler.DeliveryAnalysisHandler
 	PersonalReportHandler      *handler.PersonalReportHandler
 	PlatformSkillHandler       *handler.PlatformSkillHandler
 	AgentPromptTemplateHandler *handler.AgentPromptTemplateHandler
@@ -93,6 +94,16 @@ func Setup(r *gin.Engine, deps Deps) {
 	{
 		authGroup.POST("/register", deps.AuthHandler.Register)
 		authGroup.POST("/login", deps.AuthHandler.Login)
+	}
+
+	// Delivery analysis prototype is embedded through a same-origin proxy. The
+	// static shell is public because an iframe cannot attach an Authorization
+	// header to its document request; its API routes must be reviewed before
+	// production data goes live.
+	if deps.DeliveryAnalysisHandler != nil {
+		r.GET("/delivery-analysis-app", deps.DeliveryAnalysisHandler.Static)
+		r.GET("/delivery-analysis-app/*filepath", deps.DeliveryAnalysisHandler.Static)
+		r.Any("/api/delivery-analysis/*path", deps.DeliveryAnalysisHandler.API)
 	}
 
 	// Authenticated API routes

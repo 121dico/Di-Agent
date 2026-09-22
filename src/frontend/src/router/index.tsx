@@ -20,6 +20,7 @@ const SkillsView = lazy(() => import('@/views/SkillsView'));
 const KnowledgeView = lazy(() => import('@/views/KnowledgeView'));
 const TaskBoardView = lazy(() => import('@/views/TaskBoardView'));
 const ReportsView = lazy(() => import('@/views/ReportsView'));
+const DeliveryAnalysisView = lazy(() => import('@/views/DeliveryAnalysisView'));
 const SettingsView = lazy(() => import('@/views/SettingsView'));
 
 const withSuspense = (el: React.ReactNode) => (
@@ -79,6 +80,7 @@ const routes: RouteObject[] = [
       { path: 'knowledge', element: <AdminWorkspaceRoute path="/knowledge">{withSuspense(<KnowledgeView />)}</AdminWorkspaceRoute> },
       { path: 'tasks', element: <AdminWorkspaceRoute path="/tasks">{withSuspense(<TaskBoardView />)}</AdminWorkspaceRoute> },
       { path: 'reports', element: withSuspense(<ReportsView />) },
+      { path: 'delivery-analysis', element: withSuspense(<DeliveryAnalysisView />) },
       { path: 'settings', element: withSuspense(<SettingsView />) },
     ],
   },

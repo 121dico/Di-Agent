@@ -5,6 +5,7 @@ export interface ReportAgentContext {
   dateRange?: string;
   cities: string[];
   summary?: string;
+  pageData?: string;
 }
 
 const start = '<di-report-page-context>';

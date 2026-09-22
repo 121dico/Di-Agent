@@ -14,7 +14,7 @@ type AgentConfigInjector struct{}
 
 var reportTaskKeywords = []string{
 	"报表", "看板", "图表", "趋势", "指标", "查数据", "查询数据", "数据分析",
-	"价敏", "价格敏感", "订单量", "用户量", "gmv", "duid", "hive", "sql",
+	"价敏", "价格敏感", "订单量", "用户量", "投放", "投放表", "投放分析", "投放数据", "人群", "实验组", "对照组", "优惠券", "召回", "放量", "转化率", "gmv", "duid", "hive", "sql",
 	"report", "dashboard", "chart", "metric", "analytics", "query data", "data source",
 }
 

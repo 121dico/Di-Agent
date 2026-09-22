@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Bot } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { clampPanelPosition, parsePanelPosition, type PanelPosition } from '@/components/chat/taskPanelPosition';
-import { ReportAgentChat, type ReportAgentContext } from './ReportAgentChat';
+import { ReportAgentChat, type AgentChatConfig, type ReportAgentContext } from './ReportAgentChat';
 import styles from './ReportAgentWidget.module.css';
 
 const launcherSize = { width: 64, height: 52 };
@@ -12,7 +12,7 @@ const viewport = () => {
   return { width: window.innerWidth / scale, height: window.innerHeight / scale, scale };
 };
 
-export function ReportAgentWidget({ context }: { context: ReportAgentContext }) {
+export function ReportAgentWidget({ context, config }: { context: ReportAgentContext; config?: AgentChatConfig }) {
   const userId = useAuthStore((state) => state.user?.id);
   const [open, setOpen] = useState(false);
   const [hasOpened, setHasOpened] = useState(false);
@@ -24,7 +24,9 @@ export function ReportAgentWidget({ context }: { context: ReportAgentContext }) 
   const positionRef = useRef(position);
   const moved = useRef(false);
   const drag = useRef<{ id: number; x: number; y: number; origin: PanelPosition } | null>(null);
-  const storageKey = `di_agent:report-agent-position:${userId ?? 'anonymous'}`;
+  const workspace = config?.workspace ?? 'report';
+  const title = config?.agentName ?? '报表agent';
+  const storageKey = `di_agent:${workspace}-agent-position:${userId ?? 'anonymous'}`;
   const place = useCallback((next: PanelPosition) => {
     const bounds = viewport();
     const clamped = clampPanelPosition(next, bounds, launcherSize, 12);
@@ -87,14 +89,14 @@ export function ReportAgentWidget({ context }: { context: ReportAgentContext }) 
   if (!userId) return null;
   return createPortal(<>
     <div ref={dockRef} className={styles.dock}>
-      <button ref={launcherRef} type="button" className={styles.launcher} aria-label={open ? '收起报表agent' : '打开报表agent'} aria-expanded={open} aria-controls={open ? 'report-agent-dialog' : undefined}
-        title="报表agent · 拖动调整位置" onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}
+      <button ref={launcherRef} type="button" className={styles.launcher} aria-label={open ? `收起${title}` : `打开${title}`} aria-expanded={open} aria-controls={open ? `${workspace}-agent-dialog` : undefined}
+        title={`${title} · 拖动调整位置`} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}
         onClick={() => { if (moved.current) { moved.current = false; return; } setHasOpened(true); setOpen((value) => !value); }}>
         <span className={styles.icon}><Bot size={25} strokeWidth={1.7} /></span>
       </button>
     </div>
-    {hasOpened && <div hidden={!open} ref={dialogRef} className={styles.dialog} id="report-agent-dialog" role="dialog" aria-label="报表agent对话" aria-modal="false">
-      <ReportAgentChat context={context} onClose={close} active={open} />
+    {hasOpened && <div hidden={!open} ref={dialogRef} className={styles.dialog} id={`${workspace}-agent-dialog`} role="dialog" aria-label={`${title}对话`} aria-modal="false">
+      <ReportAgentChat context={context} onClose={close} active={open} {...(config ? { config } : {})} />
     </div>}
   </>, document.body);
 }

@@ -281,6 +281,11 @@ func main() {
 	agentHandler := handler.NewAgentHandler(agentSvc, hub)
 	agentRuntimeHandler := handler.NewAgentRuntimeHandler(agentRuntimeSvc)
 	reportHandler := handler.NewReportHandler(reportSvc)
+	deliveryAnalysisHandler, deliveryAnalysisErr := handler.NewDeliveryAnalysisHandler(firstNonEmpty(os.Getenv("DELIVERY_ANALYSIS_BASE_URL"), "http://127.0.0.1:4173"))
+	if deliveryAnalysisErr != nil {
+		logger.Warn("delivery analysis proxy disabled", "error", deliveryAnalysisErr)
+		deliveryAnalysisHandler = nil
+	}
 	personalReportHandler := handler.NewPersonalReportHandler(personalReportSvc)
 	agentHandler.SetIPTracker(machineTracker)
 	platformSkillHandler := handler.NewPlatformSkillHandler(platformSkillSvc)
@@ -373,6 +378,7 @@ func main() {
 		AgentHandler:               agentHandler,
 		AgentRuntimeHandler:        agentRuntimeHandler,
 		ReportHandler:              reportHandler,
+		DeliveryAnalysisHandler:    deliveryAnalysisHandler,
 		PersonalReportHandler:      personalReportHandler,
 		PlatformSkillHandler:       platformSkillHandler,
 		AgentPromptTemplateHandler: agentPromptTemplateHandler,

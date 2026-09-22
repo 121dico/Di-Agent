@@ -386,6 +386,13 @@ func TestBuildAgentConfigTextIncludesRealReportToolProtocol(t *testing.T) {
 	}
 }
 
+func TestBuildAgentConfigTextTreatsDeliveryQuestionsAsRealDataTasks(t *testing.T) {
+	got := BuildAgentConfigText(&model.Agent{ID: "agent-1", Name: "投放分析助手", CLITool: "codex"}, "", "分析当前投放人群和实验组转化率")
+	if !strings.Contains(got, "[真实数据报表 MCP 强制说明书]") || !strings.Contains(got, "第一步必须立即调用 discover_report_data") {
+		t.Fatal("delivery analysis should receive the governed report MCP protocol")
+	}
+}
+
 func TestBuildAgentConfigTextKeepsFullReportManualOutOfUnrelatedTasks(t *testing.T) {
 	got := BuildAgentConfigText(&model.Agent{ID: "agent-1", Name: "助手", CLITool: "claude"}, "", "你好，介绍一下你自己")
 	if strings.Contains(got, "[真实数据报表 MCP 强制说明书]") {
