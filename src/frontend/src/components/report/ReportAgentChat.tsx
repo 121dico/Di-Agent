@@ -146,7 +146,7 @@ export function ReportAgentChat({ context, onClose, active = true }: Props) {
   return <section className={styles.panel} aria-label="报表agent对话">
     <header className={styles.header}>
       <span className={styles.avatar}><Bot size={19} /></span>
-      <div className={styles.heading}><strong>报表agent</strong><span>{loading ? '正在连接' : busy ? '正在分析' : online && connected ? '陪你读懂每一份报表' : '等待连接'}</span></div>
+      <div className={styles.heading}><strong>报表agent</strong></div>
       <button className={styles.iconButton} onClick={onClose} aria-label="收起报表agent" title="收起"><Minus size={18} /></button>
     </header>
     <label className={styles.agentPicker}>执行 Agent

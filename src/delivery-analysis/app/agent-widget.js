@@ -22,7 +22,7 @@
   launcher.setAttribute('aria-controls',panel.id);
   const header = make('header','delivery-agent-header');
   const heading = make('div','delivery-agent-heading');
-  const status = make('span','','陪你看清每一次投放'); heading.append(make('strong','','投放agent'),status);
+  heading.append(make('strong','','投放agent'));
   const close = make('button','delivery-agent-close','−'); close.type = 'button'; close.setAttribute('aria-label','收起投放agent');
   header.append(icon(),heading,close);
   const picker = make('label','delivery-agent-picker','执行 Agent');
@@ -121,7 +121,6 @@
       if(value.session)agentSelect.value=value.session.agent.id;
     }
     agentSelect.disabled=value.busy||value.connecting||!value.session;
-    status.textContent=value.connecting?'正在连接':value.busy?'正在分析':value.session?'陪你看清每一次投放':'连接后即可继续对话';
     hint.textContent=value.busy?'正在分析，收起后仍会继续':'Enter 发送 · Shift + Enter 换行';
     notice.hidden=!value.error; noticeText.textContent=value.error; retry.disabled=value.busy||value.connecting;
     const nextSignature=JSON.stringify([value.items,value.currentQuestion,value.partial,value.busy]);
