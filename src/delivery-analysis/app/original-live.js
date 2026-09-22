@@ -400,6 +400,16 @@
     const stages=interval?(coupon?[['周期进组',interval.users],['周期领券',interval.coupon],['领券且 7 日复购',interval.coupon_repurchase]]:[['期间覆盖',interval.users],['期间曾达标',interval.achieved]]):emptyStages;
     renderFunnel('dailyFunnelVisual',stages,funnel);
   }
+  function openCumulativeDrill(value){
+    const current=state.data?.task.cumulative;if(!current)return;
+    const drill=current.breakdown||{dimensions:[current.dimension],filters:[]};
+    if(drill.dimensions.length>=3){notice('累计下钻最多支持三级；可点击“清空下钻”重新开始');return;}
+    const options=Object.entries(state.data.task.dimensionOptions).filter(([key])=>!drill.dimensions.includes(key)&&!drill.filters.some(f=>f.dimension===key));
+    text('#dialogTitle','选择下一级累计维度');
+    $('dialogBody').innerHTML='<p>当前路径：'+esc([...drill.filters.map(f=>f.dimension+'='+f.value),...drill.dimensions].join(' › '))+'；已选择枚举：'+esc(value)+'</p><div class="profile-dimensions">'+options.map(([key,label])=>'<button type="button" class="secondary-button compact-button" data-cumulative-next="'+esc(key)+'">'+esc(label)+'</button>').join('')+'</div><p>联合桶缺失时显示空态，不用其他维度比例推算。</p>';
+    $('infoDialog').showModal();
+    all('[data-cumulative-next]').forEach(btn=>btn.addEventListener('click',()=>{const next=btn.dataset.cumulativeNext;const filters=[...drill.filters,{dimension:drill.dimensions.at(-1),value}];$('infoDialog').close();load({...selection,cumulativeBreakdown:JSON.stringify({dimensions:[next],filters})});},{once:true}));
+  }
   function cumulative(task) {
     const c=task.cumulative;if(!c)return;
     renderExperimentReference(task,'cumulative');
@@ -434,11 +444,15 @@
     text('#funnelDefinitionNote',range+' · '+selected+' · 按DUID独立去重');
     text('#resourceFunnelPanel .funnel-footnote',coupon?'完整发券 '+num(s.full)+' 人，其中完整发券后复购 '+num(s.full_repurchase)+' 人；这是主链子集。':'这是覆盖与达标集合关系，未提供曝光、点击数据。');
     renderFunnel('funnelVisual',coupon?[['累计进组',s.users],['累计领券',s.coupon],['领券后7日复购',s.success]]:[['期间去重覆盖',s.users],['期间曾达标',s.success]],resourceFunnel);
-    text('#effectBreakdown h3','累计标签拆解');text('#drillPath',selected+' · '+label);text('#breakdownVisualTitle',label);
-    text('#breakdownVisualDefinition',c.exclusiveDimension?'各标签人数互斥，按期间去重统计':'期间标签可变化，同一用户可计入多个标签，不可相加');
-    const delta=r=>Number.isFinite(r.rate)&&Number.isFinite(s.rate)?((r.rate-s.rate)*100).toFixed(2)+'pp':'—';
-    setVisual('breakdownVisual',rows.map(r=>'<div class="breakdown-visual-group"><div class="breakdown-visual-row"><div class="breakdown-visual-label"><strong>'+esc(r.value)+'</strong><small>'+num(r.users)+' 人 · '+pct(s.users?r.users/s.users:null)+'</small></div><div class="breakdown-rate"><div class="breakdown-rate-track"><b class="positive" style="width:'+100*(r.rate||0)+'%"></b></div><strong>'+pct(r.rate)+'</strong><em>'+delta(r)+'</em></div></div></div>').join(''));
-    setVisual('breakdownTable',table([label,'累计去重人数','占所选范围',c.metric,'与整体差异'],rows.map(r=>[r.value,num(r.users),pct(s.users?r.users/s.users:null),pct(r.rate),delta(r)])));
+    const drill=c.breakdown||{dimensions:[c.dimension],filters:[],rows};
+    const path=[...drill.filters.map(f=>f.dimension+'='+f.value),...drill.dimensions].join(' › ');
+    text('#effectBreakdown h3','累计标签拆解');text('#drillPath',selected+' · '+path);text('#breakdownVisualTitle',drill.dimensions.map(k=>task.dimensionOptions[k]||k).join(' × '));
+    text('#breakdownVisualDefinition',drill.status==='missing'?drill.note:(drill.exclusive?'联合标签按期间去重统计；点击枚举继续下钻':'标签随期间变化，不用边际比例推算组合人数'));
+    const delta=r=>Number.isFinite(r.delta)?(r.delta*100).toFixed(2)+'pp':Number.isFinite(r.rate)&&Number.isFinite(s.rate)?((r.rate-s.rate)*100).toFixed(2)+'pp':'—';
+    const drillRows=drill.rows||[];
+    setVisual('breakdownVisual',drillRows.map(r=>'<div class="breakdown-visual-group"><div class="breakdown-visual-row" role="button" tabindex="0" data-cumulative-value="'+esc(r.value)+'"><div class="breakdown-visual-label"><strong>'+esc(r.value)+'</strong><small>'+num(r.users)+' 人 · '+pct(r.share??(s.users?r.users/s.users:null))+'</small></div><div class="breakdown-rate"><div class="breakdown-rate-track"><b class="positive" style="width:'+100*(r.rate||0)+'%"></b></div><strong>'+pct(r.rate)+'</strong><em>'+delta(r)+'</em></div></div></div>').join('') || '<div class="visual-empty-caption">'+esc(drill.note||'暂无数据')+'</div>');
+    setVisual('breakdownTable',table([path,'累计去重人数','占当前下钻',''+c.metric,'与整体差异'],drillRows.map(r=>[r.value,num(r.users),pct(r.share),pct(r.rate),delta(r)])));
+    $('clearDrill')?.classList.toggle('hidden',!drill.filters.length && drill.dimensions.length<=1);
     const invalid=rows.filter(r=>r.unmet>0).sort((a,b)=>b.unmet-a.unmet);
     setVisual('cumulativeInvalidList',invalid.length?invalid.map((r,i)=>'<div class="cause-row"><span class="cause-index">'+String(i+1).padStart(2,'0')+'</span><span><strong>'+esc(r.value)+'</strong><small>'+num(r.unmet)+' 人'+(c.exclusiveDimension?' · '+pct(s.unmet?r.unmet/s.unmet:null):' · 该标签内未达成')+'</small></span></div>').join(''):'当前范围未达成人数为 0');
     text('#subview-effect > .root-cause-panel .cause-recommend p',c.exclusiveDimension?'未达成人数为所选范围累计分母人群减累计成功人群；标签排名是描述性统计，不代表原因。':'标签随日期变化：人数表示该标签内未达成，不等于整个期间从未达成；标签间不可相加。');
@@ -487,7 +501,7 @@
     try {
       const data=window.deliveryAPI?await window.deliveryAPI.bootstrap(next):await (async()=>{const response=await fetch('/api/bootstrap?'+new URLSearchParams(next),{headers:{Authorization:'Bearer '+(localStorage.getItem('di_agent_token')||'')}});const data=await response.json();if(!response.ok)throw new Error(data.error||'读取失败');return data;})();
       if(version!==state.request)return;if(data.env!=='live')throw new Error('接口未返回真实数据');
-      state.data=data;selection={taskId:data.analysisTask?.id||data.task.id,...(data.task.selectedCrowd?{crowdId:data.task.selectedCrowd.id}:{}),...(data.task.selectedDate?{date:data.task.selectedDate}:{} ),group:data.task.selectedGroup,dimension:data.task.dimension,...(data.task.cumulative?{cumulativeGroup:data.task.cumulative.selectedGroup,cumulativeDimension:data.task.cumulative.dimension}:{}),...(data.task.portraitDimension?{portraitDimension:data.task.portraitDimension}:{}),...(data.task.profileAnalysis?{profileDimensions:data.task.profileAnalysis.dimensions.join(',')}:{})};
+      state.data=data;selection={taskId:data.analysisTask?.id||data.task.id,...(data.task.selectedCrowd?{crowdId:data.task.selectedCrowd.id}:{}),...(data.task.selectedDate?{date:data.task.selectedDate}:{} ),group:data.task.selectedGroup,dimension:data.task.dimension,...(data.task.cumulative?{cumulativeGroup:data.task.cumulative.selectedGroup,cumulativeDimension:data.task.cumulative.dimension,...(data.task.cumulative.breakdown?.filters?.length||data.task.cumulative.breakdown?.dimensions?.length>1?{cumulativeBreakdown:JSON.stringify({dimensions:data.task.cumulative.breakdown.dimensions,filters:data.task.cumulative.breakdown.filters})}:{} )}:{}),...(data.task.portraitDimension?{portraitDimension:data.task.portraitDimension}:{}),...(data.task.profileAnalysis?{profileDimensions:data.task.profileAnalysis.dimensions.join(',')}:{})};
       try{if(!window.deliveryOffline)sessionStorage.setItem('deliveryOriginalSelection',JSON.stringify(selection));}catch{}
       text('#dailyMetricSelect option[value="firstOrderRate"]',data.task.metric);
       const dates=all('#customDateRange input');if(dates[0]&&data.task.daily.length&&!dates[0].dataset.initialized){dates[0].value=data.task.daily[0].date;dates[1].value=data.task.daily.at(-1).date;dates.forEach(n=>n.dataset.initialized='true');}
@@ -612,11 +626,13 @@
       if(n.dataset.dailyFunnelView){funnel=n.dataset.dailyFunnelView;all('#dailyFunnelSwitch button').forEach(b=>b.classList.toggle('active',b===n));if(state.data)renderData();else renderFunnel('dailyFunnelVisual',emptyStages,funnel);}
       if(n.dataset.funnelView){resourceFunnel=n.dataset.funnelView;all('#funnelViewSwitch button').forEach(b=>b.classList.toggle('active',b===n));if(state.data?.task.cumulative)cumulative(state.data.task);else renderFunnel('funnelVisual',emptyStages,resourceFunnel);}
       if(n.dataset.liveCumulativeGroup&&state.data){event.stopImmediatePropagation();load({...selection,cumulativeGroup:n.dataset.liveCumulativeGroup});return;}
-      if(n.dataset.breakdownDimension&&state.data){event.stopImmediatePropagation();load({...selection,cumulativeDimension:dimensions[n.dataset.breakdownDimension]});return;}
+      if(n.dataset.breakdownDimension&&state.data){event.stopImmediatePropagation();const next={...selection,cumulativeDimension:dimensions[n.dataset.breakdownDimension]};delete next.cumulativeBreakdown;load(next);return;}
       if(n.dataset.liveCumulativeDimension&&state.data){event.stopImmediatePropagation();$('infoDialog').close();load({...selection,cumulativeDimension:n.dataset.liveCumulativeDimension});return;}
+      if(n.dataset.cumulativeValue&&state.data){event.stopImmediatePropagation();openCumulativeDrill(n.dataset.cumulativeValue);return;}
+      if(n.id==='clearDrill'&&state.data){event.stopImmediatePropagation();const next={...selection};delete next.cumulativeBreakdown;load(next);return;}
       if(n.id==='customBreakdownDimension'&&state.data){
         event.stopImmediatePropagation();text('#dialogTitle','选择累计拆解维度');
-        $('dialogBody').innerHTML='<p>当前支持单维度累计去重；三维交叉和逐级下钻尚待实现。</p>'+Object.entries(state.data.task.dimensionOptions).map(([key,label])=>'<button type="button" class="secondary-button compact-button" data-live-cumulative-dimension="'+esc(key)+'">'+esc(label)+'</button>').join('');
+        $('dialogBody').innerHTML='<p>累计组合最多三级；选择维度后点击枚举可继续下钻，人数只来自已核验的联合去重桶。</p>'+Object.entries(state.data.task.dimensionOptions).map(([key,label])=>'<button type="button" class="secondary-button compact-button" data-live-cumulative-dimension="'+esc(key)+'">'+esc(label)+'</button>').join('');
         $('infoDialog').showModal();return;
       }
       if(n.dataset.liveDate&&state.data)load({...selection,date:n.dataset.liveDate});
@@ -647,7 +663,7 @@
         ])+'<p>'+esc(task?'当前来源：'+task.sourceName+'；分区：'+task.partition+'。 '+task.notes.join(' '):'当前选择暂无已接入数据。')+'</p>';
         $('dialogBody').insertAdjacentHTML('beforeend','<h4>PRD 尚缺的6类数据/配置</h4>'+table(['类别','影响'],[
           ['人群包目录与管理信息','搜索人群、任务关联、包状态/有效期、修改删除'],['实验与活动配置剩余缺口','包与实验组配置关系、配置日期和下线记录已知；实际成员、稳定分组、券批次及整体目标仍待核验'],['投放前标签快照','实验均衡与前置画像'],['同口径大盘基准','大盘效果及差异'],['曝光点击事件','资源位曝光/点击漏斗与指标'],['可比历史活动','历史验证、变化差、历史基准']
-        ])+'<p>画像支持三级联合拆分与自然语言选维度；效果组合下钻仍缺实现；日报沿用可离线打开的交互HTML格式。暂不可用入口已标明原因；置灰不代表需求已完成。投放期新增订单/收入另需增量订单口径。</p>');
+        ])+'<p>画像支持三级联合拆分与自然语言选维度；累计效果支持最多三级联合去重下钻，缺少联合桶时明确显示空态；日报沿用可离线打开的交互HTML格式。暂不可用入口已标明原因；置灰不代表需求已完成。投放期新增订单/收入另需增量订单口径。</p>');
         if(task)$('dialogBody').insertAdjacentHTML('beforeend',fieldDetails(task));
         $('infoDialog').showModal();return;
       }

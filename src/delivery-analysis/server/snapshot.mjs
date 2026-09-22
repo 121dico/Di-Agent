@@ -195,7 +195,7 @@ export function unavailableCrowd(task,crowd,references=[]){
       notes:['Ditag当前人数为人工核验资料，不是投放期进组人数。'],evidence:[],fieldCoverage:[]};
 }
 
-export function selectTask(snapshot,id,{date,group='all',dimension='charge_life_cycle',portraitDimension,profileDimensions,cumulativeGroup='all',cumulativeDimension='charge_life_cycle',crowdId}={}) {
+export function selectTask(snapshot,id,{date,group='all',dimension='charge_life_cycle',portraitDimension,profileDimensions,cumulativeGroup='all',cumulativeDimension='charge_life_cycle',cumulativeBreakdown,crowdId}={}) {
   const task=snapshot.tasks.find(t=>t.id===id);
   if(!task)return null;
   if(crowdId){
@@ -238,7 +238,7 @@ export function selectTask(snapshot,id,{date,group='all',dimension='charge_life_
       {name:audience?'crowd_id':'source_task_id',value:task.sourceTaskId},
       ...(!audience?[{name:'entry_dt',value:selectedDate}]:[]),...(group!=='all'?[{name:'group_type',value:group}]:[])],
   };
-  return {...metadata,portraitSource,profileAnalysis,profileCrossDimensions:(task.audience||task).profileCube?.keys||[],deploymentReference:deploymentReference(task),crowdReferences:crowdReferences(task),groupPortrait:groupPortrait(task,selectedDate),experimentReference:experimentReference(task),cumulative:selectCumulative(cumulative,{group:cumulativeGroup,dimension:cumulativeDimension}),audienceFacts,fieldCoverage:snapshot.fieldCoverage || [],portraitDimension:portraitKey,
+  return {...metadata,portraitSource,profileAnalysis,profileCrossDimensions:(task.audience||task).profileCube?.keys||[],deploymentReference:deploymentReference(task),crowdReferences:crowdReferences(task),groupPortrait:groupPortrait(task,selectedDate),experimentReference:experimentReference(task),cumulative:selectCumulative(cumulative,{group:cumulativeGroup,dimension:cumulativeDimension,breakdown:cumulativeBreakdown}),audienceFacts,fieldCoverage:snapshot.fieldCoverage || [],portraitDimension:portraitKey,
     portraitDimensionOptions:Object.fromEntries(Object.keys(portraitDimensions).map(key=>[key,({...DIMENSIONS,...AUDIENCE_DIMENSIONS,activity_cycle:'流失周期'})[key] || key])),selectedDate,selectedGroup:group,dimension,dimensionOptions:{...DIMENSIONS,...(task.kind==='coupon'?{activity_cycle:'流失周期'}:{})},groups,
     groupDistribution:groups.map(g=>({group:g,rows:comparisonValues.map(value=>({value,...summarize(task.kind,comparisonRows.filter(r=>r.value===value && r.group_type===g))}))})),
     summary,distribution,portrait,portraitPartition:audience?.partition || task.partition,

@@ -70,7 +70,7 @@ export function createServer({gateway,store,appDirectory=join(ROOT,'app'),tasks}
         if(tasks&&!analysisTask)return json(res,404,{error:'任务不存在'});
         const sourceId=analysisTask?.sourceId||id;
         let task;
-        try {task=selectAnalysis(snapshot,analysisTask||{sourceId},{crowdId:url.searchParams.get('crowdId'),date:url.searchParams.get('date'),group:url.searchParams.get('group')||'all',dimension:url.searchParams.get('dimension')||'charge_life_cycle',portraitDimension:url.searchParams.get('portraitDimension')||undefined,profileDimensions:url.searchParams.get('profileDimensions')||undefined,cumulativeGroup:url.searchParams.get('cumulativeGroup')||'all',cumulativeDimension:url.searchParams.get('cumulativeDimension')||'charge_life_cycle'});} catch {
+        try {task=selectAnalysis(snapshot,analysisTask||{sourceId},{crowdId:url.searchParams.get('crowdId'),date:url.searchParams.get('date'),group:url.searchParams.get('group')||'all',dimension:url.searchParams.get('dimension')||'charge_life_cycle',portraitDimension:url.searchParams.get('portraitDimension')||undefined,profileDimensions:url.searchParams.get('profileDimensions')||undefined,cumulativeGroup:url.searchParams.get('cumulativeGroup')||'all',cumulativeDimension:url.searchParams.get('cumulativeDimension')||'charge_life_cycle',cumulativeBreakdown:url.searchParams.get('cumulativeBreakdown')||undefined});} catch {
           return json(res,400,{error:'日期、分组或维度不在当前数据范围内'});
         }
         if(!task)return json(res,404,{error:'该任务尚未接入真实数据'});

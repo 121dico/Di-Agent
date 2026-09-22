@@ -74,3 +74,22 @@ test('跨组重复场景也以每组阶段总量约束整体，不能只检查fl
  const query=async(kind,groups,conditions)=>conditions.length===1&&conditions[0].name==='is_coupon'?[{entry_dt:'d',users:5}]:conditions.length?[]:[{entry_dt:'d',users:10}];
  await assert.rejects(buildDailyUnion({query,kind:'coupon',conditions:[],dimensions:[],day:'entry_dt',source,control:{rows:[{date:'d',users:10,overlapUsers:1}]}}),/daily stage/);
 });
+
+test('累计组合与逐级下钻使用联合去重桶，分组切换保留同一筛选条件',async()=>{
+ const fixture=sourceRows.map(r=>({...r,member:r.duid===1?'会员':'非会员',life:r.duid===3?'成长':'老用户'}));
+ const query=async(kind,groups,conditions)=>{
+  const buckets=new Map();for(const r of fixture.filter(r=>conditions.every(f=>r[f.name]===f.value))){const key=JSON.stringify(groups.map(g=>r[g]));if(!buckets.has(key))buckets.set(key,[]);buckets.get(key).push(r);}
+  return [...buckets.values()].map(rs=>({...Object.fromEntries(groups.map(g=>[g,rs[0][g]])),users:new Set(rs.map(r=>r.duid)).size}));
+ };
+ const data=await buildCumulative({query,kind:'coupon',conditions:[],dimensions:['city_name','member','life'],dates:['2026-08-12','2026-08-24']});
+ const selected=selectCumulative(data,{dimension:'life',breakdown:{dimensions:['member','city_name'],filters:[{dimension:'life',value:'老用户'}]}});
+ assert.equal(selected.breakdown.summary.users,2);assert.equal(selected.breakdown.summary.success,1);assert.equal(selected.breakdown.rows.length,2);
+ assert.deepEqual(selected.breakdown.rows.find(r=>r.success===1).values,['会员','北京']);
+ assert.equal(selected.breakdown.rows.find(r=>r.success===0).share,.5);
+ assert.equal(selectCumulative(data,{group:'A',dimension:'life',breakdown:{dimensions:['city_name'],filters:[{dimension:'member',value:'非会员'}]}}).breakdown.summary.users,0);
+ const thirdLevel=selectCumulative(data,{dimension:'life',breakdown:{dimensions:['city_name'],filters:[{dimension:'member',value:'非会员'},{dimension:'life',value:'老用户'}]}}).breakdown;
+ assert.equal(thirdLevel.summary.users,1);assert.deepEqual(thirdLevel.rows[0].values,['上海']);
+ assert.throws(()=>selectCumulative(data,{dimension:'life',breakdown:{dimensions:['city_name','member','life','extra'],filters:[]}}));
+ assert.throws(()=>selectCumulative(data,{dimension:'life',breakdown:{dimensions:['life'],filters:[{dimension:'life',value:'老用户'}]}}));
+ assert.throws(()=>selectCumulative(data,{dimension:'life',breakdown:{dimensions:['missing'],filters:[]}}));
+});
