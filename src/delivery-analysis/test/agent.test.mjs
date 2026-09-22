@@ -3,14 +3,36 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {JSDOM} from 'jsdom';
 const bridge=await readFile(new URL('../app/agent-bridge.js',import.meta.url),'utf8');
-async function page(handler) {
+async function page(handler, setup) {
  const dom=new JSDOM('<body></body>',{url:'http://localhost/',runScripts:'outside-only'});
  const w=dom.window;w.localStorage.setItem('di_agent_token','session-a');w.state={data:{currentUser:{id:'u'},task:{name:'召回',selectedDate:'2026-08-24'}},request:1,ai:{}};
  w.render=()=>{};w.deliveryContext=()=>JSON.stringify({task:'184765378',date:'2026-08-24',group:'control_group',summary:{users:45}});
  const calls=[];w.fetch=async(path,opts={})=>{calls.push([path,opts.body&&JSON.parse(opts.body)]);const data=await handler(path,opts);return {ok:true,json:async()=>({code:0,data})};};
+ setup?.(w);
  w.eval(bridge);return {dom,w,calls};
 }
 const existing=path=>path==='/api/agents'?[{id:'a',name:'投放agent',user_id:'u'}]:path==='/api/conversations/agent'?{id:'c'}:[];
+
+test('投放会话接收 WebSocket 增量并立即更新正在生成的回答',async()=>{
+ let socket;
+ class FakeWebSocket {
+  static OPEN=1;
+  constructor(url){this.url=url;this.readyState=0;socket=this;queueMicrotask(()=>{this.readyState=1;this.onopen?.();});}
+  send(message){this.sent=JSON.parse(message);}
+  close(){this.readyState=3;this.onclose?.();}
+  emit(message){this.onmessage?.({data:JSON.stringify(message)});}
+ }
+ const {dom,w}=await page(path=>path.includes('/messages?')?[]:existing(path),w=>{w.WebSocket=FakeWebSocket;});
+ try {
+  await w.deliveryAgent.history();
+  assert.deepEqual(socket.sent,{type:'join_room',data:{conversation_id:'c'}});
+  const seen=[];w.deliveryAgent.subscribe(value=>seen.push(value.partial));
+  socket.emit({type:'message.streaming',data:{conversation_id:'c',message_id:'answer-1',deltas:[{type:'text',content:'先给结论：'}]}});
+  socket.emit({type:'message.streaming',data:{conversation_id:'c',message_id:'answer-1',deltas:[{type:'text.delta',content:'当前人群需要关注复购。'}]}});
+  assert.equal(w.deliveryAgent.snapshot().partial,'先给结论：当前人群需要关注复购。');
+  assert.deepEqual(seen.slice(-2),['先给结论：','先给结论：当前人群需要关注复购。']);
+ } finally {dom.window.close();}
+});
 test('专用投放会话复用、发送冻结上下文并只接收对应问题的回复',async()=>{
  const {dom,w,calls}=await page((path,opts)=>{
   if(path.endsWith('/messages')&&opts.method==='POST')return {user_message:{id:'q'}};

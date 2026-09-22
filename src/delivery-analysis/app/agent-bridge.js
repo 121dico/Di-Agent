@@ -15,6 +15,10 @@
   let pendingReply = null;
   let legacyMessages = null;
   let availableAgents = [];
+  let streamSocket = null;
+  let streamConversationId = '';
+  let streamMessageId = '';
+  let streamText = '';
   const listeners = new Set();
   const token = () => { try { return localStorage.getItem('di_agent_token') || ''; } catch { return ''; } };
   // 静态代理只改写连续 /api/；平台聊天须保留原 API 路由。
@@ -24,6 +28,66 @@
     const text = Array.isArray(blocks) ? blocks.filter(block => block.type === 'text').map(block => block.text || block.content || '').join('') : '';
     return text.trim() || String(message.content || '').trim();
   };
+  const eventText = event => {
+    if (!event || typeof event !== 'object') return '';
+    if (event.type === 'text' || event.type === 'text.delta') return String(event.content || event.text || '');
+    return '';
+  };
+  const blocksText = blocks => Array.isArray(blocks) ? blocks.filter(block => block && (block.kind === 'text' || block.type === 'text')).map(block => String(block.text || block.content || '')).join('') : '';
+  function closeStream() {
+    if (streamSocket) {
+      streamSocket.onclose = null;
+      try { streamSocket.close(); } catch {}
+    }
+    streamSocket = null;
+    streamConversationId = '';
+    streamMessageId = '';
+    streamText = '';
+  }
+  function handleStreamMessage(message) {
+    const currentId = session?.conversation?.id;
+    const data = message?.data || {};
+    const conversationId = data.conversation_id || data.conversationId;
+    if (!currentId || conversationId !== currentId) return;
+    if (message.type === 'message.streaming') {
+      const messageId = data.message_id || data.messageId || data.id || '';
+      if (messageId && messageId !== streamMessageId) {
+        streamMessageId = messageId;
+        streamText = '';
+      }
+      const delta = Array.isArray(data.deltas) ? data.deltas.map(eventText).join('') : '';
+      const content = delta || (typeof data.content === 'string' ? data.content : '');
+      if (content) {
+        streamText += content;
+        partial = streamText;
+        notify();
+      }
+      return;
+    }
+    if (message.type === 'message.complete') {
+      const content = blocksText(data.blocks) || (() => { try { return blocksText(JSON.parse(data.blocks_json || '[]')); } catch { return ''; } })() || String(data.content || '');
+      if (content) { streamText = content; partial = content; notify(); }
+    }
+  }
+  function openStream(current, expected) {
+    if (typeof window.WebSocket !== 'function' || !current?.conversation?.id || !expected) return;
+    const conversationId = current.conversation.id;
+    if (streamSocket && streamConversationId === conversationId && streamSocket.readyState < 2) return;
+    closeStream();
+    streamConversationId = conversationId;
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    try {
+      const socket = new window.WebSocket(proto + '//' + window.location.host + '/ws?token=' + encodeURIComponent(expected));
+      streamSocket = socket;
+      socket.onopen = () => socket.send(JSON.stringify({type:'join_room',data:{conversation_id:conversationId}}));
+      socket.onmessage = event => { try { handleStreamMessage(JSON.parse(event.data)); } catch {} };
+      socket.onclose = () => {
+        if (streamSocket !== socket || token() !== expected || session?.conversation?.id !== conversationId) return;
+        streamSocket = null;
+        window.setTimeout(() => openStream(current, expected), 1200);
+      };
+    } catch {}
+  }
   function assertIdentity(expected) {
     if (!expected || token() !== expected) throw new Error('登录状态已变化，请刷新页面后重新连接');
   }
@@ -41,6 +105,7 @@
   function checkLogin() {
     const value = token();
     if (value !== identity) {
+      closeStream();
       identity = value; availableAgents = []; legacyMessages = null; session = null; connecting = null; items = []; partial = ''; currentQuestion = ''; busy = false; pendingReply = null; error = '';
       notify();
     }
@@ -69,6 +134,7 @@
       if (!availableAgents.some(item => item.id === agent.id)) availableAgents.push(agent);
       const conversation = await request(path('conversations','agent'), {method:'POST',body:{agent_id:agent.id,workspace:'delivery'}}, expected);
       session = {agent:agents.find(item => item.id === conversation.peer_id) || agent,conversation};
+      openStream(session, expected);
       // 同源业务页登记归属，首次创建后的回复也不进入消息模块提醒。
       window.parent.dispatchEvent(new window.parent.CustomEvent('page-agent-conversation', {detail:conversation.id}));
       return session;
@@ -234,6 +300,7 @@
     try {
       const conversation = await request(path('conversations','agent'), {method:'POST',body:{agent_id:agentId,workspace:'delivery',select_agent:true}}, expected);
       session = {agent:selected,conversation};
+      openStream(session, expected);
     } catch (failure) { if(token() === expected)error = failure.message; throw failure; }
     finally { if(token() === expected){busy = false;notify();} }
   }
