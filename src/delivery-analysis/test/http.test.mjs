@@ -55,3 +55,16 @@ test('画像查询支持压缩传输并尊重客户端禁用压缩',()=>withServ
  assert.equal(compressed.headers.get('content-encoding'),'gzip');assert.equal((await compressed.json()).task.summary.users,10);
  const plain=await fetch(base+'/api/bootstrap',{headers:{Authorization:'Bearer valid','Accept-Encoding':'gzip;q=0'}});assert.equal(plain.headers.get('content-encoding'),null);
 }));
+
+test('首屏只返回50条查询预览，保留总数及完整持久快照',async()=>{
+ const full=structuredClone(snapshot);full.tasks[0].sourceId='source';
+ full.queries=Array.from({length:5000},(_,i)=>({sourceId:'source',queryId:'q-'+i,query:{fields:['users'],filters:[]}}));
+ await withServer(async(base)=>{
+  const response=await fetch(base+'/api/bootstrap',{headers:{Authorization:'Bearer valid'}});
+  const text=await response.text(),body=JSON.parse(text);
+  assert.equal(body.task.evidence.length,50);
+  assert.equal(body.task.evidenceTotal,5000);
+  assert.ok(text.length<100000,'首屏不得携带全量构建留痕');
+  assert.equal(full.queries.length,5000);
+ },true,full);
+});

@@ -493,13 +493,17 @@
     window.dispatchEvent(new CustomEvent('delivery:data'));
     for(const attr of ['profile-dimension','daily-breakdown'])all('[data-'+attr+']').forEach(n=>n.classList.toggle('active',(dimensions[n.getAttribute('data-'+attr)]||n.getAttribute('data-'+attr))===(attr==='profile-dimension'?(t.portraitDimension||t.dimension):t.dimension)));
   }
+  let pendingLoad=null;
   async function load(next=selection) {
-    if(next.unsupported){unsupported(next.unsupported);return;}
+    pendingLoad?.abort();
+    const controller=new AbortController();pendingLoad=controller;
+    const timeout=window.setTimeout(()=>controller.abort(),15000);
+    if(next.unsupported){window.clearTimeout(timeout);unsupported(next.unsupported);return;}
     const changedTask=next.taskId!==selection.taskId;
     if(changedTask){const saved=profilePreferences[next.taskId];const path=saved?.path||saved?.dimensions?.slice(0,1);if(path?.length)next={...next,portraitDimension:path[0],profileDimensions:path.join(',')};chart=saved?.chart||'pie';all('#customDateRange input').forEach(n=>delete n.dataset.initialized);$('dailyPeriodSelect').value='7';$('customDateRange').classList.add('hidden');}
     const version=++state.request;selection=next;state.data=null;clearData('正在读取真实数据…');notice('正在读取真实数据…');
     try {
-      const data=window.deliveryAPI?await window.deliveryAPI.bootstrap(next):await (async()=>{const response=await fetch('/api/bootstrap?'+new URLSearchParams(next),{headers:{Authorization:'Bearer '+(localStorage.getItem('di_agent_token')||'')}});const data=await response.json();if(!response.ok)throw new Error(data.error||'读取失败');return data;})();
+      const data=window.deliveryAPI?await window.deliveryAPI.bootstrap(next):await (async()=>{const response=await fetch('/api/bootstrap?'+new URLSearchParams(next),{headers:{Authorization:'Bearer '+(localStorage.getItem('di_agent_token')||'')},signal:controller.signal});const data=await response.json();if(!response.ok)throw new Error(data.error||'读取失败');return data;})();
       if(version!==state.request)return;if(data.env!=='live')throw new Error('接口未返回真实数据');
       state.data=data;selection={taskId:data.analysisTask?.id||data.task.id,...(data.task.selectedCrowd?{crowdId:data.task.selectedCrowd.id}:{}),...(data.task.selectedDate?{date:data.task.selectedDate}:{} ),group:data.task.selectedGroup,dimension:data.task.dimension,...(data.task.cumulative?{cumulativeGroup:data.task.cumulative.selectedGroup,cumulativeDimension:data.task.cumulative.dimension,...(data.task.cumulative.breakdown?.filters?.length||data.task.cumulative.breakdown?.dimensions?.length>1?{cumulativeBreakdown:JSON.stringify({dimensions:data.task.cumulative.breakdown.dimensions,filters:data.task.cumulative.breakdown.filters})}:{} )}:{}),...(data.task.portraitDimension?{portraitDimension:data.task.portraitDimension}:{}),...(data.task.profileAnalysis?{profileDimensions:data.task.profileAnalysis.dimensions.join(',')}:{})};
       try{if(!window.deliveryOffline)sessionStorage.setItem('deliveryOriginalSelection',JSON.stringify(selection));}catch{}
@@ -507,7 +511,8 @@
       const dates=all('#customDateRange input');if(dates[0]&&data.task.daily.length&&!dates[0].dataset.initialized){dates[0].value=data.task.daily[0].date;dates[1].value=data.task.daily.at(-1).date;dates.forEach(n=>n.dataset.initialized='true');}
       chart=profilePreferences[data.task.id]?.chart||chart;
       renderData();
-    }catch(error){if(version!==state.request)return;clearData(error.message);notice(error.message+'；请点击重新分析重试。');}
+    }catch(error){if(version!==state.request)return;const message=error.name==='AbortError'?'读取超时，请重试':error.message;clearData(message);notice(message+'；请点击重新分析重试。');}
+    finally{window.clearTimeout(timeout);if(pendingLoad===controller)pendingLoad=null;}
   }
   function unsupported(message) {
     ++state.request;selection={unsupported:message,unknownTask:one('.task-node.active')?.dataset.task,unknownAudience:one('.audience-option.active')?.dataset.audience};state.data=null;
@@ -523,7 +528,10 @@
     text('#contextTaskName',group.querySelector('.task-node').dataset.taskName);
     text('#contextInputName',node.dataset.audience||'任务全量');
   }
-  window.deliveryContext=()=>state.data?.task.scopeUnavailable?JSON.stringify({crowd:state.data.task.selectedCrowd,unavailable:state.data.task.scopeUnavailable}):state.data?JSON.stringify({task:state.data.task.sourceTaskId,taskName:state.data.task.name,kind:state.data.task.kind,builtAt:state.data.builtAt,partition:state.data.task.partition,selectedGroup:state.data.task.selectedGroup,profileAnalysis:state.data.task.profileAnalysis,distribution:state.data.task.distribution,groupSummary:state.data.task.groupSummary,evidence:state.data.task.evidence,date:state.data.task.selectedDate,dimension:state.data.task.dimension,portraitDimension:state.data.task.portraitDimension,portrait:state.data.task.portrait.slice(0,50),portraitRowsTotal:state.data.task.portrait.length,portraitUsers:state.data.task.portrait.reduce((sum,row)=>sum+row.users,0),audienceFacts:state.data.task.audienceFacts,summary:state.data.task.summary,cumulative:state.data.task.cumulative,experimentReference:state.data.task.experimentReference,groupPortrait:state.data.task.groupPortrait,crowdReferences:state.data.task.crowdReferences,deploymentReference:state.data.task.deploymentReference,notes:state.data.task.notes}):'当前未选择已接入的数据';
+  let contextData=null,contextText='';
+  const serializeDeliveryContext=()=>state.data?.task.scopeUnavailable?JSON.stringify({crowd:state.data.task.selectedCrowd,unavailable:state.data.task.scopeUnavailable}):state.data?JSON.stringify({task:state.data.task.sourceTaskId,taskName:state.data.task.name,kind:state.data.task.kind,builtAt:state.data.builtAt,partition:state.data.task.partition,selectedGroup:state.data.task.selectedGroup,profileAnalysis:state.data.task.profileAnalysis,distribution:state.data.task.distribution,groupSummary:state.data.task.groupSummary,evidence:(state.data.task.evidence||[]).slice(0,50),evidenceTotal:state.data.task.evidenceTotal??state.data.task.evidence?.length??0,date:state.data.task.selectedDate,dimension:state.data.task.dimension,portraitDimension:state.data.task.portraitDimension,portrait:state.data.task.portrait.slice(0,50),portraitRowsTotal:state.data.task.portrait.length,portraitUsers:state.data.task.portrait.reduce((sum,row)=>sum+row.users,0),audienceFacts:state.data.task.audienceFacts,summary:state.data.task.summary,cumulative:state.data.task.cumulative,experimentReference:state.data.task.experimentReference,groupPortrait:state.data.task.groupPortrait,crowdReferences:state.data.task.crowdReferences,deploymentReference:state.data.task.deploymentReference,notes:state.data.task.notes}):'当前未选择已接入的数据';
+  // 数据对象仅在成功加载/切换时替换；轮询无需反复序列化相同快照。
+  window.deliveryContext=()=>{if(contextData!==state.data||!contextText){contextData=state.data;contextText=serializeDeliveryContext();}return contextText;};
   window.askAi=async question=>{state.ai={question,answer:{title:'分析暂不可用',answer:'当前没有可用 Agent，请先连接 Agent 后重试。'}};window.render();};
   function fieldDetails(task) {
     const s=task.summary;
@@ -564,7 +572,7 @@
       ['效果指标',dailyMode?task.metric:scope?.metric],['成功分子',num(numerator)],['分母 · '+denominatorLabel,num(denominator)],
       ['当前效果',pct(summary?.rate)],['配置目标（不一定适用于当前范围）',Number.isFinite(current.analysisTask?.effect?.targetRate)?pct(current.analysisTask.effect.targetRate)+' · '+({coupon_repurchase_rate:'发券后7日复购率',order_penetration_rate:'近30天订单渗透率',achievement_rate:'累计个人达标率'}[current.analysisTask.effect.metric])+' · 起始 '+current.analysisTask.effect.startDate+'；仅在指标与时间口径一致时比较':'尚未配置'],
       ['对比基准','仅已接入来源组；大盘与可比历史活动未接入'],
-    ])+'<p>'+esc(dailyMode?'上方日均卡按周期内有效日期算术平均；本表效果及下方画像为当前选中日期，不能当作累计效果。':scope?.note||'累计数据未接入')+'</p><p>'+esc(task.notes.join(' '))+'</p><h4>标签及未达成人群依据</h4>'+table(['标签','人数','未达成'],(dailyMode?(valid?task.distribution:[]):scope?.distribution||[]).map(r=>[r.value,num(r.users),num(r.unmet)]))+'<h4>来源聚合查询 · '+queries.length+' 条</h4><p>这些是构建已发布快照的查询；页面筛选读取快照，不在点击时重新扫描源表。此处展示前50条，完整依据保留在导出快照。</p>'+queries.slice(0,50).map(q=>'<details><summary>'+esc(q.queryId||'来源查询')+' · '+esc(q.durationMs??'—')+' ms</summary><pre class="analysis-query">'+esc(JSON.stringify(q.query,null,2))+'</pre></details>').join('');
+    ])+'<p>'+esc(dailyMode?'上方日均卡按周期内有效日期算术平均；本表效果及下方画像为当前选中日期，不能当作累计效果。':scope?.note||'累计数据未接入')+'</p><p>'+esc(task.notes.join(' '))+'</p><h4>标签及未达成人群依据</h4>'+table(['标签','人数','未达成'],(dailyMode?(valid?task.distribution:[]):scope?.distribution||[]).map(r=>[r.value,num(r.users),num(r.unmet)]))+'<h4>来源聚合查询 · '+(task.evidenceTotal??queries.length)+' 条</h4><p>这些是构建已发布快照的查询；页面筛选读取快照，不在点击时重新扫描源表。此处展示前50条，完整依据保留在导出快照。</p>'+queries.slice(0,50).map(q=>'<details><summary>'+esc(q.queryId||'来源查询')+' · '+esc(q.durationMs??'—')+' ms</summary><pre class="analysis-query">'+esc(JSON.stringify(q.query,null,2))+'</pre></details>').join('');
     $('infoDialog').showModal();
   }
   function markUnavailable() {

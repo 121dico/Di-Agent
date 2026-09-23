@@ -74,6 +74,8 @@ export function createServer({gateway,store,appDirectory=join(ROOT,'app'),tasks}
           return json(res,400,{error:'日期、分组或维度不在当前数据范围内'});
         }
         if(!task)return json(res,404,{error:'该任务尚未接入真实数据'});
+        // 页面只展示前50条；完整查询依据保留于发布快照和离线导出。
+        task={...task,evidenceTotal:task.evidence?.length||0,evidence:(task.evidence||[]).slice(0,50)};
         return json(res,200,{env:'live',builtAt:snapshot.builtAt,status:store.status,currentUser:{id:user.id,name:user.display_name || user.username},tasks:sources,analysisTask,moduleOptions:MODULES,task});
       }
       if(req.method!=='GET')return json(res,405,{error:'method_not_allowed'});

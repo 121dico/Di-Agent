@@ -124,3 +124,7 @@ src/backend/data/
 
 # === 本地临时运行文件 ===
 .tmp/
+
+# === Python 运行缓存 ===
+__pycache__/
+*.py[cod]

@@ -37,3 +37,8 @@ bash scripts/dev.sh
 
 - 所有脚本从项目根目录执行，内部自行 cd 到子目录
 - 不要手动 cd 到 `src/backend` 再运行 go build/test，工作目录不会在命令间保持
+
+## ops/ — 线上维护
+
+`python3 scripts/ops/archive_legacy_deployments.py` 预览旧发布残留；`--apply` 可恢复归档，`--restore <manifest.json>` 预览恢复。
+目录职责和发布检查见 [线上目录与发布规则](../doc/operations/production-layout.md)。

@@ -16,6 +16,7 @@ interface AgentState {
   candidates: AgentCandidate[];
   loading: boolean;
   machineLoading: boolean;
+  candidatesLoading: boolean;
   error: string | null;
   agentsFetching: boolean;
   agentsLoaded: boolean;
@@ -51,6 +52,8 @@ function sortAgents(list: Agent[]): Agent[] {
 
 let agentsFetchPromise: Promise<void> | null = null;
 let agentMutationVersion = 0;
+let machinesFetchPromise: Promise<void> | null = null;
+let candidatesFetchPromise: Promise<void> | null = null;
 
 export const useAgentStore = create<AgentState>((set) => ({
   agents: [],
@@ -58,6 +61,7 @@ export const useAgentStore = create<AgentState>((set) => ({
   candidates: [],
   loading: false,
   machineLoading: false,
+  candidatesLoading: false,
   error: null,
   agentsFetching: false,
   agentsLoaded: false,
@@ -94,17 +98,22 @@ export const useAgentStore = create<AgentState>((set) => ({
   fetchDaemonMachines: async (force) => {
     const state = useAgentStore.getState();
     if (!force && state.machinesLoaded) return;
-    set({ machineLoading: true, error: null });
-    try {
-      const machines = await agentApi.getDaemonMachines();
-      set({ machines, machinesLoaded: true });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '查询电脑连接失败';
-      set({ error: message });
-      throw err;
-    } finally {
-      set({ machineLoading: false });
-    }
+    if (machinesFetchPromise) return machinesFetchPromise;
+    machinesFetchPromise = (async () => {
+      set({ machineLoading: true, error: null });
+      try {
+        const machines = await agentApi.getDaemonMachines();
+        set({ machines, machinesLoaded: true });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '查询电脑连接失败';
+        set({ error: message });
+        throw err;
+      } finally {
+        set({ machineLoading: false });
+        machinesFetchPromise = null;
+      }
+    })();
+    return machinesFetchPromise;
   },
 
   createDaemonMachine: async (name) => {
@@ -125,17 +134,22 @@ export const useAgentStore = create<AgentState>((set) => ({
   fetchAgentCandidates: async (force) => {
     const state = useAgentStore.getState();
     if (!force && state.candidatesLoaded) return;
-    set({ machineLoading: true, error: null });
-    try {
-      const candidates = await agentApi.getAgentCandidates();
-      set({ candidates, candidatesLoaded: true });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '查询候选 Agent 失败';
-      set({ error: message });
-      throw err;
-    } finally {
-      set({ machineLoading: false });
-    }
+    if (candidatesFetchPromise) return candidatesFetchPromise;
+    candidatesFetchPromise = (async () => {
+      set({ candidatesLoading: true, error: null });
+      try {
+        const candidates = await agentApi.getAgentCandidates();
+        set({ candidates, candidatesLoaded: true });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '查询候选 Agent 失败';
+        set({ error: message });
+        throw err;
+      } finally {
+        set({ candidatesLoading: false });
+        candidatesFetchPromise = null;
+      }
+    })();
+    return candidatesFetchPromise;
   },
 
   addAgentCandidate: async (id, body) => {

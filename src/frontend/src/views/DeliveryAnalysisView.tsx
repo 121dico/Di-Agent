@@ -22,11 +22,13 @@ const deliveryAgentConfig: AgentChatConfig = {
 
 const DeliveryAnalysisView: React.FC = () => {
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const lastContextRef = useRef('');
   const [context, setContext] = useState<DeliveryAgentContext>({ reportName: '当前投放', cities: [] });
   const readContext = () => {
     const frameWindow = frameRef.current?.contentWindow as (Window & { deliveryContext?: () => string }) | null;
     const raw = frameWindow?.deliveryContext?.();
-    if (!raw) return;
+    if (!raw || lastContextRef.current === raw) return;
+    lastContextRef.current = raw;
     try {
       const parsed = JSON.parse(raw) as { taskName?: string; partition?: string; date?: string; selectedGroup?: string; dimension?: string };
       setContext((previous) => {

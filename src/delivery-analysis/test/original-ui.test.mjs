@@ -375,3 +375,30 @@ test('30/60/90入口切换对应人群而非弹详情；未关联范围不能出
  assert.equal(requested.searchParams.has('crowdId'),false);assert.match(d.querySelector('#dailyMetrics').textContent,/25.00%/);
  }finally{dom.window.close();}
 });
+
+test('Agent上下文按快照复用序列化且查询预览有界',async()=>{
+ const input=structuredClone(data);input.task.evidence=Array.from({length:5000},(_,i)=>({queryId:'q-'+i}));
+ const dom=await page(input);
+ let serialized=0;
+ dom.window.state.data.task.summary.toJSON=()=>{serialized++;return {users:100};};
+ const first=dom.window.deliveryContext();
+ for(let i=0;i<10;i++)assert.equal(dom.window.deliveryContext(),first);
+ assert.equal(serialized,1);
+ assert.equal(JSON.parse(first).evidence.length,50);
+ assert.equal(JSON.parse(first).evidenceTotal,5000);
+ dom.window.state.data={...dom.window.state.data,task:{...dom.window.state.data.task,name:'切换任务'}};
+ assert.equal(JSON.parse(dom.window.deliveryContext()).taskName,'切换任务');
+ dom.window.close();
+});
+
+test('切换取消旧请求，超时退出加载且旧请求不能覆盖新状态',async()=>{
+ const dom=await page(data),w=dom.window,signals=[],timers=[];
+ const realTimeout=w.setTimeout.bind(w);
+ w.setTimeout=(fn,delay,...args)=>delay===15000?(timers.push(fn),12345):realTimeout(fn,delay,...args);
+ w.fetch=(_url,{signal})=>new Promise((_resolve,reject)=>{signals.push(signal);signal.addEventListener('abort',()=>reject(new w.DOMException('aborted','AbortError')));});
+ const a=w.deliveryLive.load(),b=w.deliveryLive.load();
+ assert.equal(signals[0].aborted,true);
+ timers.at(-1)();await Promise.all([a,b]);
+ assert.match(w.document.getElementById('phaseAvailabilityNote').textContent,/读取超时/);
+ assert.equal(w.state.data,null);dom.window.close();
+});

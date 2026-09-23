@@ -8,6 +8,7 @@ export function useAgents() {
   const loading = useAgentStore((s) => s.loading);
   const machineLoading = useAgentStore((s) => s.machineLoading);
   const error = useAgentStore((s) => s.error);
+  const machinesLoaded = useAgentStore((s) => s.machinesLoaded);
   const fetchAgents = useAgentStore((s) => s.fetchAgents);
   const fetchDaemonMachines = useAgentStore((s) => s.fetchDaemonMachines);
   const deleteDaemonMachine = useAgentStore((s) => s.deleteDaemonMachine);
@@ -19,9 +20,9 @@ export function useAgents() {
   const deleteAgent = useAgentStore((s) => s.deleteAgent);
 
   useEffect(() => {
-    fetchAgents();
-    fetchDaemonMachines();
-    fetchAgentCandidates();
+    void fetchAgents().catch(() => {});
+    void fetchDaemonMachines().catch(() => {});
+    void fetchAgentCandidates().catch(() => {});
   }, [fetchAgents, fetchDaemonMachines, fetchAgentCandidates]);
 
   return {
@@ -29,7 +30,7 @@ export function useAgents() {
     machines,
     candidates,
     loading,
-    machineLoading,
+    machineLoading: machineLoading || (!machinesLoaded && !error),
     error,
     createDaemonMachine,
     deleteDaemonMachine,
