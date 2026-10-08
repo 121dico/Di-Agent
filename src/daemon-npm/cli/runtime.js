@@ -18,6 +18,11 @@ function codexDesktopRuntimePaths({
       home && pathImpl.join(home, 'Applications', 'ChatGPT.app', 'Contents', 'Resources', 'codex'),
       '/Applications/Codex.app/Contents/Resources/codex',
       home && pathImpl.join(home, 'Applications', 'Codex.app', 'Contents', 'Resources', 'codex'),
+      // Desktop 更新后移动了内置 CLI；保留旧布局兼容尚未更新的安装。
+      '/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex',
+      home && pathImpl.join(home, 'Applications', 'ChatGPT.app', 'Contents', 'Resources', 'codex-cli', 'bin', 'codex'),
+      '/Applications/Codex.app/Contents/Resources/codex-cli/bin/codex',
+      home && pathImpl.join(home, 'Applications', 'Codex.app', 'Contents', 'Resources', 'codex-cli', 'bin', 'codex'),
     ]);
   }
   if (platform !== 'win32') return [];

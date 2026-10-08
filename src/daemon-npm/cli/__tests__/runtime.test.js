@@ -43,6 +43,24 @@ test('runtime discovery removes duplicate physical paths and keeps CLI first', (
   ]);
 });
 
+test('runtime discovery recognizes relocated macOS desktop binaries alongside CLI', () => {
+  const desktop = '/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex';
+  const resolved = resolveRuntimeCandidates({
+    cliCommand: 'codex',
+    desktopPaths: codexDesktopRuntimePaths({ platform: 'darwin', home: '/Users/me' }),
+    existingFile: (candidate) => candidate === desktop,
+    commandVersion: (command) => {
+      if (command === 'codex') return 'codex-cli 0.156.1';
+      return command === desktop ? 'codex-cli 0.162.0-alpha.2' : null;
+    },
+  });
+
+  assert.deepEqual(resolved, [
+    { command: 'codex', variant: 'cli', version: 'codex-cli 0.156.1' },
+    { command: desktop, variant: 'desktop', version: 'codex-cli 0.162.0-alpha.2' },
+  ]);
+});
+
 test('runtime resolution prefers standalone CLI before a desktop fallback', () => {
   const desktop = '/Applications/ChatGPT.app/Contents/Resources/codex';
   const resolved = resolveRuntimeCandidate({
@@ -95,6 +113,10 @@ test('desktop runtime paths cover supported macOS bundles', () => {
     '/Users/me/Applications/ChatGPT.app/Contents/Resources/codex',
     '/Applications/Codex.app/Contents/Resources/codex',
     '/Users/me/Applications/Codex.app/Contents/Resources/codex',
+    '/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex',
+    '/Users/me/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex',
+    '/Applications/Codex.app/Contents/Resources/codex-cli/bin/codex',
+    '/Users/me/Applications/Codex.app/Contents/Resources/codex-cli/bin/codex',
   ]);
   assert.deepEqual(zcodeDesktopRuntimePaths({ platform: 'darwin', home: '/Users/me' }), [
     '/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs',

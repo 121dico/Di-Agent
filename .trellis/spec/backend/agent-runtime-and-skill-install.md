@@ -128,6 +128,11 @@ events as a standalone CLI.
   Node executable; Windows command wrappers continue through `cmd.exe`.
 - Codex Desktop uses its bundled `codex app-server` and the user's normal
   `~/.codex` authentication/state.
+- macOS Codex Desktop discovery supports both `ChatGPT.app` and `Codex.app`
+  in `/Applications` and `~/Applications`. Retain the legacy
+  `Contents/Resources/codex` layout and also probe
+  `Contents/Resources/codex-cli/bin/codex`. A relocated executable is still
+  the `desktop` variant; its version string is not a discovery version gate.
 - ZCode Desktop creates one protocol session per live persistent slot, subscribes
   with `deliveryKind: "desktop-continuous"`, and serializes turns through that
   session.
@@ -170,6 +175,10 @@ events as a standalone CLI.
 - Resolution tests assert separate CLI/Desktop candidates, CLI default,
   Desktop fallback, dynamic variant, duplicate-path removal, case-insensitive
   Windows comparison, and macOS/Windows bundle paths.
+- macOS regression tests must combine the real path-provider and resolver:
+  when only the relocated executable exists, report Desktop alongside CLI;
+  cover both application names and system/user installation roots, preserving
+  the legacy paths.
 - Process tests assert script entries use the current Node executable.
 - Codex adapter tests assert process normalization, protocol timeout, pending RPC
   settlement, turn settlement, and child error/exit behavior.
