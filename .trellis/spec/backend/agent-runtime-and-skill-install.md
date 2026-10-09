@@ -410,3 +410,52 @@ their start event and end only at the result with the same invocation ID. Input
 fragments must not reset start time. Terminal task events must not invent tool
 completion. Missing legacy timestamps stay absent. The visual trajectory must
 fall back to order-only bars and never derive duration from token/text length.
+
+## Scenario: Progressive internal-source disclosure
+
+### 1. Scope / Trigger
+
+When an Agent lacks a lead for an internal question, expose a small source index first and a single source guide only after the Agent selects it. This metadata capability does not grant access to private source content.
+
+### 2. Signatures
+
+- Daemon MCP: `discover_internal_sources({}) -> {sources: [{id,name,purpose,status}]}`.
+- Daemon MCP: `get_internal_source_guide({source_id}) -> {source_id,name,status,guidance}`.
+- Backend registry: `tool_specs.DiscoverInternalSources()` and `tool_specs.GetInternalSourceGuide()`, both with `RouteInfo=nil`.
+- Context builder: `BuildAgentConfigText(agent, contextStr, taskText)` advertises only the two tool names and loading order.
+
+### 3. Contracts
+
+- Both tools are read-only daemon-local metadata and appear in ordinary existing Agents' MCP `tools/list`, including a stored `toolset=none` Agent.
+- Discovery returns only bounded summaries; it does not include guides, source contents, credentials, or per-user authorization claims.
+- The guide opens exactly one allowlisted source ID: `cooper`, `gitlab`, `data_map`, or `hive`. These are currently `not_connected` on the Agent side. The single-user Hive data-page connection is not delegated Agent access.
+- A future connector may mark a source available only after a real per-user read path exists and checks the current requester's authorization on each read. Tool metadata and source status must be updated together.
+
+### 4. Validation & Error Matrix
+
+| Condition | Result |
+|---|---|
+| Discover without source choice | Four short source summaries, no guide body |
+| Guide for known source | Only that source's status and guidance |
+| Unknown or long `source_id` | Tool error `未知资料源`; do not echo input |
+| Source has no per-user connector | Keep `not_connected`; Agent reports the gap, not a fabricated search |
+| Agent has no custom tools configured | Discovery tools still appear in `tools/list` |
+
+### 5. Good / Base / Bad Cases
+
+- Good: Agent sees a short pointer, discovers source statuses, opens one guide, and honestly reports an unavailable connector.
+- Base: an unrelated chat does not expand any source guide.
+- Bad: put every source guide in the initial prompt or reuse the daemon machine token as the end user's company identity.
+
+### 6. Tests Required
+
+- Context test asserts the two tool names are present while source URLs, full guides, and secrets are absent.
+- Daemon tests assert bounded discovery, single-source guide, unknown-ID error, and `tools/list` / `tools/call` for an ordinary Agent.
+- Go spec test asserts tool names and daemon-local `RouteInfo=nil`.
+
+### 7. Wrong vs Correct
+
+```text
+Wrong: initial prompt = all Cooper/GitLab/data-map/Hive instructions and implied login state.
+Correct: initial prompt = compact discovery pointer; MCP call returns one selected guide with honest status.
+```

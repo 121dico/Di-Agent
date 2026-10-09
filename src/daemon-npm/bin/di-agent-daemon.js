@@ -3827,6 +3827,23 @@ async function callMcpApi(serverURL, daemonToken, method, pathname, options = {}
   return requestJSON(method, url, options.body, daemonToken);
 }
 
+// 这里只保留少量非敏感索引；完整来源边界由单来源指南按需返回。
+const INTERNAL_SOURCE_CATALOG = [
+  { id: 'cooper', name: 'Cooper 文档', purpose: '查业务背景、口径和已有方案', status: 'not_connected' },
+  { id: 'gitlab', name: 'GitLab 代码', purpose: '查实现、接口和已有仓库', status: 'not_connected' },
+  { id: 'data_map', name: '数据地图', purpose: '查表结构、字段和血缘', status: 'not_connected' },
+  { id: 'hive', name: 'Hive 数据', purpose: '核对已授权的实际数据', status: 'not_connected' },
+];
+
+const INTERNAL_SOURCE_GUIDES = {
+  cooper: '适合寻找业务解释、指标口径和方案线索。当前 Agent 尚未接入 Cooper 检索；不要假称已读取文档，也不要借用浏览器登录态。可请用户提供相关文档或等待按用户授权的只读连接器接入。',
+  gitlab: '适合根据仓库名、接口或函数查已有实现。当前 Agent 尚未接入公司 GitLab 检索；不要假称已查看代码，也不要使用共享机器凭据代替提问者权限。可请用户提供仓库或代码片段。',
+  data_map: '适合根据表名、字段或业务口径查结构和血缘。当前 Agent 尚未接入数据地图；不要编造字段或血缘。可请用户提供表结构或等待按用户授权的只读连接器接入。',
+  hive: '适合在明确表、字段和日期后核对实际数值。当前 Agent 尚无按提问者身份执行 Hive 查询的连接器；现有页面上的单用户 Hive 凭据不等于所有 Agent 可用。不要使用共享凭据或声称已查询数据。',
+};
+
+const INTERNAL_DISCOVERY_TOOL_NAMES = ['discover_internal_sources', 'get_internal_source_guide'];
+
 const MCP_TOOLS = [
   {
     name: 'list_conversations',
@@ -3896,6 +3913,28 @@ const MCP_TOOLS = [
       const skill = skills.find((item) => item.name.toLowerCase() === name.toLowerCase());
       if (!skill) throw new Error(`skill not found for current agent: ${name}`);
       return skill;
+    },
+  },
+  {
+    name: 'discover_internal_sources',
+    description: '内部问题缺少线索时，发现资料源的简短用途与真实接入状态；不读取私有内容。',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: () => ({ sources: INTERNAL_SOURCE_CATALOG.map((source) => ({ ...source })) }),
+  },
+  {
+    name: 'get_internal_source_guide',
+    description: '选定一个资料源后，仅展开该来源的使用边界；未接入来源不能据此读取资料。',
+    inputSchema: {
+      type: 'object',
+      properties: { source_id: { type: 'string', enum: INTERNAL_SOURCE_CATALOG.map((source) => source.id) } },
+      required: ['source_id'],
+      additionalProperties: false,
+    },
+    run: async (args = {}) => {
+      const sourceId = typeof args.source_id === 'string' ? args.source_id.trim() : '';
+      const source = INTERNAL_SOURCE_CATALOG.find((item) => item.id === sourceId);
+      if (!source) throw new Error('未知资料源');
+      return { source_id: source.id, name: source.name, status: source.status, guidance: INTERNAL_SOURCE_GUIDES[source.id] };
     },
   },
   // ── 受治理的报表数据 ──
@@ -4709,6 +4748,7 @@ async function resolveAllowedTools(ctx) {
   // Append them at runtime so existing Agents work without being recreated.
   const toolSet = new Set(tools);
   for (const reportTool of REPORT_TOOL_NAMES) toolSet.add(reportTool);
+  for (const discoveryTool of INTERNAL_DISCOVERY_TOOL_NAMES) toolSet.add(discoveryTool);
   tools = [...toolSet];
   ctx.allowedTools = tools;
   return ctx.allowedTools;
@@ -4957,6 +4997,7 @@ module.exports = {
   onWebSocket,
   installSkillFromDirectory,
   MCP_TOOLS,
+  handleMcpMessage,
   parseGitHubSkillSource,
   readMcpRuntimeContext,
   resolveAllowedTools,

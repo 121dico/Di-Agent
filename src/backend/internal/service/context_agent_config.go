@@ -108,6 +108,7 @@ func BuildAgentConfigText(agent *model.Agent, contextStr string, taskText string
 			sb.WriteString("\n\n")
 		}
 	}
+	sb.WriteString("[内部资料渐进发现]\n内部问题缺少线索时，可调用 discover_internal_sources 查看资料源的简短用途和真实接入状态；仅在选定一个来源后调用 get_internal_source_guide 展开该来源指南。按问题与新线索决定下一步，不按固定顺序查找；未接入来源不可声称已检索或获得用户权限。\n\n")
 
 	// Report data is a governed platform capability rather than free-form web
 	// research. Keep a compact reminder on every task, then inject the full MCP

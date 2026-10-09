@@ -598,6 +598,8 @@ func registerAllToolSpecs(registry *service.ToolRegistry) {
 	// Skill tools (new)
 	mustRegister(ctx, registry, tool_specs.GetAgentSkill())
 	mustRegister(ctx, registry, tool_specs.ListPlatformSkills())
+	mustRegister(ctx, registry, tool_specs.DiscoverInternalSources())
+	mustRegister(ctx, registry, tool_specs.GetInternalSourceGuide())
 
 	// Platform infrastructure tools（所有 Agent 默认可用，不可禁用）
 	mustRegister(ctx, registry, tool_specs.RenderCard())
