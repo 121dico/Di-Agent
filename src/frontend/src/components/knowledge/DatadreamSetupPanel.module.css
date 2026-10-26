@@ -1,0 +1,58 @@
+.panel { max-width: 1000px; margin: 0 auto; color: var(--wb-text-primary); }
+.heading { display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); margin-bottom: var(--space-4); }
+.heading h1 { font-size: 24px; margin: 0; }
+.heading p, .hint, .guideIntro { color: var(--wb-text-secondary); font-size: 14px; line-height: 1.7; margin: 0; }
+.headingIcon { color: var(--wb-text-tertiary); font-size: 24px; }
+.card { background: var(--wb-surface); border: 1px solid var(--wb-border-subtle); border-radius: var(--radius-5); padding: var(--space-4) var(--space-5); margin-bottom: var(--space-4); }
+.machineRow { display: flex; align-items: flex-end; flex-wrap: wrap; gap: var(--space-3); }
+.machineField { min-width: 200px; flex: 1; display: flex; flex-direction: column; gap: var(--space-2); font-size: 12px; color: var(--wb-text-secondary); }
+.machineField select { width: 100%; min-height: 40px; padding: 8px 12px; background: var(--wb-surface); border: 1px solid var(--wb-border-default); border-radius: var(--radius-3); color: var(--wb-text-primary); font: inherit; font-size: 14px; }
+.panel :global(.ant-btn), .guide :global(.ant-btn) { min-height: 40px; }
+.summary { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-4); }
+.summary h2 { margin: 0 0 var(--space-2); font-size: 16px; font-weight: 600; }
+.summary p { margin: 0; color: var(--wb-text-secondary); font-size: 12px; line-height: 1.6; }
+.actions { display: flex; align-items: flex-start; flex-wrap: wrap; gap: var(--space-2); }
+.setupEntry { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.setupEntry > span, .firstUse { color: var(--wb-text-tertiary); font-size: 12px; line-height: 1.6; }
+.firstUse { margin: var(--space-2) 0 0; }
+.stepHeading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.stepHeading h3 { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: 15px; font-weight: 600; }
+.stepNumber { display: inline-flex; justify-content: center; align-items: center; width: 26px; height: 26px; flex-shrink: 0; border: 1px solid var(--wb-border-default); border-radius: 50%; font-variant-numeric: tabular-nums; font-size: 13px; }
+.configForm > .formField + .formField { border-top: 1px solid var(--wb-border-subtle); padding-top: var(--space-5); }
+.imagePlaceholder { padding: var(--space-4); border: 1px dashed var(--wb-border-default); border-radius: var(--radius-3); color: var(--wb-text-secondary); font-size: 13px; line-height: 1.7; }
+.guideImage { margin: var(--space-4) 0; }
+.guideImage img { display: block; max-width: 100%; height: auto; border: 1px solid var(--wb-border-subtle); border-radius: var(--radius-3); }
+.guideImage figcaption { color: var(--wb-text-secondary); font-size: 12px; margin-top: var(--space-2); }
+.checkList { list-style: none; padding: 0; margin: var(--space-4) 0 0; }
+.checkRow { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); border-top: 1px solid var(--wb-border-subtle); padding: var(--space-3) 0; }
+.checkRow:last-child { padding-bottom: 0; }
+.checkCopy { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.checkCopy strong { font-size: 14px; font-weight: 500; }
+.checkCopy span, .checkCopy small { font-size: 12px; line-height: 1.6; color: var(--wb-text-secondary); overflow-wrap: anywhere; }
+.checkStatus { flex-shrink: 0; font-size: 12px; padding-top: 2px; }
+.success { color: var(--wb-success); }
+.muted { color: var(--wb-text-tertiary); }
+.warning { color: var(--wb-warning); }
+.error { color: var(--wb-error); }
+.notice { color: var(--wb-text-primary); background: var(--wb-surface-subtle); border-radius: var(--radius-3); padding: var(--space-3); }
+p.warning, p.error, p.notice, .hint { font-size: 13px; line-height: 1.7; margin: var(--space-3) 0 0; overflow-wrap: anywhere; }
+.footnote { font-size: 12px; color: var(--wb-text-tertiary); line-height: 1.7; margin: var(--space-2) 0 0; }
+.helpLinks { display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: 12px; }
+.helpLinks a, .steps a { color: var(--wb-link); }
+.helpLinks button, .textButton { padding: 0; border: 0; background: transparent; cursor: pointer; color: var(--wb-link); font: inherit; }
+.panel button:focus-visible, .guide button:focus-visible, .panel select:focus-visible, .guide a:focus-visible, .panel a:focus-visible { outline: 2px solid var(--wb-focus); outline-offset: 3px; }
+.guide { max-width: calc(100vw - 32px); }
+.guideIntro { margin-top: var(--space-4); }
+.configForm { display: flex; flex-direction: column; gap: var(--space-5); margin-top: var(--space-5); }
+.formField { display: flex; flex-direction: column; gap: var(--space-2); }
+.fieldLabel { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: var(--space-2); font-size: 13px; }
+.fieldLabel a { font-size: 12px; color: var(--wb-link); }
+.configForm :global(.ant-input), .configForm :global(.ant-input-affix-wrapper) { min-height: 40px; }
+.configForm :global(.ant-input-affix-wrapper .ant-input) { min-height: auto; }
+.steps { padding-left: 24px; margin: var(--space-4) 0; }
+.steps li { padding: 0 0 var(--space-5) var(--space-2); }
+.steps li::marker { color: var(--wb-text-tertiary); }
+.steps h3 { font-size: 14px; margin: 0 0 var(--space-2); }
+.steps p { color: var(--wb-text-secondary); line-height: 1.7; margin: 0 0 var(--space-2); font-size: 13px; }
+.guideFooter { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); border-top: 1px solid var(--wb-border-subtle); padding-top: var(--space-4); }
+@media (max-width: 767px) { .card { padding: var(--space-4); } .machineField { flex-basis: 100%; min-width: 0; } .actions { width: 100%; } .panel :global(.ant-btn), .guide :global(.ant-btn), .machineField select { min-height: 44px; } .heading { align-items: flex-start; } .headingIcon { display: none; } .checkRow { gap: var(--space-2); } }

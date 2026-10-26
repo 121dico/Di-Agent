@@ -45,6 +45,25 @@ test('新增个人效果指标缺失或覆盖数越界时不发布快照',async(
   }
 });
 
+test('重建表未配置个人目标时保留滚动效果，不生成虚假的达标累计',async()=>{
+  const fake=gateway(),query=fake.query;
+  fake.query=async function(q){
+    const rows=await query.call(this,q);
+    return q.fields.some(f=>f.alias==='target_count')?rows.map(r=>({
+      ...r,achieved:null,unmet:null,target_count:0,target_min:null,target_max:null,
+    })):rows;
+  };
+  const snapshot=await buildSnapshot(fake);
+  const effect=selectTask(snapshot,'effect');
+  assert.equal(effect.summary.rate,.1);
+  assert.equal(effect.summary.achieved,null);
+  assert.equal(effect.summary.unmet,null);
+  assert.equal(effect.summary.personalTarget,null);
+  assert.equal(effect.cumulative,null);
+  assert.equal(effect.periodFunnels,null);
+  assert.equal(fake.evidence.some(e=>e.query.filters.some(f=>f.name==='achieved_flag'&&f.value===1)),false);
+});
+
 test('联合快照逐维对账，不允许同总数但错标签的联合桶发布',async()=>{
  const fake=gateway(),query=fake.query;
  fake.query=async function(q){const rows=await query.call(this,q);return q.group_by.includes('city_name')&&q.group_by.includes('charge_life_cycle')?rows.map(r=>({...r,city_name:'错误城市'})):rows;};

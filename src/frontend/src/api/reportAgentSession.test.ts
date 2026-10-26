@@ -7,7 +7,7 @@ vi.mock('./client', () => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.
 describe('报表 Agent 会话接入', () => {
   beforeEach(() => vi.resetAllMocks());
 
-  it('并发打开只创建一次绑定在线 Claude 的报表 Agent 和独立会话', async () => {
+  it('并发打开只创建一次绑定在线 Codex 的报表 Agent 和独立会话', async () => {
     vi.mocked(get).mockImplementation(async (path) => {
       if (path === '/api/agents') return [];
       if (path === '/api/daemon/machines') return [{ id: 'machine', status: 'connected' }];
@@ -29,8 +29,19 @@ describe('报表 Agent 会话接入', () => {
     expect(first.conversation.id).toBe('report-conversation');
     expect(second).toEqual(first);
     expect(post).toHaveBeenCalledTimes(2);
-    expect(post).toHaveBeenCalledWith('/api/daemon/agent-candidates/claude/add', expect.objectContaining({ name: '报表agent', cli_tool: 'claude', enable_management_tools: false }));
+    expect(post).toHaveBeenCalledWith('/api/daemon/agent-candidates/codex/add', expect.objectContaining({ name: '报表agent', cli_tool: 'codex', enable_management_tools: false }));
     expect(post).toHaveBeenCalledWith('/api/conversations/agent', { agent_id: 'report-agent', workspace: 'report', select_agent: false });
+  });
+
+  it('优先复用已连接的 Codex_cli 而不是旧 Claude 报表 Agent', async () => {
+    vi.mocked(get).mockResolvedValue([
+      { id: 'claude-report', user_id: 'user-5', name: '报表agent', cli_tool: 'claude', status: 'online', machine_id: 'machine' },
+      { id: 'codex-existing', user_id: 'user-5', name: 'Codex_cli', cli_tool: 'codex', status: 'online', machine_id: 'machine' },
+    ]);
+    vi.mocked(post).mockResolvedValue({ id: 'codex-conversation', peer_id: 'codex-existing' });
+    const session = await ensureReportAgentSession('user-5', 'session-5', () => true);
+    expect(session.agent.id).toBe('codex-existing');
+    expect(post).toHaveBeenCalledWith('/api/conversations/agent', { agent_id: 'codex-existing', workspace: 'report', select_agent: false });
   });
 
   it('已有报表 Agent 时恢复同一会话，认证变化后不创建资源', async () => {

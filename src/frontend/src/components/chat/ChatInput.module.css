@@ -502,6 +502,18 @@
   background: var(--wb-surface-selected);
 }
 
+.recipientArea { position: relative; width: min(100%, var(--chat-reading-width)); margin: 0 auto 6px; min-width: 0; }
+.recipientArea .targetBar { margin: 0; padding: 0; background: transparent; border: 0; }
+.recipientArea .targetBar > button:first-child { min-width: 0; max-width: calc(100% - 32px); }
+.recipientMenu { position: absolute; bottom: 100%; left: 0; z-index: 20; width: min(320px, 100%); max-height: 240px; overflow-y: auto; padding: 4px; background: var(--wb-surface, #fff); border: 1px solid var(--color-border, #ddd); border-radius: 8px; box-shadow: 0 4px 16px #0001; }
+.recipientMenu .mentionItem { width: 100%; border: 0; background: transparent; text-align: left; }
+.recipientMenu .mentionItem[aria-selected="true"] { background: var(--wb-surface-selected); }
+.orchaBadge { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; font-size: 11px; color: var(--color-text-secondary); white-space: nowrap; }
+.recipientEmpty { display: block; padding: 10px; color: var(--color-text-secondary); }
+.recipientName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recipientMenu .mentionItem { display: flex; align-items: center; gap: 6px; }
+.recipientMenu .mentionItem:focus-visible { outline: 2px solid var(--wb-link); outline-offset: -2px; }
+
 @media (max-width: 720px) {
   .container { padding: 8px 14px 14px; }
   .inputRow { border-radius: var(--radius-5); }

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/121dico/Di-Agent/src/backend/internal/bossauth"
 	"github.com/121dico/Di-Agent/src/backend/internal/catalog"
 	"github.com/121dico/Di-Agent/src/backend/internal/handler"
 	"github.com/121dico/Di-Agent/src/backend/internal/middleware"
@@ -17,6 +18,7 @@ import (
 
 // Deps aggregates all HTTP handler instances needed for route setup.
 type Deps struct {
+	BossBoundary               *bossauth.Boundary
 	AuthHandler                *handler.AuthHandler
 	ConvHandler                *handler.ConversationHandler
 	MsgHandler                 *handler.MessageHandler
@@ -28,6 +30,8 @@ type Deps struct {
 	AgentHandler               *handler.AgentHandler
 	AgentRuntimeHandler        *handler.AgentRuntimeHandler
 	ReportHandler              *handler.ReportHandler
+	HiveDataHandler            *handler.HiveDataHandler
+	DataMapHandler             *handler.DataMapHandler
 	DeliveryAnalysisHandler    *handler.DeliveryAnalysisHandler
 	PersonalReportHandler      *handler.PersonalReportHandler
 	PlatformSkillHandler       *handler.PlatformSkillHandler
@@ -37,6 +41,7 @@ type Deps struct {
 	ToolCategoryHandler        *handler.ToolCategoryHandler
 	CatalogHandler             *catalog.Handler
 	DaemonHandler              *handler.DaemonHandler
+	ManagedMCPSetupHandler     *handler.ManagedMCPSetupHandler
 	TaskHandler                *handler.TaskHandler
 	ArtifactHandler            *handler.ArtifactHandler
 	DeploymentHandler          *handler.DeploymentHandler
@@ -92,6 +97,11 @@ func Setup(r *gin.Engine, deps Deps) {
 	// Auth routes (no auth)
 	authGroup := r.Group("/api/auth")
 	{
+		if deps.BossBoundary != nil {
+			authGroup.GET("/providers", deps.BossBoundary.Providers)
+			authGroup.GET("/boss/session", deps.BossBoundary.Status)
+			authGroup.POST("/boss/session", deps.BossBoundary.Session)
+		}
 		authGroup.POST("/register", deps.AuthHandler.Register)
 		authGroup.POST("/login", deps.AuthHandler.Login)
 	}
@@ -211,6 +221,37 @@ func Setup(r *gin.Engine, deps Deps) {
 		apiGroup.GET("/agents/:id/models", deps.AgentHandler.ListModels)
 		apiGroup.GET("/agents/:id/files/browse", deps.AgentHandler.BrowseFiles)
 
+		// Authenticated data hub and read-only Hive query receipts.
+		if deps.HiveDataHandler != nil {
+			dataRoutes := apiGroup.Group("/data")
+			dataRoutes.Use(middleware.ValidateUUIDParam("id"))
+			dataRoutes.GET("/connections", deps.HiveDataHandler.Connections)
+			dataRoutes.GET("/session", deps.HiveDataHandler.Session)
+			dataRoutes.GET("/api/sources", deps.HiveDataHandler.APISources)
+			dataRoutes.GET("/hive/tables", deps.HiveDataHandler.Tables)
+			dataRoutes.POST("/hive/tables", deps.HiveDataHandler.AddTable)
+			dataRoutes.GET("/hive/fields", deps.HiveDataHandler.Fields)
+			dataRoutes.GET("/hive/catalog", deps.HiveDataHandler.Catalog)
+			dataRoutes.GET("/hive/catalog/probe", deps.HiveDataHandler.ProbeCatalogTable)
+			dataRoutes.POST("/hive/login", deps.HiveDataHandler.Login)
+			dataRoutes.POST("/hive/query", deps.HiveDataHandler.Query)
+			dataRoutes.GET("/hive/receipts", deps.HiveDataHandler.List)
+			dataRoutes.GET("/hive/receipts/:id", deps.HiveDataHandler.Get)
+		}
+
+		// Fixed enterprise reports
+		if deps.HiveDataHandler != nil {
+			dataRoutes := apiGroup.Group("/data")
+			dataRoutes.Use(middleware.ValidateUUIDParam("id"))
+			dataRoutes.GET("/connections", deps.HiveDataHandler.Connections)
+			dataRoutes.GET("/session", deps.HiveDataHandler.Session)
+			dataRoutes.GET("/api/sources", deps.HiveDataHandler.APISources)
+			dataRoutes.GET("/hive/tables", deps.HiveDataHandler.Tables)
+			dataRoutes.POST("/hive/query", deps.HiveDataHandler.Query)
+			dataRoutes.GET("/hive/receipts", deps.HiveDataHandler.List)
+			dataRoutes.GET("/hive/receipts/:id", deps.HiveDataHandler.Get)
+		}
+
 		// Fixed enterprise reports
 		if deps.ReportHandler != nil {
 			reportRoutes := apiGroup.Group("/reports")
@@ -278,10 +319,17 @@ func Setup(r *gin.Engine, deps Deps) {
 
 		// Daemon machine management
 		apiGroup.GET("/daemon/machines", deps.AgentHandler.ListDaemonMachines)
+		apiGroup.POST("/daemon/local-identity/verify", deps.AgentHandler.VerifyBrowserIdentity)
 		apiGroup.POST("/daemon/machines", deps.AgentHandler.CreateDaemonMachine)
 		apiGroup.DELETE("/daemon/machines/:id", deps.AgentHandler.DeleteDaemonMachine)
 		apiGroup.GET("/daemon/machines/:id/connect", deps.AgentHandler.GetMachineConnect)
 		apiGroup.GET("/daemon/machines/:id/launcher", deps.AgentHandler.GetMachineLauncher)
+		if deps.ManagedMCPSetupHandler != nil {
+			apiGroup.POST("/daemon/machines/:id/managed-mcp/inspect", deps.ManagedMCPSetupHandler.Inspect)
+			apiGroup.POST("/daemon/machines/:id/managed-mcp/configure", deps.ManagedMCPSetupHandler.Configure)
+			apiGroup.POST("/daemon/machines/:id/managed-mcp/setup-session", deps.ManagedMCPSetupHandler.SetupSession)
+			apiGroup.POST("/daemon/machines/:id/managed-mcp/save", deps.ManagedMCPSetupHandler.Save)
+		}
 		apiGroup.GET("/daemon/agent-candidates", deps.AgentHandler.ListAgentCandidates)
 		apiGroup.POST("/daemon/agent-candidates/:id/add", deps.AgentHandler.AddCandidateAgent)
 
@@ -374,6 +422,17 @@ func Setup(r *gin.Engine, deps Deps) {
 	r.GET("/daemon/tasks", deps.DaemonHandler.WithMachine(deps.DaemonHandler.ClaimTask))
 	r.POST("/daemon/tasks/:id/complete", deps.DaemonHandler.WithMachine(deps.DaemonHandler.CompleteTask))
 	r.POST("/daemon/tasks/:id/heartbeat", deps.DaemonHandler.WithMachine(deps.DaemonHandler.Heartbeat))
+	r.GET("/daemon/managed-mcps", deps.DaemonHandler.WithMachineBearer(handler.ManagedMCPCatalog))
+	// 数据地图试点凭据只允许已认证的单机 owner 使用；这里不复用可自填
+	// user_id 的全局 daemon-token /mcp 路由，也不把机器密钥放进 URL。
+	if deps.DataMapHandler != nil {
+		r.GET("/daemon/internal-sources/status", deps.DaemonHandler.WithMachineBearer(deps.DataMapHandler.Status))
+		r.GET("/daemon/internal-sources/data-map/hive/tables", deps.DaemonHandler.WithMachineBearer(deps.DataMapHandler.SearchHiveTables))
+	}
+	if deps.HiveDataHandler != nil {
+		r.GET("/daemon/internal-sources/hive-data/status", deps.DaemonHandler.WithMachineBearer(deps.HiveDataHandler.MachineStatus))
+		r.POST("/daemon/internal-sources/hive-data/probe", deps.DaemonHandler.WithMachineBearer(deps.HiveDataHandler.MachineProbe))
+	}
 
 	// Internal routes (daemon-token auth, called by MCP subprocess tools like
 	// deploy_project to push cards/results back to backend). Shares the same
@@ -433,12 +492,12 @@ func Setup(r *gin.Engine, deps Deps) {
 		// server-validated queries; physical source configuration stays admin-only.
 		if deps.ReportHandler != nil {
 			mcpGroup.GET("/report-data/contracts", deps.ReportHandler.ListAgentContracts)
+			mcpGroup.GET("/report-templates/default", deps.ReportHandler.GetDefaultTemplate)
 			mcpGroup.POST("/report-data/query", deps.ReportHandler.QueryAgentData)
 		}
 		if deps.PersonalReportHandler != nil {
-			mcpGroup.POST("/personal-reports", deps.PersonalReportHandler.Create)
+			mcpGroup.POST("/personal-reports", deps.PersonalReportHandler.CreateAgent)
 		}
-
 		// Tool registry (MCP) - daemon fetches tool definitions at startup
 		mcpGroup.GET("/tool-registry", deps.ToolDefHandler.ToolRegistry)
 	}

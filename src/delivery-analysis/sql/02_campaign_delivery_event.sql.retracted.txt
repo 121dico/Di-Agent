@@ -1,0 +1,84 @@
+-- 投放分析：投放中过程事实
+-- 运行前必须绑定 DELIVERY_EVENT_SOURCE_TABLE。
+-- 该源表必须提供：campaign_id, resource_id, crowd_id, duid, event_ts,
+-- event_type(entry/exposure/click/coupon_issued/coupon_received/coupon_used),
+-- source_event_id, coupon_batch_id。
+-- 没有曝光/点击日志时，不得用 entry 人数代替，页面显示暂无数据。
+
+-- 仅本次重建执行；日常调度/分区补跑必须注释 DROP，避免移除历史分区元数据。
+-- 当前仍为待绑定源表的模板，不能仅替换日期后直接运行。
+DROP TABLE IF EXISTS epower_platform.ads_delivery_campaign_delivery_event_di;
+
+CREATE EXTERNAL TABLE IF NOT EXISTS epower_platform.ads_delivery_campaign_delivery_event_di (
+    campaign_id          string,
+    resource_id          string,
+    crowd_id             string,
+    duid                 bigint,
+    group_type           string,
+    event_dt             string,
+    event_ts             string,
+    event_type           string,
+    is_experiment_entry  int,
+    is_exposure          int,
+    is_click             int,
+    is_coupon_issued     int,
+    is_coupon_received   int,
+    is_coupon_used       int,
+    coupon_batch_id      string,
+    coupon_id            string,
+    source_event_id      string,
+    city_name            string,
+    charge_region        string
+)
+PARTITIONED BY (dt string)
+STORED AS ORC;
+
+WITH source_event AS (
+    SELECT
+        CAST(campaign_id AS string) AS campaign_id,
+        CAST(resource_id AS string) AS resource_id,
+        CAST(crowd_id AS string) AS crowd_id,
+        CAST(duid AS bigint) AS duid,
+        CAST(event_ts AS string) AS event_ts,
+        CAST(event_type AS string) AS event_type,
+        CAST(source_event_id AS string) AS source_event_id,
+        CAST(coupon_batch_id AS string) AS coupon_batch_id,
+        CAST(coupon_id AS string) AS coupon_id
+    FROM ${DELIVERY_EVENT_SOURCE_TABLE}
+    WHERE to_date(event_ts) BETWEEN '${CAMPAIGN_START_DT}' AND '${CAMPAIGN_END_DT}'
+      AND duid > 0
+),
+baseline AS (
+    SELECT campaign_id, resource_id, crowd_id, duid, group_type,
+           city_name, charge_region
+    FROM epower_platform.ads_delivery_campaign_audience_baseline_di
+    WHERE dt = '${BIZ_DATE_LINE}'
+),
+dedup AS (
+    SELECT s.*, b.group_type, b.city_name, b.charge_region,
+           row_number() OVER (
+             PARTITION BY s.campaign_id, s.resource_id, s.duid,
+                          s.event_type, s.source_event_id
+             ORDER BY s.event_ts
+           ) AS rn
+    FROM source_event s
+    JOIN baseline b
+      ON s.campaign_id = b.campaign_id
+     AND s.resource_id = b.resource_id
+     AND s.crowd_id = b.crowd_id
+     AND s.duid = b.duid
+)
+INSERT OVERWRITE TABLE epower_platform.ads_delivery_campaign_delivery_event_di
+PARTITION (dt = '${BIZ_DATE_LINE}')
+SELECT
+    campaign_id, resource_id, crowd_id, duid, group_type,
+    to_date(event_ts), event_ts, event_type,
+    CASE WHEN event_type = 'entry' THEN 1 ELSE 0 END,
+    CASE WHEN event_type = 'exposure' THEN 1 ELSE 0 END,
+    CASE WHEN event_type = 'click' THEN 1 ELSE 0 END,
+    CASE WHEN event_type = 'coupon_issued' THEN 1 ELSE 0 END,
+    CASE WHEN event_type = 'coupon_received' THEN 1 ELSE 0 END,
+    CASE WHEN event_type = 'coupon_used' THEN 1 ELSE 0 END,
+    coupon_batch_id, coupon_id, source_event_id, city_name, charge_region
+FROM dedup
+WHERE rn = 1;

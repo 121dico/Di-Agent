@@ -30,19 +30,21 @@ type fakeStreamingNotifier struct {
 		convID    string
 		eventType string
 		memberIDs []string
+		data      interface{}
 	}
 }
 
 func (n *fakeStreamingNotifier) PushToConversation(_ string, _ []string, _ interface{}) {}
 
-func (n *fakeStreamingNotifier) PushCustomEvent(convID string, memberIDs []string, eventType string, _ interface{}) {
+func (n *fakeStreamingNotifier) PushCustomEvent(convID string, memberIDs []string, eventType string, data interface{}) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.customCalls = append(n.customCalls, struct {
 		convID    string
 		eventType string
 		memberIDs []string
-	}{convID: convID, eventType: eventType, memberIDs: append([]string(nil), memberIDs...)})
+		data      interface{}
+	}{convID: convID, eventType: eventType, memberIDs: append([]string(nil), memberIDs...), data: data})
 }
 
 func (n *fakeStreamingNotifier) IsOnline(_ string) bool { return false }
@@ -51,6 +53,39 @@ func (n *fakeStreamingNotifier) CustomEventCount() int {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	return len(n.customCalls)
+}
+
+func (n *fakeStreamingNotifier) CustomEventCountByType(eventType string) int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	count := 0
+	for _, call := range n.customCalls {
+		if call.eventType == eventType {
+			count++
+		}
+	}
+	return count
+}
+
+func TestStreamingPipelineAnnouncesWorkerBeforeFirstModelDelta(t *testing.T) {
+	notifier := &fakeStreamingNotifier{}
+	msgRepo := &fakeMsgRepo{}
+	handle, err := SetupStreamingPipeline(context.Background(), StreamingPipelineDeps{
+		MsgRepo: msgRepo, Notifier: notifier,
+		ConvRepo: &fakeStreamingConvRepo{memberIDs: []string{"user-1"}},
+	}, "conv-1", "worker-1", "Codex", "codex", "task-1", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	notifier.mu.Lock()
+	defer notifier.mu.Unlock()
+	if len(notifier.customCalls) != 1 || notifier.customCalls[0].eventType != ws.TypeMessageStreaming {
+		t.Fatalf("worker must appear before its first delta: %+v", notifier.customCalls)
+	}
+	payload, ok := notifier.customCalls[0].data.(map[string]interface{})
+	if !ok || payload["message_id"] != handle.MessageID || payload["task_id"] != "task-1" || payload["agent_name"] != "Codex" {
+		t.Fatalf("start event must identify the worker message and task: %#v", notifier.customCalls[0].data)
+	}
 }
 
 // fakeTaskAgentIndex 记录 RegisterTaskAgent / DeleteTaskAgent 调用。
@@ -296,7 +331,7 @@ func TestDispatcher_StreamingFailure_DaemonNotConnected(t *testing.T) {
 	}
 
 	// 应广播 1 次 message.complete 终态事件（status=error）
-	if got := notifier.CustomEventCount(); got != 1 {
+	if got := notifier.CustomEventCountByType(ws.TypeMessageComplete); got != 1 {
 		t.Fatalf("expected 1 terminal broadcast, got %d", got)
 	}
 }
@@ -346,7 +381,7 @@ func TestDispatcher_StreamingFailure_TaskFailed(t *testing.T) {
 	if !found {
 		t.Fatal("expected streaming placeholder to be finalized with Error status on task failure")
 	}
-	if got := notifier.CustomEventCount(); got != 1 {
+	if got := notifier.CustomEventCountByType(ws.TypeMessageComplete); got != 1 {
 		t.Fatalf("expected 1 terminal broadcast on task failure, got %d", got)
 	}
 }
@@ -395,7 +430,7 @@ func TestDispatcher_StreamingFailure_WaitFails(t *testing.T) {
 	if !found {
 		t.Fatal("expected streaming placeholder to be finalized with Error status on wait failure")
 	}
-	if got := notifier.CustomEventCount(); got != 1 {
+	if got := notifier.CustomEventCountByType(ws.TypeMessageComplete); got != 1 {
 		t.Fatalf("expected 1 terminal broadcast on wait failure, got %d", got)
 	}
 }
@@ -444,7 +479,7 @@ func TestDispatcher_StreamingFailure_DispatchFails(t *testing.T) {
 	if !found {
 		t.Fatal("expected streaming placeholder to be finalized with Error status on dispatch failure")
 	}
-	if got := notifier.CustomEventCount(); got != 1 {
+	if got := notifier.CustomEventCountByType(ws.TypeMessageComplete); got != 1 {
 		t.Fatalf("expected 1 terminal broadcast on dispatch failure, got %d", got)
 	}
 }

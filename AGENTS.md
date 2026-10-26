@@ -134,3 +134,26 @@ These have caused real bugs in this codebase:
 | API reference | `doc/reference/api.md` |
 | Module tasks | `doc/task/M0-基础设施.md` ~ `doc/task/M10-Pin上下文.md` |
 | Task progress | `doc/TASKLIST.md` |
+
+## Di Agent 服务器与账号长期上下文
+
+- 服务器、账号密码、Web 入口、常用路径见：/Users/didi/Documents/dpsk/AGENTS.md
+- 本仓库不保存明文密码，避免被提交到 Git。
+
+### 默认线上交付要求（用户于 2026-10-13 再次确认）
+
+- 正式服务器为 `10.190.43.41`，Web 入口 `http://10.190.43.41:8080/`，部署目录 `/root/energy_tag_agent`；SSH 使用 `haopengchen_i` 或 `root`，凭据只从上述本机记录读取。
+- 每次完成本地功能修改或修复，都必须在测试、构建通过后同步到正式服务器并验收；除非用户明确要求不上线，不需要再次提醒部署。不能把“本地通过”当作“线上完成”；阻塞或未上线的部分必须明确说明。
+- 发布前核对源码与运行产物，防止落后服务器源码覆盖已上线功能。同步本次源码和产物，验证前后端依赖完整；不混入其他任务未验证的改动。
+- 发布保留可回滚备份，并记录实际运行产物指纹、发布范围和验收结果。线上工作区可能含未提交发布，不能只凭 Git HEAD 宣称线上版本。
+- 用户已确认整合顺序：先保留线上完整快照，再逐项合并本地功能；语义冲突保留线上行为，不明取舍先说明；复测后发布。禁止用本地目录或旧 Git HEAD 全量覆盖线上。
+- 发布版本以 `/root/energy_tag_agent/RELEASE.json` 与 `.releases/<release_id>/manifest.json` 为准；必须同时核对当前进程二进制、前端入口和源码哈希。具体合同见 `.trellis/spec/backend/production-reconciliation.md`。
+
+## Production reconciliation baseline (2026-10-13)
+
+- Current deployed release: `reconcile-20261013-604fa5e6-601fe870`; inspect `RELEASE.json` and `.releases/reconcile-20261013-604fa5e6-601fe870/manifest.json`, not Git HEAD alone.
+- Before any release: freeze actual production source/artifact/config hashes and backup application/database; incrementally merge local changes. Preserve production behavior on semantic conflict. Never blindly replace production with an old local tree.
+- Protect runtime configuration, credentials, database, uploads, and `/root/delivery_insight_ai/runtime`. Live Delivery source must be inspected separately from repository copies.
+- Keep a unique release manifest, previous runtime files and verification record. Recheck concurrent edits and active tasks before switching; preserve later edits during rollback.
+- This batch was deployment-only at user request: no Git commit or push. Deferred local unlimited timeout, one-minute disconnect failure and V1.2 renderer replacement.
+- Release results and recovery notes: `doc/operations/releases/reconcile-20261013-604fa5e6-601fe870.md`.

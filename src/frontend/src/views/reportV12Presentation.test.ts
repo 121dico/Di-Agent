@@ -18,7 +18,9 @@ it('preserves V1.2 null scores, additional levels, prior assignment and negative
   expect(result.metrics).toContainEqual({ label: '标签记录的180天订单数', value: '300', suffix: '单' });
   expect(result.scoreSeries.find((series) => series.key === 'd1')?.values.every(Number.isNaN)).toBe(true);
   expect(result.scoreSeries.find((series) => series.key === 'd2')?.values).toEqual([0, 0]);
-  expect(result.incrementSeries[0]?.values).toEqual([0, -10]);
-  expect(result.growthRateSeries[0]?.values).toEqual([0, -20]);
+  expect(Number.isNaN(result.incrementSeries[0]?.values[0])).toBe(true);
+  expect(result.incrementSeries[0]?.values[1]).toBe(-10);
+  expect(Number.isNaN(result.growthRateSeries[0]?.values[0])).toBe(true);
+  expect(result.growthRateSeries[0]?.values[1]).toBe(-20);
   expect(result.distribution).toEqual([{ label: '中高价敏', value: 15 }, { label: '中低价敏', value: 20 }, { label: 'NEW_LEVEL', value: 5 }]);
 });

@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 const { configuredModel } = require('../cli/model-discovery');
 const { recoverCodexThread } = require('../cli/session-recovery');
+const { MANAGED_MCP_TOOLS, MANAGED_TOOL_NAMES } = require('../cli/managed-mcp');
+const { configureDatadream } = require('../cli/managed-mcp-credentials');
+const { createManagedMcpSetup, fetchOwnerCatalog } = require('../cli/managed-mcp-setup');
+const { startBrowserIdentity } = require('../cli/browser-identity');
+const DAEMON_PACKAGE_VERSION = require('../package.json').version;
 
 const { execFileSync, spawn, spawnSync } = require('node:child_process');
 const { EventEmitter } = require('node:events');
@@ -23,6 +28,7 @@ const { StreamBuffer } = require('../cli/stream_adapter');
 // 按功能分组：连接 / 任务执行 / MCP / 部署 / 文件浏览 / 技能 / 路径。
 // 单文件发布约束：不抽成独立文件（发布包只含 bin/di-agent-daemon.js）。
 // ===========================================================================
+// 与线上后端保持相同的 30 分钟默认执行上限。
 const DEFAULT_AGENT_TIMEOUT_MS = 30 * 60 * 1000;
 
 function resolveAgentTimeoutMs(rawValue) {
@@ -30,7 +36,7 @@ function resolveAgentTimeoutMs(rawValue) {
     return DEFAULT_AGENT_TIMEOUT_MS;
   }
   const parsed = Number(rawValue);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : DEFAULT_AGENT_TIMEOUT_MS;
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : DEFAULT_AGENT_TIMEOUT_MS;
 }
 
 const CONFIG = {
@@ -42,7 +48,7 @@ const CONFIG = {
   heartbeatIntervalMs: 30000,
 
   // —— 任务执行 ——
-  execTimeoutMs: resolveAgentTimeoutMs(readDiAgentEnvironment(process.env, 'AGENT_TIMEOUT_MS')), // 默认 30 分钟，可按 daemon 覆盖
+  execTimeoutMs: resolveAgentTimeoutMs(readDiAgentEnvironment(process.env, 'AGENT_TIMEOUT_MS')), // 默认30分钟，正数可覆盖
 
   // —— MCP ——
   mcpProtocolVersion: '2024-11-05',
@@ -215,8 +221,12 @@ function detectCapabilities() {
   // older daemon understands per-turn sandbox or approval semantics.
   const caps = readDiAgentEnvironment(process.env, 'DAEMON_DISABLE_STREAM_SLOT') === '1'
     ? []
-    : ['agent_runtime_controls_v1', 'agent_runtime_controls_v2', 'image_inputs_v1', 'model_selection_v1'];
+    : ['agent_runtime_controls_v1', 'agent_runtime_controls_v2', 'image_inputs_v1', 'model_selection_v1', 'task_steer_v1'];
   caps.push('model_discovery_v1');
+  caps.push('managed_mcp_v1');
+  caps.push('managed_mcp_setup_v1');
+  caps.push('managed_mcp_inline_setup_v1');
+  caps.push('browser_identity_v1');
   if (detectDocker()) caps.push('docker');
   return caps;
 }
@@ -659,10 +669,26 @@ function listDirAbs(absDir) {
 // 返回归一化后的绝对路径；非法返回 null。
 function safePathWithin(repoRoot, target) {
   if (!target || !repoRoot) return null;
-  const resolved = path.resolve(repoRoot, target);
-  const rel = path.relative(repoRoot, resolved);
-  if (rel.startsWith('..') || path.isAbsolute(rel)) return null; // 越狱或绝对路径外的
-  return resolved;
+  try {
+    const root = fs.realpathSync(repoRoot);
+    let ancestor = path.resolve(repoRoot, target);
+    const missing = [];
+    // 历史 diff 可引用已删除文件；解析最近存在的祖先后再拼回缺失段。
+    while (true) {
+      try { ancestor = fs.realpathSync(ancestor); break; }
+      catch (error) {
+        if (error.code !== 'ENOENT' || path.dirname(ancestor) === ancestor) return null;
+        // 不将悬空符号链接当成普通的缺失文件。
+        try { if (fs.lstatSync(ancestor).isSymbolicLink()) return null; } catch { /* 不存在 */ }
+        missing.unshift(path.basename(ancestor));
+        ancestor = path.dirname(ancestor);
+      }
+    }
+    const resolved = path.join(ancestor, ...missing);
+    const rel = path.relative(root, resolved);
+    if (rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) return null;
+    return resolved;
+  } catch { return null; }
 }
 
 // 二进制检测：含 NUL 字节视为二进制（不预览）。
@@ -1084,7 +1110,13 @@ bus.on('agent.stopped', (info) =>
   logFlow('info', 'agent.stopped', info),
 );
 bus.on('task.completed', (info) =>
-  logFlow('info', 'task.completed', info),
+  // Never duplicate returned file bodies or model output into daemon logs.
+  logFlow('info', 'task.completed', {
+    task_id: info.task_id, cli_tool: info.cli_tool, agent_id: info.agent_id,
+    conversation_id: info.conversation_id,
+    result_len: typeof info.result === 'string' ? info.result.length : 0,
+    artifact_count: Array.isArray(info.artifacts) ? info.artifacts.length : 0,
+  }),
 );
 bus.on('task.failed', (info) =>
   logFlow('error', 'task.failed', info),
@@ -1214,6 +1246,8 @@ function sendApprovalFailure(data) {
 // Per-conversation session mapping: `${agent_id}:${conversation_id}` → sessionId
 // 持久化路径在顶部 CONFIG.sessionsFile。
 const conversationSessions = new Map();
+// 仅登记已经取得执行槽的任务，不能把排队任务误认为可引导的当前任务。
+const activeTaskContexts = new Map();
 
 function runtimeAgentKey(agentId, conversationId) {
   return conversationId ? `${agentId}:${conversationId}` : agentId;
@@ -2747,7 +2781,7 @@ function runProcess(command, args, stdin, sessionId, cwd, extraEnv, meta = {}) {
     }
     let stdout = '';
     let stderr = '';
-    const timer = setTimeout(() => {
+    const timer = EXEC_TIMEOUT_MS > 0 ? setTimeout(() => {
       try {
         if (detached) {
           process.kill(-child.pid, 'SIGKILL');
@@ -2763,7 +2797,7 @@ function runProcess(command, args, stdin, sessionId, cwd, extraEnv, meta = {}) {
         timeout_ms: EXEC_TIMEOUT_MS,
       });
       reject(new Error(`CLI execution timed out after ${EXEC_TIMEOUT_MS / 1000}s`));
-    }, EXEC_TIMEOUT_MS);
+    }, EXEC_TIMEOUT_MS) : null;
 
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
@@ -2857,7 +2891,7 @@ async function register(serverURL, apiKey) {
     agent_count: agents.length,
     daemon_token_received: Boolean(res && res.data && res.data.daemon_token),
   });
-  logFlow('info', 'daemon.ready', { machine_id: os.hostname(), transport: WebSocket ? 'websocket' : 'polling' });
+  logFlow('info', 'daemon.ready', { machine_id: os.hostname(), daemon_version: DAEMON_PACKAGE_VERSION, transport: WebSocket ? 'websocket' : 'polling' });
 }
 
 // 在任务执行期间定期发送心跳，告知 server 任务仍在进行中
@@ -2994,12 +3028,14 @@ async function dispatchToPersistentSlot(ws, agentId, conversationId, userId, pro
   const completion = new Promise((resolve) => { release = resolve; });
   slotDispatchQueues.set(slotKey, completion);
   if (previous) await previous;
+  activeTaskContexts.set(slotKey, taskCtx);
   try {
     return await dispatchToPersistentSlotUnlocked(
       ws, agentId, conversationId, userId, prompt, systemPrompt, taskCtx,
       cliTool, onEvent, forceFresh, runtimeVariant, runtimeConfig,
     );
   } finally {
+    if (activeTaskContexts.get(slotKey) === taskCtx) activeTaskContexts.delete(slotKey);
     release();
     if (slotDispatchQueues.get(slotKey) === completion) slotDispatchQueues.delete(slotKey);
   }
@@ -3084,6 +3120,7 @@ async function dispatchToPersistentSlotUnlocked(ws, agentId, conversationId, use
     if (slot.eventRef && typeof onEvent === 'function') slot.eventRef.current = onEvent;
     try {
       const response = await slot.sendPrompt(prompt, runtimeConfig, approvalContext);
+      if (response.runtimeRetired) stopRuntimeSlot(slotKey);
       if (response.error) throw new Error(response.error);
       return response.result;
     } finally {
@@ -3117,6 +3154,7 @@ async function dispatchToPersistentSlotUnlocked(ws, agentId, conversationId, use
       if (slot.eventRef && typeof onEvent === 'function') slot.eventRef.current = onEvent;
       try {
         const response = await slot.sendPrompt(prompt, runtimeConfig, approvalContext);
+        if (response.runtimeRetired) stopRuntimeSlot(slotKey);
         if (response.error) throw new Error(response.error);
         return response.result;
       } finally {
@@ -3155,13 +3193,16 @@ async function dispatchToPersistentSlotUnlocked(ws, agentId, conversationId, use
   }
 
   if (result.ready) await result.ready;
-  const { child, sessionId, sendPrompt, close } = result;
+  const { child, sessionId, sendPrompt, steerPrompt, close } = result;
 
   // Handle process exit
   child.on('close', (code) => {
     const entry = runningAgents.get(slotKey);
     if (entry?.process === child) {
       runningAgents.delete(slotKey);
+    } else if (entry) {
+      // 旧进程的延迟退出不能把新一轮正在使用的 slot 标记为停止。
+      return;
     }
     agentTurnStates.delete(agentId);
     logFlow(code === 0 ? 'info' : 'warn', 'agent.process_exit', {
@@ -3186,6 +3227,7 @@ async function dispatchToPersistentSlotUnlocked(ws, agentId, conversationId, use
     runtimeVariant,
     runtimeConfigFingerprint,
     sendPrompt,
+    steerPrompt,
     close,
     eventRef,
   });
@@ -3206,6 +3248,7 @@ async function dispatchToPersistentSlotUnlocked(ws, agentId, conversationId, use
 
   try {
     const response = await sendPrompt(prompt, runtimeConfig, approvalContext);
+    if (response.runtimeRetired) stopRuntimeSlot(slotKey);
     if (response.error) throw new Error(response.error);
     return response.result;
   } finally {
@@ -3269,7 +3312,7 @@ async function handleAgentStart(ws, payload) {
     const eventRef = { current: null };
     const result = spawnStreamJsonProcess(agent_id, null, system_prompt, false, null, null, null, eventRef, cli_tool, runtime_variant);
     if (result.ready) await result.ready;
-    const { child, sessionId, sendPrompt, close } = result;
+    const { child, sessionId, sendPrompt, steerPrompt, close } = result;
 
     // Wait briefly to detect immediate startup failure (same pattern as dispatchToPersistentSlot)
     await sleep(2000);
@@ -3304,6 +3347,7 @@ async function handleAgentStart(ws, payload) {
       cliTool: cli_tool,
       runtimeVariant: runtime_variant,
       sendPrompt,
+      steerPrompt,
       close,
       currentConversationId: null,
       eventRef,
@@ -3350,7 +3394,7 @@ async function handleTaskDispatch(ws, data) {
     agent_id: data.agent_id,
     conversation_id: data.conversation_id,
     user_id: data.user_id,
-    // message_id 由后端可选传入——有则流式（createAgentReply 路径），无则批处理（orchestrator / 文件浏览等）。
+    // message_id 由后端可选传入；单聊、群聊 Worker 和 Orchestrator 都用它路由流式增量。
     message_id: data.message_id,
     force_fresh_session: data.force_fresh_session === true,
     session_generation: Number(data.session_generation || 0),
@@ -3404,7 +3448,9 @@ async function handleTaskDispatch(ws, data) {
   recentDispatches.set(dedupKey, { ts: now, hasMessageId: Boolean(task.message_id) });
 
   const imageOutputDir = path.join(os.tmpdir(), 'di-agent-cli-tasks', String(task.id).replace(/[^a-zA-Z0-9_-]/g, '-'), 'image-outputs');
-  if (task.cli_tool !== '__di_agent_list_models__') {
+  // These tools carry machine-readable JSON, not a model prompt or reply.
+  const internalRPC = [BROWSE_FILES_TOOL, OPEN_PATH_TOOL, INSTALL_SKILL_TOOL, '__di_agent_list_models__'].includes(task.cli_tool);
+  if (!internalRPC) {
     task.prompt = (task.prompt || '') + require('../cli/image-output').imageOutputInstruction(imageOutputDir);
   }
   const { systemPrompt, userPrompt } = buildPromptParts(task);
@@ -3429,8 +3475,8 @@ async function handleTaskDispatch(ws, data) {
   const hasMsgId = Boolean(taskCtx.messageId);
   const shouldStream = hasMsgId;
 
-  // 流式输出：仅当 backend 传了 message_id（createAgentReply 路径）时启用。
-  // orchestrator / 文件浏览等路径不传 message_id，走批处理（不做流式），避免
+  // 流式输出：仅当 backend 传了 message_id 时启用。
+  // 文件浏览等不落消息的路径不传 message_id，走批处理，避免
   // 多个 dispatch 共享同一 agent slot 时，无 message_id 的 dispatch 抢占流式通道。
   const streamBuffer = shouldStream
     ? new StreamBuffer({
@@ -3455,7 +3501,7 @@ async function handleTaskDispatch(ws, data) {
 
   try {
     let result;
-    fs.mkdirSync(imageOutputDir, { recursive: true, mode: 0o700 });
+    if (!internalRPC) fs.mkdirSync(imageOutputDir, { recursive: true, mode: 0o700 });
     taskCtx.images = require('../cli/image-input').validateImages(task.images, task.cli_tool);
     validateTaskRuntimeConfig(task);
     const persistentSpec = cliTools.getCliTool(task.cli_tool);
@@ -3485,11 +3531,13 @@ async function handleTaskDispatch(ws, data) {
       result = await executeTaskOnce(task, taskCtx, onEvent);
       if (result === null) return true;
     }
-    let imageOutput;
-    try { imageOutput = require('../cli/image-output').collectImageOutputs(result, imageOutputDir); }
-    catch { imageOutput = {text: `${result}\n\n图片未返回：本次任务图片输出目录无法读取`, artifacts: []}; }
+    let imageOutput = { text: result, artifacts: [] };
+    if (!internalRPC) {
+      try { imageOutput = require('../cli/image-output').collectImageOutputs(result, imageOutputDir); }
+      catch { imageOutput = {text: `${result}\n\n图片未返回：本次任务图片输出目录无法读取`, artifacts: []}; }
+    }
     result = imageOutput.text;
-    const artifacts = [...parseArtifacts(result), ...imageOutput.artifacts];
+    const artifacts = internalRPC ? [] : [...parseArtifacts(result), ...imageOutput.artifacts];
     // MCP subprocess（如 deploy_project）产出的卡片已通过 ctx.emitCard →
     // POST /api/internal/task-cards 直接上报后端 TaskCardQueue，
     // daemon 主进程不再参与卡片收集。
@@ -3549,7 +3597,43 @@ registerWsHandler('task.cancel', (ws, data) => {
   bus.emit('task.cancel', { ws, data });
   return true;
 });
+const handleTaskSteer = require('../cli/task-steering').createTaskSteering({
+  getRuntime: (agentId, conversationId) => {
+    const key = runtimeAgentKey(agentId, conversationId);
+    return { slot: runningAgents.get(key), context: activeTaskContexts.get(key) };
+  },
+});
+registerWsHandler('task.steer', (ws, data) => {
+  // 不进入正常 dispatch 队列，也不替换正在流式输出的 eventRef。
+  handleTaskSteer(data).then(result => {
+    safeSend(ws, JSON.stringify({ type: 'task.steer.result', data: result }));
+  }).catch(() => {
+    safeSend(ws, JSON.stringify({ type: 'task.steer.result', data: {
+      request_id: data?.request_id, task_id: data?.task_id, status: 'unknown',
+      reason: '未确认补充指令，请勿重复发送',
+    } }));
+  });
+  return true;
+});
 registerWsHandler('task.approval_decision', (_ws, data) => resolveAgentApproval(data));
+
+const managedMcpSetup = createManagedMcpSetup({
+  authorize: (userId) => fetchOwnerCatalog(daemonConn.serverURL, daemonConn.apiKey, userId),
+});
+const managedMcpConnections = new WeakSet();
+for (const action of ['managed_mcp.inspect', 'managed_mcp.configure', 'managed_mcp.setup_session', 'managed_mcp.save']) {
+  registerWsHandler(action, (ws, data) => {
+    if (!managedMcpConnections.has(ws)) {
+      managedMcpConnections.add(ws);
+      onWebSocket(ws, 'close', () => managedMcpSetup.close(ws));
+    }
+    // 个人 Key、配置页 URL 和授权 token 不能进入平台消息或日志。
+    managedMcpSetup.handle(action, data, ws).then((result) => {
+      if (result) safeSend(ws, JSON.stringify({ type: 'managed_mcp.result', data: result }));
+    }).catch(() => {});
+    return true;
+  });
+}
 
 // 部署已改为 MCP 工具（deploy_project / stop_deploy），不经 WS 下发。
 // daemon 主进程只负责 TTL 清理（scanAndCleanupDeploys，见 main()）。
@@ -3779,11 +3863,10 @@ async function getAgentJWT(serverURL, apiKey, force) {
   return cachedAgentJWT;
 }
 
-// apiURLWithToken 用指定 JWT 作为 token query 调用 /api（鉴权中间件支持 query token）。
-function apiURLWithToken(serverURL, jwt, pathname, query) {
+// Keep credentials out of the URL; production auth requires a Bearer header.
+function apiURLWithQuery(serverURL, pathname, query) {
   const url = new URL(serverURL);
   url.pathname = `${url.pathname.replace(/\/$/, '')}${pathname}`;
-  url.searchParams.set('token', jwt);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
@@ -3798,9 +3881,9 @@ async function callApi(serverURL, apiKey, method, pathname, options = {}) {
   let lastError;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const jwt = await getAgentJWT(serverURL, apiKey, attempt === 1);
-    const url = apiURLWithToken(serverURL, jwt, pathname, options.query);
+    const url = apiURLWithQuery(serverURL, pathname, options.query);
     try {
-      return await requestJSON(method, url, options.body);
+      return await requestJSON(method, url, options.body, jwt);
     } catch (error) {
       lastError = error;
       if (attempt === 0 && /HTTP 401/.test(error.message)) {
@@ -3827,24 +3910,93 @@ async function callMcpApi(serverURL, daemonToken, method, pathname, options = {}
   return requestJSON(method, url, options.body, daemonToken);
 }
 
+// 数据地图试点使用单机 API key 证明电脑所属用户；密钥只放在 Authorization
+// 请求头，不能沿用可自填 user_id 的全局 daemon-token 路由。
+async function callDataMapMachineApi(serverURL, apiKey, method, pathname, options = {}, userId) {
+  const url = new URL(serverURL);
+  url.pathname = `${url.pathname.replace(/\/$/, '')}${pathname}`;
+  if (options.query) {
+    for (const [key, value] of Object.entries(options.query)) {
+      if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
+    }
+  }
+  if (userId) url.searchParams.set('user_id', userId);
+  return requestJSON(method, url, options.body, apiKey);
+}
+
 // 这里只保留少量非敏感索引；完整来源边界由单来源指南按需返回。
 const INTERNAL_SOURCE_CATALOG = [
   { id: 'cooper', name: 'Cooper 文档', purpose: '查业务背景、口径和已有方案', status: 'not_connected' },
   { id: 'gitlab', name: 'GitLab 代码', purpose: '查实现、接口和已有仓库', status: 'not_connected' },
-  { id: 'data_map', name: '数据地图', purpose: '查表结构、字段和血缘', status: 'not_connected' },
-  { id: 'hive', name: 'Hive 数据', purpose: '核对已授权的实际数据', status: 'not_connected' },
+  { id: 'data_map', name: '数据地图', purpose: '查已登记的 Hive 库表资产标识；不查业务行', status: 'not_connected' },
+  { id: 'hive', name: 'Hive 数据', purpose: '核对已授权的实际数据（兼容原资料源）', status: 'not_connected' },
+  { id: 'hive_data', name: 'Hive 真实数据', purpose: '用本人 Hadoop 会话或已绑定的个人凭据验证获批表的 dt 列；不借用数据地图权限', status: 'not_connected' },
 ];
 
 const INTERNAL_SOURCE_GUIDES = {
   cooper: '适合寻找业务解释、指标口径和方案线索。当前 Agent 尚未接入 Cooper 检索；不要假称已读取文档，也不要借用浏览器登录态。可请用户提供相关文档或等待按用户授权的只读连接器接入。',
   gitlab: '适合根据仓库名、接口或函数查已有实现。当前 Agent 尚未接入公司 GitLab 检索；不要假称已查看代码，也不要使用共享机器凭据代替提问者权限。可请用户提供仓库或代码片段。',
-  data_map: '适合根据表名、字段或业务口径查结构和血缘。当前 Agent 尚未接入数据地图；不要编造字段或血缘。可请用户提供表结构或等待按用户授权的只读连接器接入。',
-  hive: '适合在明确表、字段和日期后核对实际数值。当前 Agent 尚无按提问者身份执行 Hive 查询的连接器；现有页面上的单用户 Hive 凭据不等于所有 Agent 可用。不要使用共享凭据或声称已查询数据。',
+  data_map: '此处仅用于发现数据地图中已登记的 Hive 库表资产；当前 Agent 尚未接入，不能查询表、字段、分区、血缘或业务数据。可请用户提供资产信息或等待获批的只读连接器接入。',
+  hive: '此处的 Hive 指通过数据地图发现 Hive 库表资产，不代表可执行 HiveServer2 SQL 或核对实际数值。当前 Agent 尚未接入该元数据通道；现有页面的单用户 Hive 凭据也不能供所有 Agent 使用。不要声称已查询资产或业务数据。',
+  hive_data: 'Hive 真实数据与数据地图资产目录是两个独立权限边界。当前 Agent 未接入个人 Hive 探测通道，不能声称已读取业务数据。',
 };
 
-const INTERNAL_DISCOVERY_TOOL_NAMES = ['discover_internal_sources', 'get_internal_source_guide'];
+const INTERNAL_DISCOVERY_TOOL_NAMES = ['discover_internal_sources', 'get_internal_source_guide', 'search_data_map_hive_tables', 'probe_hive_data'];
+
+async function dataMapDiscoveryStatus(ctx) {
+  if (!ctx || typeof ctx.callDataMapApi !== 'function') return { status: 'not_connected' };
+  try {
+    const response = await ctx.callDataMapApi('GET', '/daemon/internal-sources/status');
+    const status = response && Object.prototype.hasOwnProperty.call(response, 'data') ? response.data : response;
+    const states = ['not_configured', 'configured_unverified', 'connected', 'no_permission', 'temporarily_unavailable'];
+    if (!status || !states.includes(status.status) || status.capability !== 'hive_table_metadata_only') {
+      return { status: 'temporarily_unavailable' };
+    }
+    return { status: status.status, capability: status.capability };
+  } catch (error) {
+    // 兼容尚未升级的服务端，但非 404 的故障不能误报为“未接入”。
+    if (/HTTP 404/.test(error.message)) return { status: 'not_connected' };
+    if (/HTTP 401|HTTP 403/.test(error.message)) return { status: 'no_permission' };
+    return { status: 'temporarily_unavailable' };
+  }
+}
+
+function dataMapSourceGuide(sourceId, status) {
+  if (status === 'connected') return '当前仅能调用 search_data_map_hive_tables 查询数据地图登记的 Hive 表资产标识。字段、分区详情和业务数据未接入；不能执行 HiveServer2 SQL。';
+  if (status === 'configured_unverified') return '试点凭据已配置但正式接口尚未核验。可尝试调用 search_data_map_hive_tables 查询 Hive 表资产标识；调用失败或返回格式不符不能解释为资产不存在，字段、分区和业务数据未接入。';
+  if (status === 'no_permission') return '当前提问者没有数据地图 Hive 元数据试点权限；不要借用其他人的凭据或浏览器会话。';
+  if (status === 'temporarily_unavailable') return '数据地图 Hive 元数据通道暂时不可用；不能据此判断资产不存在，请稍后重试或请用户提供资料。';
+  return sourceId === 'hive' ? INTERNAL_SOURCE_GUIDES.hive : INTERNAL_SOURCE_GUIDES.data_map;
+}
+
+async function hiveDataDiscoveryStatus(ctx) {
+  if (!ctx || typeof ctx.callHiveDataApi !== 'function') return { status: 'not_connected' };
+  try {
+    const response = await ctx.callHiveDataApi('GET', '/daemon/internal-sources/hive-data/status');
+    const value = response && Object.prototype.hasOwnProperty.call(response, 'data') ? response.data : response;
+    const states = ['connected', 'not_configured', 'login_required', 'no_permission', 'temporarily_unavailable'];
+    if (!value || !states.includes(value.status) || value.capability !== 'approved_hive_dt_probe_only') {
+      return { status: 'temporarily_unavailable' };
+    }
+    return { status: value.status, capability: value.capability };
+  } catch (error) {
+    if (/HTTP 404/.test(error.message)) return { status: 'not_connected' };
+    if (/HTTP 401|HTTP 403/.test(error.message)) return { status: 'no_permission' };
+    return { status: 'temporarily_unavailable' };
+  }
+}
+
+function hiveDataSourceGuide(status) {
+  if (status === 'connected') return '仅可调用 probe_hive_data：选择平台已批准的表和明确的 dt 日期，HiveServer2 实际执行 SELECT dt ... LIMIT 1，以当前请求者的 Hadoop 会话或已绑定个人凭据验证 dt 列可读及该分区是否有行。成功不代表其他列有权限；无行不代表表不存在。不得用此工具执行任意 SQL。';
+  if (status === 'no_permission') return '当前请求者与个人 Hadoop 凭据绑定用户不一致；不得借用他人 Agent 或机器查询。';
+  if (status === 'not_configured') return '个人 Hadoop 连接尚未配置，不能执行真实 Hive 数据探测。';
+  if (status === 'login_required') return '请当前请求者先在 Di Agent「数据连接」页用自己的 Hadoop 账号登录；Agent 不接收密码，也不能借用其他用户的会话。登录后再调用 probe_hive_data。';
+  if (status === 'temporarily_unavailable') return 'HiveServer2 连接或探测暂时不可用，不能据此判断表无数据或无权限。';
+  return INTERNAL_SOURCE_GUIDES.hive_data;
+}
 
 const MCP_TOOLS = [
+  ...MANAGED_MCP_TOOLS,
   {
     name: 'list_conversations',
     description: '列出当前用户的所有会话（私聊与群聊）。',
@@ -3919,7 +4071,12 @@ const MCP_TOOLS = [
     name: 'discover_internal_sources',
     description: '内部问题缺少线索时，发现资料源的简短用途与真实接入状态；不读取私有内容。',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-    run: () => ({ sources: INTERNAL_SOURCE_CATALOG.map((source) => ({ ...source })) }),
+    run: async (args, ctx) => {
+      const status = await dataMapDiscoveryStatus(ctx);
+      const hiveDataStatus = await hiveDataDiscoveryStatus(ctx);
+      return { managed_mcp_discovery: '另可调用 list_managed_mcps 发现平台托管的本机数梦通道；本人配置和连接须单独验证。', sources: INTERNAL_SOURCE_CATALOG.map((source) => source.id === 'data_map'
+        ? { ...source, ...status } : (source.id === 'hive' || source.id === 'hive_data') ? { ...source, ...hiveDataStatus } : { ...source }) };
+    },
   },
   {
     name: 'get_internal_source_guide',
@@ -3930,11 +4087,59 @@ const MCP_TOOLS = [
       required: ['source_id'],
       additionalProperties: false,
     },
-    run: async (args = {}) => {
+    run: async (args = {}, ctx) => {
       const sourceId = typeof args.source_id === 'string' ? args.source_id.trim() : '';
       const source = INTERNAL_SOURCE_CATALOG.find((item) => item.id === sourceId);
       if (!source) throw new Error('未知资料源');
+      if (sourceId === 'data_map') {
+        const status = await dataMapDiscoveryStatus(ctx);
+        return { source_id: source.id, name: source.name, ...status, guidance: dataMapSourceGuide(sourceId, status.status) };
+      }
+      if (sourceId === 'hive_data' || sourceId === 'hive') {
+        const status = await hiveDataDiscoveryStatus(ctx);
+        return { source_id: source.id, name: source.name, ...status, guidance: hiveDataSourceGuide(status.status) };
+      }
       return { source_id: source.id, name: source.name, status: source.status, guidance: INTERNAL_SOURCE_GUIDES[source.id] };
+    },
+  },
+  {
+    name: 'probe_hive_data',
+    description: '用当前请求者的 Hadoop 会话或已绑定个人凭据，对平台已批准的 Hive 表指定 dt 分区执行只读 SELECT dt ... LIMIT 1。只验证 dt 列可读和该分区是否有行；不读取其他列，不允许任意 SQL。先查看 hive_data 来源指南。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        table_name: { type: 'string', enum: ['epower_platform.price_sensitive_v1_3', 'charge_dw.dwd_charge_trd_order_di'] },
+        dt: { type: 'string', description: '分区日期，格式 YYYY-MM-DD' },
+      },
+      required: ['table_name', 'dt'],
+      additionalProperties: false,
+    },
+    run: async (args, ctx) => {
+      const response = await ctx.callHiveDataApi('POST', '/daemon/internal-sources/hive-data/probe', {
+        body: { table_name: args.table_name, dt: args.dt },
+      });
+      return response && Object.prototype.hasOwnProperty.call(response, 'data') ? response.data : response;
+    },
+  },
+  {
+    name: 'search_data_map_hive_tables',
+    description: '只读分页搜索数据地图登记的 Hive 库表前缀；空页不证明某张表全局不存在。需要独立获批的试点凭据，仅限绑定用户；不会执行 Hive SQL 或返回业务行。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        db_name: { type: 'string', description: '可选 Hive 库名' },
+        prefix: { type: 'string', description: '必填表名前缀，仅字母、数字和下划线' },
+        page_no: { type: 'integer', description: '页码，默认 1，最大 1000' },
+        page_size: { type: 'integer', description: '每页条数，默认 10，最大 20' },
+      },
+      required: ['prefix'],
+      additionalProperties: false,
+    },
+    run: async (args, ctx) => {
+      const response = await ctx.callDataMapApi('GET', '/daemon/internal-sources/data-map/hive/tables', {
+        query: { db_name: args.db_name, prefix: args.prefix, page_no: args.page_no, page_size: args.page_size },
+      });
+      return response && Object.prototype.hasOwnProperty.call(response, 'data') ? response.data : response;
     },
   },
   // ── 受治理的报表数据 ──
@@ -3945,12 +4150,19 @@ const MCP_TOOLS = [
     run: (args, ctx) => ctx.callMcpApi('GET', '/mcp/report-data/contracts'),
   },
   {
+    name: 'get_report_template',
+    description: '生成报表前读取默认 template-1 的 V1.2 基础图表模板：曲线、柱状图、饼/环图视觉样式固定；Agent 只选择真实数据、图表类型、字段和板块顺序。',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: (args, ctx) => ctx.callMcpApi('GET', '/mcp/report-templates/default'),
+  },
+  {
     name: 'query_report_data',
-    description: '依据 discover_report_data 返回的字段契约执行真实查询。只能使用已声明字段，不得猜测字段、直接拼 SQL 或编造结果；每页最多 100 行。',
+    description: '依据字段契约执行真实查询。V1.2 亿级价敏源需设置 prepared_view=v12_dashboard 读取已有预计算快照，避免即时全表去重触发内存限制。',
     inputSchema: {
       type: 'object',
       properties: {
         source_id: { type: 'string', description: 'discover_report_data 返回的数据源 ID' },
+        prepared_view: { type: 'string', enum: ['v12_dashboard'], description: 'V1.2 同版生成使用预计算快照；fields 传 dt 占位' },
         fields: {
           type: 'array',
           minItems: 1,
@@ -4008,20 +4220,38 @@ const MCP_TOOLS = [
   },
   {
     name: 'save_personal_report',
-    description: '仅在本轮 query_report_data 成功后调用。把真实查询得到的指标、图表、表格和分析保存为当前用户个人报表，并自动在对话中显示可点击卡片。',
+    description: '先调用 get_report_template，仅在本轮 query_report_data 成功后调用。V1.2 预计算查询使用唯一 v12_dashboard 板块；其他数据只提交字段绑定，图表视觉样式由 template-1 固定。服务端装配真实数据并显示报表卡片。',
     inputSchema: {
       type: 'object',
       properties: {
         title: { type: 'string', description: '报表标题' },
         description: { type: 'string', description: '一句话摘要' },
         data_source_id: { type: 'string', description: '查询使用的数据源 ID' },
-        query_id: { type: 'string', description: '本轮 query_report_data 返回的 query_id' },
+        query_id: { type: 'string', description: '本轮 query_report_data 返回的主查询凭证' },
         document: {
           type: 'object',
-          description: '结构化报表文档，sections 可包含 metric、chart、table、insight、text，data 必须来自真实查询结果。',
+          description: '只提交字段绑定，不提交 data/rows/数值/HTML/CSS。',
+          properties: {
+            template_id: { type: 'string', enum: ['template-1'] },
+            sections: {
+              type: 'array', minItems: 1, maxItems: 16,
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' }, type: { type: 'string', enum: ['metrics', 'chart', 'table', 'v12_dashboard'] }, title: { type: 'string' },
+                  query_id: { type: 'string', description: '此板块的 query_report_data 凭证；省略时使用主凭证' },
+                  chart_type: { type: 'string', enum: ['line', 'bar', 'donut'] },
+                  x_field: { type: 'string' }, label_field: { type: 'string' }, value_field: { type: 'string' },
+                  metrics: { type: 'array', items: { type: 'object', properties: { field: { type: 'string' }, label: { type: 'string' }, suffix: { type: 'string' } }, required: ['field', 'label'], additionalProperties: false } },
+                  series: { type: 'array', items: { type: 'object', properties: { field: { type: 'string' }, label: { type: 'string' } }, required: ['field', 'label'], additionalProperties: false } },
+                  columns: { type: 'array', items: { type: 'object', properties: { field: { type: 'string' }, label: { type: 'string' }, suffix: { type: 'string' } }, required: ['field', 'label'], additionalProperties: false } },
+                },
+                required: ['id', 'type', 'title'], additionalProperties: false,
+              },
+            },
+          },
+          required: ['sections'], additionalProperties: false,
         },
-        style_preset: { type: 'string', enum: ['business', 'journal', 'soft', 'glass', 'balanced'] },
-        style_prompt: { type: 'string' },
       },
       required: ['title', 'data_source_id', 'query_id', 'document'],
       additionalProperties: false,
@@ -4030,23 +4260,20 @@ const MCP_TOOLS = [
       const proof = ctx.reportQueryProofs && ctx.reportQueryProofs.get(args.query_id);
       if (!proof) throw new Error('必须先在本轮调用 query_report_data，并使用其真实 query_id 保存报表');
       if (proof.source_id !== args.data_source_id) throw new Error('data_source_id 与真实查询来源不一致');
+      for (const section of args.document?.sections || []) {
+        const sectionQueryId = section.query_id || args.query_id;
+        const sectionProof = ctx.reportQueryProofs.get(sectionQueryId);
+        if (!sectionProof || sectionProof.source_id !== args.data_source_id) {
+          throw new Error(`板块 ${section.id || '未知'} 缺少本轮同数据源的真实查询凭证`);
+        }
+      }
       const body = {
         conversation_id: ctx.conversationId || undefined,
         data_source_id: proof.source_id,
         title: args.title,
         description: args.description || '',
-        status: 'saved',
-        style_preset: args.style_preset || 'balanced',
-        style_prompt: args.style_prompt || '',
-        query: proof.query,
+        query_id: args.query_id,
         document: args.document,
-        provenance: {
-          source_name: proof.source_name,
-          source_partition: proof.source_partition,
-          query_id: args.query_id,
-          duration_ms: proof.duration_ms,
-          queried_at: new Date().toISOString(),
-        },
       };
       const res = await ctx.callMcpApi('POST', '/mcp/personal-reports', { body });
       const report = res && res.data ? res.data : res;
@@ -4660,7 +4887,7 @@ const DEFAULT_AGENT_TOOLS = [
 ];
 const NO_AGENT_TOOLS = [];
 const MANAGEMENT_TOOL_NAMES = ['create_agent', 'update_agent', 'delete_agent'];
-const REPORT_TOOL_NAMES = ['discover_report_data', 'query_report_data', 'save_personal_report'];
+const REPORT_TOOL_NAMES = ['discover_report_data', 'get_report_template', 'query_report_data', 'save_personal_report'];
 
 // TOOLSET_TEMPLATES is populated from the backend API at startup (see fetch below).
 const TOOLSET_TEMPLATES = {};
@@ -4749,6 +4976,9 @@ async function resolveAllowedTools(ctx) {
   const toolSet = new Set(tools);
   for (const reportTool of REPORT_TOOL_NAMES) toolSet.add(reportTool);
   for (const discoveryTool of INTERNAL_DISCOVERY_TOOL_NAMES) toolSet.add(discoveryTool);
+  for (const managedTool of MANAGED_TOOL_NAMES) {
+    if (managedTool !== 'set_managed_mcp_enabled') toolSet.add(managedTool);
+  }
   tools = [...toolSet];
   ctx.allowedTools = tools;
   return ctx.allowedTools;
@@ -4779,7 +5009,7 @@ async function handleMcpMessage(line, toolMap, ctx) {
       result: {
         protocolVersion: MCP_PROTOCOL_VERSION,
         capabilities: { tools: {} },
-        serverInfo: { name: 'di-agent-platform', version: '0.1.0' },
+        serverInfo: { name: 'di-agent-platform', version: DAEMON_PACKAGE_VERSION },
       },
     });
     return;
@@ -4822,6 +5052,10 @@ async function handleMcpMessage(line, toolMap, ctx) {
     }
     try {
       const res = await tool.run((params && params.arguments) || {}, ctx);
+      if (MANAGED_TOOL_NAMES.includes(toolName) && res && Array.isArray(res.content)) {
+        writeMcp({ jsonrpc: '2.0', id, result: res });
+        return;
+      }
       const data = res && Object.prototype.hasOwnProperty.call(res, 'data') ? res.data : res;
       writeMcp({
         jsonrpc: '2.0',
@@ -4868,6 +5102,8 @@ async function runMcpServer(serverURL, apiKey) {
   const daemonToken = readArg('--daemon-token') || readDiAgentEnvironment(process.env, 'DAEMON_TOKEN') || '';
   const taskContextFile = readArg('--task-context-file') || '';
   const ctx = {
+    // 只保存不可逆作用域；平台、电脑凭证或用户变化不能继承接入状态。
+    managedMcpScope: crypto.createHash('sha256').update(JSON.stringify([serverURL, apiKey])).digest('hex'),
     conversationId: readArg('--conversation-id') || readDiAgentEnvironment(process.env, 'CONVERSATION_ID') || null,
     userId: readArg('--user-id') || readDiAgentEnvironment(process.env, 'USER_ID') || null,
     agentId: readArg('--agent-id') || readDiAgentEnvironment(process.env, 'AGENT_ID') || null,
@@ -4886,6 +5122,18 @@ async function runMcpServer(serverURL, apiKey) {
     callMcpApi: (method, pathname, options) => {
       const current = ctx.refreshRuntimeContext();
       return callMcpApi(serverURL, daemonToken, method, pathname, options, current.userId);
+    },
+    callDataMapApi: (method, pathname, options) => {
+      const current = ctx.refreshRuntimeContext();
+      return callDataMapMachineApi(serverURL, apiKey, method, pathname, options, current.userId);
+    },
+    callHiveDataApi: (method, pathname, options) => {
+      const current = ctx.refreshRuntimeContext();
+      return callDataMapMachineApi(serverURL, apiKey, method, pathname, options, current.userId);
+    },
+    callManagedMcpApi: (method, pathname, options) => {
+      const current = ctx.refreshRuntimeContext();
+      return callDataMapMachineApi(serverURL, apiKey, method, pathname, options, current.userId);
     },
     // emitCard 把 MCP subprocess 工具产出的卡片推到后端 task-card 队列，
     // daemon 主进程 createAgentReply 时 Drain 合并到 message.cards_json。
@@ -4948,11 +5196,50 @@ async function runMcpServer(serverURL, apiKey) {
 }
 
 async function main() {
+  if (process.argv.includes('--configure-managed-mcp')) {
+    if (readArg('--configure-managed-mcp') !== 'datadream') throw new Error('暂仅支持配置 datadream');
+    await configureDatadream();
+    return;
+  }
   const serverURL = readArg('--server-url') || readDiAgentEnvironment(process.env, 'SERVER_URL');
   const apiKey = readArg('--api-key') || readDiAgentEnvironment(process.env, 'API_KEY');
   if (!serverURL || !apiKey) {
     logFlow('error', 'cli.usage_error', { usage: 'di-agent-daemon --server-url <url> --api-key <key> [--mcp]' });
     process.exit(2);
+  }
+
+  if (process.argv.includes('--bind-managed-mcp-credential')) {
+    if (readArg('--bind-managed-mcp-credential') !== 'cooper' || !process.stdin.isTTY || !process.stdout.isTTY) throw new Error('请在本人交互终端绑定 Cooper 个人凭据。');
+    const userId = readArg('--user-id') || readDiAgentEnvironment(process.env, 'USER_ID');
+    if (!userId) throw new Error('绑定需要当前平台用户 ID');
+    await callDataMapMachineApi(serverURL, apiKey, 'GET', '/daemon/managed-mcps', undefined, userId);
+    const credential = require('../cli/managed-mcp-credentials').loadDatadreamCredential();
+    if (!credential) throw new Error('尚未配置本机公司个人凭据');
+    const rl = require('node:readline/promises').createInterface({ input: process.stdin, output: process.stdout });
+    let answer;
+    try { answer = await rl.question(`将本人现有公司 MCP 凭据绑定到 ${serverURL} 的用户 ${userId}、当前电脑？输入 yes 确认：`); }
+    finally { rl.close(); }
+    if (answer !== 'yes') throw new Error('绑定已取消');
+    require('../cli/managed-mcp-state').bindCredential({ userId, managedMcpScope: crypto.createHash('sha256').update(JSON.stringify([serverURL, apiKey])).digest('hex') }, credential.key);
+    process.stdout.write('个人凭据绑定完成；令牌未发送到平台服务器。\n');
+    return;
+  }
+
+  if (process.argv.includes('--bind-managed-mcp-browser')) {
+    if (readArg('--bind-managed-mcp-browser') !== 'intranet-fetcher' || !process.stdin.isTTY || !process.stdout.isTTY) throw new Error('请在本人交互终端绑定 mcphub 内网页面检索。');
+    const userId = readArg('--user-id') || readDiAgentEnvironment(process.env, 'USER_ID');
+    if (!userId) throw new Error('绑定需要当前平台用户 ID');
+    const result = await callDataMapMachineApi(serverURL, apiKey, 'GET', '/daemon/managed-mcps', undefined, userId);
+    const connectors = result?.data?.connectors || result?.connectors || [];
+    require('../cli/managed-mcp-intranet').validateConnector(connectors.find(entry => entry.id === 'intranet-fetcher'));
+    const rl = require('node:readline/promises').createInterface({ input: process.stdin, output: process.stdout });
+    let answer;
+    try { answer = await rl.question(`确认当前电脑的 Chrome 公司登录态属于平台用户 ${userId}，且允许只在本机用于只读内网页面检索？输入 yes：`); }
+    finally { rl.close(); }
+    if (answer !== 'yes') throw new Error('绑定已取消');
+    require('../cli/managed-mcp-state').bindBrowser({ userId, managedMcpScope: crypto.createHash('sha256').update(JSON.stringify([serverURL, apiKey])).digest('hex') });
+    process.stdout.write('本机浏览器登录态已确认绑定；Cookie 未发送至平台。\n');
+    return;
   }
 
   if (process.argv.includes('--mcp')) {
@@ -4963,6 +5250,10 @@ async function main() {
   daemonConn.serverURL = serverURL;
   daemonConn.apiKey = apiKey;
   daemonConn.daemonToken = readArg('--daemon-token') || readDiAgentEnvironment(process.env, 'DAEMON_TOKEN') || '';
+  // 仅普通 daemon 启动回环识别，MCP 子进程不占用端口；冲突不影响任务执行。
+  await startBrowserIdentity({ serverURL, apiKey }).catch(() => {
+    logFlow('warn', 'browser_identity.unavailable', { reason: 'local_identity_unavailable' });
+  });
   loadSessionMap();
   // 部署 TTL 管理：启动时清理上次遗留的过期部署，之后每 5 分钟扫一次。
   // MCP 工具 deploy_project 发起的部署写状态文件到 ~/.di-agent/deploys/，
@@ -4982,6 +5273,8 @@ if (require.main === module) {
 }
 
 module.exports = {
+  handleTaskDispatch,
+  pendingTaskCompletions,
   buildPromptParts,
   DEFAULT_AGENT_TIMEOUT_MS,
   commandForTask,
@@ -4994,9 +5287,11 @@ module.exports = {
   ensureOpenCodeMcpConfig,
   daemonConn,
   dispatchToPersistentSlot,
+  dispatchWsMessage,
   onWebSocket,
   installSkillFromDirectory,
   MCP_TOOLS,
+  callDataMapMachineApi,
   handleMcpMessage,
   parseGitHubSkillSource,
   readMcpRuntimeContext,

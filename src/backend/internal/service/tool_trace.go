@@ -23,6 +23,21 @@ func SanitizeToolTraceEvents(events []model.AgentEvent, previous []model.Message
 		e := &out[i]
 		id := e.ToolUseIDOrAlt()
 		switch e.Type {
+		case model.AgentEventError:
+			// 错误在实时广播前归一化，不能等最终持久化时才脱敏。
+			// error 只需要诊断正文与事件排序信息，其他任意载荷不向客户端透传。
+			diagnostic := ""
+			for _, value := range []string{e.Message, e.Content, e.Text, e.Reason, e.Output, e.Delta} {
+				if strings.TrimSpace(value) != "" {
+					diagnostic = value
+					break
+				}
+			}
+			diagnostic = safeAgentFailureReason(diagnostic)
+			if diagnostic == "" {
+				diagnostic = "本次执行未完成，未提供具体失败原因。"
+			}
+			*e = model.AgentEvent{Type: model.AgentEventError, Seq: e.Seq, Ts: e.Ts, Message: diagnostic, IsError: true}
 		case model.AgentEventToolUse, model.AgentEventToolCallStart:
 			if e.Tool != "" && id != "" {
 				call := *e

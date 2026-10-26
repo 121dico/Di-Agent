@@ -87,8 +87,8 @@ func (r *fakeDaemonAgentRepo) DeleteDaemonMachine(_ context.Context, _, _ string
 func (r *fakeDaemonAgentRepo) GetDaemonMachineByAPIKeyHash(_ context.Context, _ string) (*model.DaemonMachine, error) {
 	return nil, nil
 }
-func (r *fakeDaemonAgentRepo) GetDaemonMachineByID(_ context.Context, _ string) (*model.DaemonMachine, error) {
-	return nil, nil
+func (r *fakeDaemonAgentRepo) GetDaemonMachineByID(_ context.Context, id string) (*model.DaemonMachine, error) {
+	return &model.DaemonMachine{ID: id, UserID: "user-1"}, nil
 }
 func (r *fakeDaemonAgentRepo) MarkDaemonMachineConnected(_ context.Context, _, _ string) error {
 	return nil
@@ -980,5 +980,32 @@ func TestModelDiscoveryDoesNotCreateTaskBoardItems(t *testing.T) {
 	h.syncTaskToBoard(context.Background(), &model.DaemonTask{CLITool: "__di_agent_list_models__"}, `{"models":[]}`, "")
 	if len(calls) != 0 {
 		t.Fatal("read-only model scan must not create a business task")
+	}
+}
+
+func TestFileBrowsingDoesNotCreateTaskBoardItems(t *testing.T) {
+	calls := []string{}
+	h := &DaemonHandler{taskSync: &fakeTaskBoardSyncer{lifecycleCalls: &calls}, logger: slog.Default()}
+	h.syncTaskToBoard(context.Background(), &model.DaemonTask{ID: "browse", UserID: "owner", CLITool: "__di_agent_browse_files__"}, `{"content":"private file"}`, "")
+	if len(calls) != 0 {
+		t.Fatal("file preview must not persist a business task or file body")
+	}
+}
+
+func TestFileBrowsingCompletionResolvesOwnedPromiseWithoutBoardWrite(t *testing.T) {
+	h, hub, repo := newTestDaemonHandler(t)
+	repo.daemonTask = &model.DaemonTask{ID: "browse", UserID: "owner", MachineID: "machine", CLITool: "__di_agent_browse_files__"}
+	calls := []string{}
+	h.SetTaskBoardSyncer(&fakeTaskBoardSyncer{lifecycleCalls: &calls})
+	ch := hub.RegisterTaskPromise("browse")
+	defer hub.RemoveTaskPromise("browse")
+	h.handleTaskComplete(json.RawMessage(`{"task_id":"browse","result":"{\"content\":\"preview\"}"}`), &model.DaemonMachine{ID: "machine", UserID: "owner"})
+	select {
+	case got := <-ch:
+		if got.Result != `{"content":"preview"}` || len(calls) != 0 {
+			t.Fatalf("file result changed or board written: %v, %v", got, calls)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("authenticated browse completion did not resolve")
 	}
 }

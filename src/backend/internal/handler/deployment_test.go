@@ -143,8 +143,10 @@ func TestServeSite_RejectsTraversalIntoAnotherDeployment(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/sites/"+id+"/%2e%2e/"+otherID+"/secret.html", nil)
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("code = %d, want 403; body=%s", w.Code, w.Body.String())
+	// Gin may reject an encoded traversal before ServeSite runs. Both 403 and
+	// 404 deny access; the response must never disclose another deployment.
+	if w.Code != http.StatusForbidden && w.Code != http.StatusNotFound {
+		t.Fatalf("code = %d, want 403 or 404; body=%s", w.Code, w.Body.String())
 	}
 	if bytes.Contains(w.Body.Bytes(), []byte("other deployment")) {
 		t.Fatal("traversal served another deployment's file")

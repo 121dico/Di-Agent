@@ -10,7 +10,7 @@ interface ErrorBlockProps {
   block: MessageBlock;
   /** streaming flag（registry 签名要求；error 不增量，忽略该 prop） */
   streaming?: boolean;
-  /** registry 签名要求；ErrorBlock 不依赖上下文，忽略 */
+  /** 使用消息来源标明执行失败的 Agent。 */
   ctx?: BlockRenderContext;
   /** 重试按钮回调（可选；registry 渲染路径不传，保留给其他调用方） */
   onRetry?: () => void;
@@ -23,14 +23,16 @@ interface ErrorBlockProps {
  *
  * streaming prop 不使用：error 是一次性事件，无 token 增量。
  */
-function ErrorBlockInner({ block, onRetry }: ErrorBlockProps) {
+function ErrorBlockInner({ block, ctx, onRetry }: ErrorBlockProps) {
   const text = useMemo(() => block.text || '生成失败，请重试', [block.text]);
+  const isRoutingTimeout = text.trim() === 'workspace routing discovery timed out';
   return (
-    <div className={styles.errorBlock}>
+    <div className={styles.errorBlock} role="alert">
       <div className={styles.errorHeader}>
         <ExclamationCircleOutlined />
-        <span>生成失败</span>
+        <span>{ctx?.agentName ? `${ctx.agentName} 执行失败` : '执行失败'}</span>
       </div>
+      {isRoutingTimeout && <div>工作区路由发现超时，本次执行未完成。</div>}
       <div className={styles.errorBody}>{text}</div>
       {onRetry && (
         <Button

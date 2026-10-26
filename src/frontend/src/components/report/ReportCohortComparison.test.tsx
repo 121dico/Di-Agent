@@ -5,11 +5,41 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it, vi } from 'vitest';
 import { ReportCohortComparison } from './ReportCohortComparison';
 
+it('keeps the tiny final grade in one continuous arc adjoining the preceding grade', () => {
+  const host = document.createElement('div');
+  const values = [1, 6, 7, 15, 119, 850, 2];
+  host.innerHTML = renderToStaticMarkup(<ReportCohortComparison all={values.map((value, index) => ({ label: `等级${index}`, value }))} orders={[]} />);
+  const sectors = [...host.querySelectorAll('svg[aria-label="全量人群环形图"] [role="button"]')];
+  expect(sectors).toHaveLength(7);
+  const last = sectors[6]!;
+  expect(last.tagName.toLowerCase()).toBe('path');
+  expect(last.hasAttribute('stroke-dasharray')).toBe(false);
+  const arc = last.getAttribute('d')!;
+  expect(arc.match(/A/g)).toHaveLength(1);
+  const coordinates = arc.match(/-?\d+(?:\.\d+)?(?:e[-+]?\d+)?/gi)!.map(Number);
+  expect(coordinates[0]).toBeCloseTo(213.993, 2);
+  expect(coordinates[1]).toBeCloseTo(128.944, 2);
+  expect(coordinates.slice(-2)).toEqual([214, 130]);
+  const previousEnd = sectors[5]!.getAttribute('d')!.trim().split(/\s+/).slice(-2);
+  expect(arc.trim().split(/\s+/).slice(1, 3)).toEqual(previousEnd);
+});
+
 it('marks inconsistent same-grade bases unavailable instead of showing more than 100 percent', () => {
   const host = document.createElement('div');
   host.innerHTML = renderToStaticMarkup(<ReportCohortComparison all={[]} orders={[{ label: '高价敏', value: 20 }]} orderGradeTotals={[{ label: '高价敏', value: 10 }]} precision={2} />);
   expect(host.querySelector('tbody tr td:last-child')?.textContent).toBe('—');
   expect(host.textContent).not.toContain('200.00%');
+});
+
+it('draws a complete ring for one nonzero grade and leaves zero grades without sectors', () => {
+  const host = document.createElement('div');
+  host.innerHTML = renderToStaticMarkup(<ReportCohortComparison all={[{ label: '高价敏', value: 0 }, { label: '低价敏', value: 100 }]} orders={[]} />);
+  const sectors = [...host.querySelectorAll('svg[aria-label="全量人群环形图"] [role="button"]')];
+  expect(sectors).toHaveLength(1);
+  const arc = sectors[0]!.getAttribute('d')!;
+  expect(arc.match(/A/g)).toHaveLength(2);
+  expect(arc).toBe('M 214 130 A 84 84 0 0 1 46 130 A 84 84 0 0 1 214 130');
+  expect(host.textContent).not.toMatch(/NaN|Infinity/);
 });
 
 it('formats hundreds of millions as 亿 and shows exact sector counts on hover without changing the other ring', () => {
@@ -21,7 +51,7 @@ it('formats hundreds of millions as 亿 and shows exact sector counts on hover w
     const all = container.querySelector('section[aria-label="全量人群价敏分布"]')!;
     const orders = container.querySelector('section[aria-label="有订单人群价敏分布"]')!;
     expect(all.querySelector('text')?.textContent).toBe('3.71亿');
-    const sector = all.querySelector('circle[role="button"]')!;
+    const sector = all.querySelector('[role="button"]')!;
     act(() => sector.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })));
     expect(all.querySelector('[role="status"]')?.textContent).toContain('315,888,579 人');
     expect(all.querySelector('[role="status"]')?.textContent).toContain('85.2%');
@@ -89,8 +119,8 @@ it('lets keyboard users toggle and restore a sector without changing the other c
   const root = createRoot(container);
   try {
     act(() => root.render(<ReportCohortComparison all={[{ label: '高价敏', value: 20 }, { label: '低价敏', value: 80 }]} orders={[{ label: '高价敏', value: 10 }, { label: '低价敏', value: 10 }]} />));
-    const sector = container.querySelector<SVGCircleElement>('circle[aria-label="全量人群 高价敏"]')!;
-    const otherSector = container.querySelector<SVGCircleElement>('circle[aria-label="有订单人群 高价敏"]')!;
+    const sector = container.querySelector<SVGElement>('[aria-label="全量人群 高价敏"]')!;
+    const otherSector = container.querySelector<SVGElement>('[aria-label="有订单人群 高价敏"]')!;
     const value = container.querySelector<HTMLButtonElement>('button[aria-label="全量人群 高价敏 人数与占比"]')!;
     expect(sector.getAttribute('tabindex')).toBe('0');
     const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });

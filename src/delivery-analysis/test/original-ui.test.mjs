@@ -278,6 +278,38 @@ test('BOSS配置在原漏斗及包详情可见，组别过滤与错误清理不�
  dom.window.close();
 });
 
+test('原报表首屏直接显示已核验的 Apollo、三包 Ditag 与六条 BOSS 配置',async()=>{
+ const [{experimentReference},{crowdReferences},{deploymentReference}]=await Promise.all([
+  import('../server/experiment-reference.mjs'),import('../server/crowd-reference.mjs'),import('../server/deployment-reference.mjs')
+ ]);
+ const live=structuredClone(data);
+ live.task.experimentReference=experimentReference(live.task);
+ live.task.crowdReferences=crowdReferences(live.task);
+ live.task.deploymentReference=deploymentReference(live.task);
+ const dom=await page(live),d=dom.window.document;
+ dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true;};dom.window.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ try{
+  assert.equal(d.querySelectorAll('#verifiedReferenceSummary .verified-source-card').length,5);
+  assert.match(d.querySelector('#verifiedReferenceSummary').textContent,/117,098.*117,218.*2,458,957.*1,781,910.*5,109,498.*6 条配置/s);
+  assert.match(d.querySelector('#preMetrics').textContent,/Apollo计划分流.*50.00% \/ 50.00%/s);
+  assert.match(d.querySelector('#apolloBalanceSummary').textContent,/2026-08-24.*117,098.*117,218/s);
+  assert.match(d.querySelector('#bossFunnelSummary').textContent,/6 条.*100 城 \/ 7 端/s);
+  assert.match(d.querySelector('#currentExperimentReference').textContent,/本次实验的历史分流记录.*13 个观测日/s);
+  assert.doesNotMatch(d.querySelector('#funnelVisual').textContent,/117,098|2,458,957/);
+  d.querySelector('#verifiedReferenceSummary [data-live-experiment]').click();
+  assert.equal(d.getElementById('infoDialog').open,true);
+  assert.match(d.getElementById('dialogBody').textContent,/2026-08-12.*152,823.*153,178/s);
+  d.querySelector('#closeDialog').click();
+  live.task.selectedDate='2026-08-12';live.task.daily.unshift({date:'2026-08-12',...summary});
+  d.getElementById('refreshAnalysis').click();await new Promise(r=>setTimeout(r,30));
+  assert.match(d.querySelector('#apolloBalanceSummary').textContent,/2026-08-12.*152,823.*153,178/s);
+  dom.window.fetch=async()=>({ok:false,json:async()=>({error:'读取失败'})});
+  d.getElementById('refreshAnalysis').click();await new Promise(r=>setTimeout(r,30));
+  assert.equal(d.getElementById('verifiedReferenceSummary').hidden,true);
+  assert.equal(d.getElementById('bossFunnelSummary').hidden,true);
+ }finally{dom.window.close();}
+});
+
 test('画像配置可多选并记忆，二三级拆分与重置通过真实查询契约驱动',async()=>{
  const payload=structuredClone(data);
  const keys=['charge_life_cycle','charge_freq_type','city_name'];
@@ -357,22 +389,44 @@ test('画像清楚区分召回单日和安心充人群，保留Demo维度说明�
  dom.window.close();
 });
 
-test('30/60/90入口切换对应人群而非弹详情；未关联范围不能出现任务全量',async()=>{
- const {crowdReferences}=await import('../server/crowd-reference.mjs'),{selectTask}=await import('../server/snapshot.mjs');
+test('重建表的画像时点按钮切换请求并展示覆盖人数，不把来源字段写成当前快照',async()=>{
+ const fixture=structuredClone(data);
+ fixture.task.hasPrePortrait=true;
+ fixture.task.portraitPhase='pre';
+ fixture.task.availablePortraitPhases=['pre','entry','post7d'];
+ fixture.task.portraitSource={sourceName:'epower_platform.ads_delivery_coupon_funnel_di',scope:'pre_entry_cohort',labelCoverage:null};
+ const dom=await page(fixture),d=dom.window.document;
+ let requested;
+ dom.window.fetch=async url=>{
+  requested=new URL(url,'http://localhost');
+  const next=structuredClone(fixture);
+  next.task.portraitPhase=requested.searchParams.get('portraitPhase')||'pre';
+  next.task.portraitSource={...next.task.portraitSource,scope:next.task.portraitPhase,labelCoverage:90,sourceFields:{charge_life_cycle:'post_7d_charge_life_cycle'}};
+  return {ok:true,json:async()=>next};
+ };
+ assert.equal(d.querySelectorAll('[data-portrait-phase]').length,3);
+ d.querySelector('[data-portrait-phase="post7d"]').click();
+ await new Promise(resolve=>setTimeout(resolve,30));
+ assert.equal(requested.searchParams.get('portraitPhase'),'post7d');
+ assert.match(d.querySelector('#profileScope').textContent,/个人进组后第 7 天画像/);
+ assert.match(d.querySelector('#profileScope').textContent,/90 \/ 100/);
+ assert.equal(d.querySelector('[data-portrait-phase="post7d"]').getAttribute('aria-pressed'),'true');
+ dom.window.close();
+});
+
+test('30/60/90入口展开已核验的包详情，不改变当前任务统计范围',async()=>{
+ const {crowdReferences}=await import('../server/crowd-reference.mjs');
  const live=structuredClone(data);live.task.crowdReferences=crowdReferences(live.task);
- const dom=await page(live),d=dom.window.document;let requested;
- dom.window.fetch=async url=>{requested=new URL(url,'http://localhost');const crowdId=requested.searchParams.get('crowdId');return {ok:true,json:async()=>crowdId?{...live,task:selectTask({tasks:[live.task]},'coupon',{crowdId})}:live};};
+ const dom=await page(live),d=dom.window.document;
+ dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true;};dom.window.HTMLDialogElement.prototype.close=function(){this.open=false;};
  try{
  for(const id of ['1011337400','1011337415','1011337424']){
-  d.querySelector('[data-live-select-crowd="'+id+'"]').click();await new Promise(r=>setTimeout(r,30));
-  assert.equal(requested.searchParams.get('crowdId'),id);assert.equal(d.querySelector('#infoDialog').open,false);
-  assert.match(d.querySelector('#contextInputName').textContent,new RegExp(id));assert.equal(dom.window.state.data.task.selectedCrowd.id,id);
-  assert.doesNotMatch(d.querySelector('#dailyMetrics').textContent,/25.00%/);assert.equal(dom.window.state.data.task.summary.users,undefined);
-  assert.match(d.querySelector('#phaseAvailabilityNote').textContent,/成员关联/);
+  d.querySelector('[data-task-group="recall"] [data-live-crowd="'+id+'"]').click();
+  assert.equal(d.querySelector('#infoDialog').open,true);assert.match(d.querySelector('#dialogBody').textContent,new RegExp(id));
+  assert.equal(dom.window.state.data.task.summary.users,100);assert.equal(dom.window.deliveryLive.selection().crowdId,undefined);
+  assert.match(d.querySelector('#dailyMetrics').textContent,/25.00%/);
+  d.querySelector('#closeDialog').click();
  }
- assert.equal(JSON.parse(dom.window.sessionStorage.getItem('deliveryOriginalSelection')).crowdId,'1011337424');
- d.querySelector('[data-task="recall"]').click();await new Promise(r=>setTimeout(r,30));
- assert.equal(requested.searchParams.has('crowdId'),false);assert.match(d.querySelector('#dailyMetrics').textContent,/25.00%/);
  }finally{dom.window.close();}
 });
 

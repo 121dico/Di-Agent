@@ -1,4 +1,13 @@
 .form { display: flex; flex-direction: column; gap: 18px; }
+.companySection { display: flex; flex-direction: column; gap: 10px; }
+.companySection .submitButton { width: 100%; margin: 0; }
+.companyStatus { margin: 0; color: var(--wb-text-secondary); font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
+.separator { display: flex; align-items: center; gap: 12px; color: var(--wb-text-tertiary); font-size: 11px; }
+.separator::before, .separator::after { content: ''; height: 1px; flex: 1; background: var(--wb-border-default); }
+.retryButton { align-self: flex-start; border: 0; padding: 4px 0; color: var(--wb-text-primary); background: transparent; text-decoration: underline; cursor: pointer; font-size: 12px; }
+.localButton { min-height: 46px; justify-content: space-between; padding-inline: 15px; border: 1px solid var(--wb-border-default); border-radius: var(--radius-3); color: var(--wb-text-primary); background: var(--wb-surface); box-shadow: none; }
+.localButton:hover:not(:disabled) { color: var(--wb-text-primary); border-color: var(--wb-text-secondary); background: var(--wb-surface); }
+.retryButton:focus-visible, .localButton:focus-visible, .submitButton:focus-visible { outline: 2px solid var(--wb-focus); outline-offset: 3px; }
 
 .intro { margin-bottom: 18px; }
 .intro > span { color: var(--wb-text-tertiary); font-size: 9px; font-weight: 700; letter-spacing: .13em; }

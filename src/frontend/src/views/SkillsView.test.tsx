@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
 import { expect, it, vi } from 'vitest';
 import SkillsView from './SkillsView';
 const { fetchAgents, selectAgent } = vi.hoisted(() => ({ fetchAgents: vi.fn().mockResolvedValue(undefined), selectAgent: vi.fn() }));
@@ -15,7 +16,7 @@ vi.mock('antd', () => ({
 it('defaults to the first agent and uses a compact header selector to switch agents', async () => {
   const container = document.createElement('div');
   const root = createRoot(container);
-  await act(async () => root.render(<SkillsView />));
+  await act(async () => root.render(<MemoryRouter><SkillsView /></MemoryRouter>));
   expect(container.textContent).toContain('Codex local skills panel');
   const selector = container.querySelector('header select') as HTMLSelectElement;
   expect(selector.value).toBe('a');

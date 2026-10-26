@@ -17,8 +17,44 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-say() { printf '\033[36m[Di Agent]\033[0m %s\n' "$*"; }
-fail() { printf '\033[31m[Di Agent] 安装失败: %s\033[0m\n' "$*" >&2; exit 1; }
+PROGRESS_PID=""
+stop_progress() {
+  if [ -n "$PROGRESS_PID" ]; then
+    kill "$PROGRESS_PID" >/dev/null 2>&1 || true
+    wait "$PROGRESS_PID" >/dev/null 2>&1 || true
+    PROGRESS_PID=""
+    printf '\r\033[2K'
+  fi
+}
+# 百分比表示已完成的连接步骤，不按时间假装下载或连接已经完成。
+progress() {
+  stop_progress
+  percent=$1; label=$2; bar=""; index=0
+  while [ "$index" -lt 20 ]; do
+    if [ "$index" -lt "$((percent / 5))" ]; then bar="${bar}━"; else bar="${bar}─"; fi
+    index=$((index + 1))
+  done
+  if [ -t 1 ] && [ "$percent" -lt 100 ]; then
+    (
+      while :; do
+        for frame in '◐' '◓' '◑' '◒'; do
+          printf '\r\033[2K[Di Agent] %s [%s] %3s%% %s' "$frame" "$bar" "$percent" "$label"
+          sleep 0.15
+        done
+      done
+    ) &
+    PROGRESS_PID=$!
+  else
+    printf '[Di Agent] [%s] %3s%% %s\n' "$bar" "$percent" "$label"
+  fi
+}
+say() { printf '%s\n' "$*" >> "${DIR:-${TMPDIR:-/tmp}}/connection-setup.log"; }
+fail() {
+  stop_progress
+  printf '\033[31m[Di Agent] 连接未完成：%s\033[0m\n' "$*" >&2
+  [ -z "${DIR:-}" ] || printf '[Di Agent] 排查日志：%s/daemon.err.log\n' "$DIR" >&2
+  exit 1
+}
 
 [ -n "$SERVER_URL" ] && [ -n "$API_KEY" ] || fail "缺少 --server-url 或 --api-key 参数"
 
@@ -80,7 +116,11 @@ rollback_install() {
     mv "$DIR" "$LEGACY_DIR" >/dev/null 2>&1 || true
   fi
 }
-trap rollback_install EXIT
+finish_install() { stop_progress; rollback_install; }
+trap finish_install EXIT
+trap 'exit 130' INT TERM
+
+progress 0 "正在准备连接 · 步骤进度"
 
 if [ ! -e "$DIR" ] && [ -d "$LEGACY_DIR" ]; then
   mv "$LEGACY_DIR" "$DIR" || fail "无法迁移已有 daemon 状态目录"
@@ -105,11 +145,11 @@ if [ -z "$NODE_BIN" ]; then
   tar xzf "$DIR/$tarball" -C "$DIR" || fail "Node 解压失败"
   NODE_BIN="$DIR/node-v$NODE_VER-darwin-$arch/bin/node"
 fi
-say "Node 就绪: $NODE_BIN"
+progress 20 "环境已就绪"
 
 # --- 2. daemon 离线包（从服务器局域网下载，不依赖 npm 与外网）---
-say "下载 daemon 离线包..."
 curl -fsSL "$SERVER_URL/downloads/di-agent-daemon-bundle.tar.gz" -o "$DIR/bundle.tar.gz" || fail "daemon 包下载失败（请确认能访问 ${SERVER_URL}）"
+progress 40 "正在准备连接组件"
 DAEMON_PACKAGE_DIR="$DIR/node_modules/di-agent-daemon"
 DAEMON_LINK_BACKUP=""
 if [ -L "$DAEMON_PACKAGE_DIR" ]; then
@@ -133,6 +173,7 @@ if ! tar xzf "$DIR/bundle.tar.gz" -C "$DIR"; then
 fi
 DAEMON_JS="$DIR/node_modules/di-agent-daemon/bin/di-agent-daemon.js"
 [ -f "$DAEMON_JS" ] || fail "daemon 入口文件缺失"
+progress 60 "正在配置连接"
 
 # --- 3. 启动脚本（幂等: 重跑即更新 Key 并重启）---
 # PATH 固化为当前终端的完整 PATH: launchd 拉起进程时默认 PATH 只有 /usr/bin:/bin，
@@ -196,6 +237,7 @@ if [ -f "$LEGACY_PLIST" ]; then
   launchctl unload "$LEGACY_PLIST" >/dev/null 2>&1 || true
   LEGACY_SERVICE_UNLOADED=1
 fi
+progress 80 "正在确认电脑在线"
 launchctl load "$PLIST" || fail "launchd 注册失败"
 CANONICAL_SERVICE_LOADED=1
 
@@ -237,8 +279,12 @@ fi
 rmdir "$DIR/node_modules/@hust-agenthub" >/dev/null 2>&1 || true # [brand-compat]
 
 INSTALL_COMMITTED=1
+stop_progress
 trap - EXIT
-
-say "安装完成！daemon 已在后台运行，并已注册开机自启"
-say "现在回到浏览器刷新页面，本机会自动显示为 Connected"
-say "日志: $DIR/daemon.log"
+trap - INT TERM
+if [ "${DI_AGENT_SKIP_HEALTH_CHECK:-0}" != "1" ]; then
+  progress 100 "连接完成"
+  printf '[Di Agent] 已就绪，可以回到 Di Agent。\n'
+else
+  printf '[Di Agent] 设置已完成，尚未确认连接状态。\n'
+fi

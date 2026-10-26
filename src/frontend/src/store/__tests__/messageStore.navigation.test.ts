@@ -100,3 +100,25 @@ describe('messageStore navigation refresh', () => {
     expect(refreshed?.blocks).toBeUndefined();
   });
 });
+
+describe('worker streaming start', () => {
+  it('shows a named worker and stop control before its first model delta', () => {
+    resetStore([]);
+    useMessageStore.getState().appendDeltas(conversationId, 'worker-message', [], {
+      taskId: 'worker-task', agentId: 'worker-agent', agentName: 'Codex',
+    });
+    const message = useMessageStore.getState().messages[conversationId]?.[0];
+    expect(message?.id).toBe('worker-message');
+    expect(message?.status).toBe('streaming');
+    expect(message?.username).toBe('Codex');
+    expect(message?.blocks).toEqual([]);
+    expect(useMessageStore.getState().streamingTaskIds['worker-message']).toBe('worker-task');
+
+    useMessageStore.getState().appendDeltas(conversationId, 'worker-message', [
+      { type: 'text', content: '第一段' },
+    ]);
+    const updated = useMessageStore.getState().messages[conversationId];
+    expect(updated).toHaveLength(1);
+    expect(updated?.[0]?.blocks?.[0]?.text).toBe('第一段');
+  });
+});

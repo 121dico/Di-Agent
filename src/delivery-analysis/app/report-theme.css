@@ -180,6 +180,23 @@ button[data-unavailable], input[data-unavailable], #baselineButtons button:disab
 #audiencePackageMeta .package-meta-row strong { min-width: 0; overflow-wrap: anywhere; }
 #ditagCrowdDirectory .link-button { max-width: 100%; white-space: normal; text-align: left; }
 
+/* 把已核验的配置与包资料放回原报表首屏，来源数值保持各自口径。 */
+.verified-reference-summary { margin: 0 0 18px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.verified-reference-summary[hidden], .verified-reference-inline[hidden] { display: none; }
+.verified-reference-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 12px; margin-bottom: 10px; }
+.verified-reference-heading strong { color: var(--ink); font-size: 13px; }
+.verified-reference-heading small { color: var(--muted); font-size: 11px; }
+.verified-source-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 9px; }
+.verified-source-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #f8fafc; color: var(--ink); text-align: left; cursor: pointer; }
+.verified-source-card:hover, .verified-source-card:focus-visible { border-color: #93c5fd; background: #eff6ff; }
+.verified-source-card > span { color: var(--muted); font-size: 11px; }
+.verified-source-card > strong { font-size: 15px; overflow-wrap: anywhere; }
+.verified-source-card > small { color: var(--muted); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.verified-reference-inline { display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px 12px; padding: 10px 12px; margin: 10px 0 14px; border-left: 3px solid #3b82f6; border-radius: 4px; background: #eff6ff; line-height: 1.5; }
+.verified-reference-inline > strong { color: var(--ink); font-size: 11px; }
+.verified-reference-inline > span { color: var(--muted); font-size: 10px; }
+.verified-reference-inline > .link-button { margin-left: auto; font-size: 10px; }
+
 .boss-reference { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; line-height: 1.6; }
 .boss-reference > strong { color: var(--ink); }
 .boss-reference p { margin: 6px 0; overflow-wrap: anywhere; }
@@ -223,6 +240,9 @@ button[data-unavailable], input[data-unavailable], #baselineButtons button:disab
 /* 画像范围紧随人数，避免将单日召回误认为完整圈选人群。 */
 .profile-scope { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; color:var(--muted); font-size:13px; padding:0 0 16px; }
 .profile-scope:empty { display:none; }
+.profile-phase-switch { display:flex; flex-wrap:wrap; gap:8px; width:100%; }
+.profile-phase-switch button.active { color:#1d4ed8; border-color:#93c5fd; background:#eff6ff; }
+.profile-scope > small { width:100%; }
 
 /* 查询依据在原弹窗中换行，保留长字段和筛选值。 */
 .analysis-query { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.6; }

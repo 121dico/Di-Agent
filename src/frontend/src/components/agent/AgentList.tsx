@@ -17,6 +17,8 @@ import { AvatarPickerModal } from './AvatarPickerModal';
 import { getAgentRuntimeIdentity, resolveAgentAvatar } from './agentPresentation';
 import { StatusBadge, type StatusBadgeStatus } from '@/components/common/StatusBadge';
 import styles from './AgentList.module.css';
+import { computerDisplayName } from '@/utils/computerNames';
+import { useBrowserMachine } from '@/hooks/useBrowserMachine';
 
 interface AgentListProps {
   selectedAgentId: string | null;
@@ -122,6 +124,7 @@ export const AgentList: React.FC<AgentListProps> = ({
     refreshMachines,
     refreshCandidates,
   } = useAgents();
+  const browserMachine = useBrowserMachine(machines, !machineLoading);
 
   useEffect(() => {
     if (machines.length === 0 && agents.length === 0) return;
@@ -178,11 +181,11 @@ export const AgentList: React.FC<AgentListProps> = ({
     });
     const groups = machines.map((machine) => ({
       id: machine.id,
-      name: machine.name,
+      name: computerDisplayName(machine),
       machineID: machine.machine_id,
       status: machine.status,
       lastSeenAt: machine.last_seen_at,
-      isLocal: machine.is_local ?? false,
+      user_id: machine.user_id,
       isGlobal: false,
       agents: agentsByMachine.get(machine.id) ?? [],
     }));
@@ -194,7 +197,7 @@ export const AgentList: React.FC<AgentListProps> = ({
         machineID: '',
         status: 'offline' as DaemonMachine['status'],
         lastSeenAt: undefined,
-        isLocal: false,
+        user_id: '',
         isGlobal: true,
         agents: globalAgents,
       });
@@ -232,6 +235,7 @@ export const AgentList: React.FC<AgentListProps> = ({
         </div>
       </div>
 
+
       {machineGroups.length === 0 ? (
         <div className={styles.empty}>
           暂未发现电脑，请先连接本地守护进程
@@ -266,9 +270,9 @@ export const AgentList: React.FC<AgentListProps> = ({
                           label={machineStatusLabel(group.status)}
                         />
                       )}
-                      {!group.isGlobal && (
-                        <Tag color={group.isLocal ? 'blue' : undefined}>
-                          {group.isLocal ? '本地' : '远程'}
+                      {!group.isGlobal && browserMachine.verified && browserMachine.label(group) !== '待识别' && (
+                        <Tag color={browserMachine.label(group) === '本机' ? 'blue' : undefined}>
+                          {browserMachine.label(group)}
                         </Tag>
                       )}
                     </div>
@@ -381,6 +385,7 @@ export const AgentList: React.FC<AgentListProps> = ({
         })
       )}
       <ConnectComputerModal
+        allowConnectedUpgrade
         candidates={candidates}
         loading={machineLoading}
         machines={machines}

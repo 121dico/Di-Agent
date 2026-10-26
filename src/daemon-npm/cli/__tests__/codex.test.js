@@ -87,6 +87,7 @@ function buildPersistentHarness(overrides = {}) {
     spawn: (command, args, options) => {
       calls.spawn.push({ command, args, options });
       child = fakeCodexChild((message, activeChild) => {
+        if (overrides.onRequest?.(message, activeChild)) return;
         if (message.method === 'initialize') {
           emitCodexLine(activeChild, { jsonrpc: '2.0', id: message.id, result: {} });
         } else if (message.method === 'model/list') {
@@ -131,6 +132,186 @@ function buildPersistentHarness(overrides = {}) {
   return { ctx, calls, get child() { return child; } };
 }
 
+test('codex accepts two supplemental messages in the same active native turn', async () => {
+  const harness = buildPersistentHarness({
+    onRequest(message, child) {
+      if (message.method === 'turn/start') {
+        emitCodexLine(child, { id: message.id, result: { turn: { id: 'active-turn' } } });
+        return true;
+      }
+      if (message.method === 'turn/steer') {
+        emitCodexLine(child, { id: message.id, result: { turnId: 'active-turn' } });
+        return true;
+      }
+      return false;
+    },
+  });
+  const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({ agentId: 'a' }, harness.ctx);
+  const identity = { task_id: 'task-1', agent_id: 'a', conversation_id: 'c', user_id: 'u' };
+  const completion = runtime.sendPrompt('original', {}, identity);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(await runtime.steerPrompt('first change', identity), { status: 'accepted' });
+  assert.deepEqual(await runtime.steerPrompt('second change', identity), { status: 'accepted' });
+  const requests = harness.child.stdin.writes.map(JSON.parse);
+  assert.equal(requests.filter(request => request.method === 'turn/start').length, 1);
+  assert.deepEqual(requests.filter(request => request.method === 'turn/steer').map(request => request.params), [
+    { threadId: 'thread-1', expectedTurnId: 'active-turn', input: [{ type: 'text', text: 'first change' }] },
+    { threadId: 'thread-1', expectedTurnId: 'active-turn', input: [{ type: 'text', text: 'second change' }] },
+  ]);
+  emitCodexLine(harness.child, { method: 'turn/completed', params: { turn: { id: 'active-turn', status: 'completed' } } });
+  assert.equal((await completion).error, undefined);
+});
+
+test('codex steering rejects absent or differently owned turns without native submission', async () => {
+  const harness = buildPersistentHarness({
+    onRequest(message, child) {
+      if (message.method !== 'turn/start') return false;
+      emitCodexLine(child, { id: message.id, result: { turn: { id: 'active-turn' } } });
+      return true;
+    },
+  });
+  const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({ agentId: 'a' }, harness.ctx);
+  const identity = { task_id: 't', agent_id: 'a', conversation_id: 'c', user_id: 'u' };
+  await runtime.ready;
+  assert.equal((await runtime.steerPrompt('idle', identity)).status, 'unavailable');
+  const completion = runtime.sendPrompt('original', {}, identity);
+  await new Promise(resolve => setImmediate(resolve));
+  for (const field of Object.keys(identity)) {
+    assert.equal((await runtime.steerPrompt('wrong owner', { ...identity, [field]: 'other' })).status, 'unavailable');
+  }
+  assert.equal(harness.child.stdin.writes.map(JSON.parse).filter(request => request.method === 'turn/steer').length, 0);
+  emitCodexLine(harness.child, { method: 'turn/completed', params: { turn: { id: 'active-turn', status: 'completed' } } });
+  await completion;
+  assert.equal((await runtime.steerPrompt('finished', identity)).status, 'unavailable');
+});
+
+test('codex steering distinguishes explicit refusal from uncertain delivery without replaying', async () => {
+  for (const scenario of [
+    { reply: { error: { code: -32601, message: 'Method not found' } }, status: 'unavailable' },
+    { reply: { error: { code: -32600, message: 'expected turn id does not match active turn' } }, status: 'unavailable' },
+    { reply: { error: { code: -32000, message: 'internal server error' } }, status: 'unknown' },
+    { reply: { result: { turnId: 'different-turn' } }, status: 'unknown' },
+    { reply: null, status: 'unknown' },
+  ]) {
+    const harness = buildPersistentHarness({
+      onRequest(message, child) {
+        if (message.method === 'turn/start') {
+          emitCodexLine(child, { id: message.id, result: { turn: { id: 'active-turn' } } });
+          return true;
+        }
+        if (message.method === 'turn/steer') {
+          if (scenario.reply) emitCodexLine(child, { id: message.id, ...scenario.reply });
+          return true;
+        }
+        return false;
+      },
+    });
+    const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({ agentId: 'a' }, harness.ctx);
+    const identity = { task_id: 't', agent_id: 'a', conversation_id: 'c', user_id: 'u' };
+    const completion = runtime.sendPrompt('original', {}, identity);
+    const keepAlive = setTimeout(() => {}, 500);
+    try {
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal((await runtime.steerPrompt('change', identity)).status, scenario.status);
+      assert.equal(harness.child.stdin.writes.map(JSON.parse).filter(request => request.method === 'turn/start').length, 1);
+      emitCodexLine(harness.child, { method: 'turn/completed', params: { turn: { id: 'active-turn', status: 'completed' } } });
+      await completion;
+    } finally { clearTimeout(keepAlive); }
+  }
+});
+
+test('codex timeout interrupts and retires the native turn before a queued retry', async () => {
+  const harness = buildPersistentHarness({
+    EXEC_TIMEOUT_MS: 25,
+    onRequest(message, child) {
+      if (message.method === 'turn/start') {
+        emitCodexLine(child, { id: message.id, result: { turn: { id: 'stuck-turn' } } });
+        return true;
+      }
+      // 模拟中断 RPC 也没有返回，不能因此再次永久等待。
+      return message.method === 'turn/interrupt';
+    },
+  });
+  const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({ agentId: 'a' }, harness.ctx);
+  const keepAlive = setTimeout(() => {}, 500);
+  try {
+    const first = runtime.sendPrompt('first');
+    const second = runtime.sendPrompt('retry');
+    const [failed, retry] = await Promise.all([first, second]);
+    assert.match(failed.error, /timed out/);
+    assert.match(retry.error, /not running|retired/i);
+    const requests = harness.child.stdin.writes.map(JSON.parse);
+    assert.equal(requests.filter(x => x.method === 'turn/start').length, 1);
+    assert.deepEqual(requests.find(x => x.method === 'turn/interrupt')?.params,
+      { threadId: 'thread-1', turnId: 'stuck-turn' });
+    assert.notEqual(harness.child.exitCode, null);
+  } finally { clearTimeout(keepAlive); }
+});
+
+test('codex stuck CUA surface access reports the tool and retires without waiting task deadline', async () => {
+  const harness = buildPersistentHarness({
+    EXEC_TIMEOUT_MS: 300,
+    CUA_SURFACE_TIMEOUT_MS: 20,
+    onRequest(message, child) {
+      if (message.method !== 'turn/start') return false;
+      emitCodexLine(child, { id: message.id, result: { turn: { id: 'stuck-turn' } } });
+      setImmediate(() => emitCodexLine(child, { method: 'item/started', params: {
+        turnId: 'stuck-turn', item: { type: 'mcpToolCall', id: 'cua-1', server: 'cua', tool: 'js',
+          arguments: { code: "let app = await cua.getApp('Microsoft Edge');" } },
+      } }));
+      return true;
+    },
+  });
+  const events = [];
+  const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({ agentId: 'a', eventRef: { current: e => events.push(e) } }, harness.ctx);
+  const keepAlive = setTimeout(() => {}, 600);
+  try {
+    const result = await runtime.sendPrompt('build timer');
+    assert.match(result.error, /getApp/);
+    assert.match(result.error, /已保留/);
+    assert.ok(events.some(e => e.type === 'turn_end' && e.error));
+    assert.notEqual(harness.child.exitCode, null);
+  } finally { clearTimeout(keepAlive); }
+});
+
+test('codex completed CUA call clears its guard and ignores late success after retirement', async () => {
+  for (const completeTool of [true, false]) {
+    const harness = buildPersistentHarness({
+      EXEC_TIMEOUT_MS: 250, CUA_SURFACE_TIMEOUT_MS: 15,
+      onRequest(message, child) {
+        if (message.method === 'turn/interrupt') {
+          emitCodexLine(child, { method: 'turn/completed', params: { turn: { id: 't', status: 'completed' } } });
+          emitCodexLine(child, { id: message.id, result: {} });
+          return true;
+        }
+        if (message.method !== 'turn/start') return false;
+        emitCodexLine(child, { id: message.id, result: { turn: { id: 't' } } });
+        setImmediate(() => {
+          const item = { type: 'functionCall', id: 'tool', name: 'js', arguments: { code: "await cua.getApp('Microsoft Edge')" } };
+          emitCodexLine(child, { method: 'item/started', params: { item } });
+          if (completeTool) {
+            emitCodexLine(child, { method: 'item/completed', params: { item: { ...item, output: 'ready' } } });
+            setTimeout(() => emitCodexLine(child, { method: 'turn/completed', params: { turn: { id: 't', status: 'completed' } } }), 45);
+          }
+        });
+        return true;
+      },
+    });
+    const runtime = createCodexCliSpec(harness.ctx).spawnPersistent({ agentId: 'a' }, harness.ctx);
+    const keepAlive = setTimeout(() => {}, 500);
+    try {
+      const result = await runtime.sendPrompt('test');
+      if (completeTool) {
+        assert.equal(result.error, undefined);
+        assert.equal(harness.child.exitCode, null);
+      } else {
+        assert.match(result.error, /getApp/);
+        assert.equal(result.runtimeRetired, true);
+      }
+    } finally { clearTimeout(keepAlive); }
+  }
+});
+
 test('codex delivers image bytes natively on first and resumed turns without leaking into text-only turns', async () => {
   const harness = buildPersistentHarness();
   const slot = createCodexCliSpec(harness.ctx).spawnPersistent({agentId:'image-agent',conversationId:'image-conv'},harness.ctx);
@@ -142,6 +323,7 @@ test('codex delivers image bytes natively on first and resumed turns without lea
   assert.equal(turns.length,3);
   for(const turn of turns.slice(0,2)) assert.deepStrictEqual(turn.params.input[1], {type:'image',url:`data:image/png;base64,${images[0].data}`});
   assert.equal(turns[2].params.input.length,1);
+  for (const turn of turns) assert.match(turn.params.input[0].text, /浏览器验收未完成/);
 });
 
 test('codex.resolveCommand returns DI_AGENT_CODEX_COMMAND env var when valid', () => {

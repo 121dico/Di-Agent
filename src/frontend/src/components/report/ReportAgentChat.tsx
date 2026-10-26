@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, Bot, Minus, Square } from 'lucide-react';
 import { getOrCreateAgentChat } from '@/api/conversation';
+import { getAgents } from '@/api/agent';
 import { ensureReportAgentSession, type ReportAgentSession } from '@/api/reportAgentSession';
 import { cancelStreamingMessage, getConversationBlackboard, getMessages, updateConversationBlackboard } from '@/api/message';
 import { useAuthStore } from '@/store/authStore';
@@ -33,6 +34,7 @@ interface Props { context: ReportAgentContext; onClose: () => void; active?: boo
 
 export function ReportAgentChat({ context, onClose, active = true, config = reportAgentConfig }: Props) {
   const userId = useAuthStore((state) => state.user?.id);
+  const executorKey = `di-agent:${config.workspace}-executor:${userId ?? ''}`;
   const token = useAuthStore((state) => state.token);
   const [session, setSession] = useState<ReportAgentSession | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -74,7 +76,14 @@ export function ReportAgentChat({ context, onClose, active = true, config = repo
     if (!userId || !token) { setLoading(false); setError(`请先登录后使用${config.agentName}`); return; }
     void (async () => {
       try {
-        const next = await config.ensureSession(userId, token, isCurrent);
+        let next = await config.ensureSession(userId, token, isCurrent);
+        let preferredId = '';
+        try { preferredId = localStorage.getItem(executorKey) ?? ''; } catch { /* 存储不可用时仍能使用默认 Agent。 */ }
+        if (preferredId && preferredId !== next.agent.id) {
+          const available = await getAgents();
+          const preferred = available.find((item) => item.id === preferredId && item.machine_id && (!item.user_id || item.user_id === userId) && (item.status === 'online' || item.status === 'busy'));
+          if (preferred && isCurrent()) next = { agent: preferred, conversation: await getOrCreateAgentChat(preferred.id, config.workspace, true) };
+        }
         if (disposed || !isCurrent()) return;
         // 显式读取可呈现加载失败；通用消息 hook 会吞掉首次加载异常。
         const beforeRequest = useMessageStore.getState().messages[next.conversation.id] ?? [];
@@ -88,7 +97,7 @@ export function ReportAgentChat({ context, onClose, active = true, config = repo
       } finally { if (!disposed) setLoading(false); }
     })();
     return () => { disposed = true; };
-  }, [userId, token, attempt, config]);
+  }, [userId, token, attempt, config, executorKey]);
 
   useEffect(() => {
     if (hasNewReply) setAwaitingReply(false);
@@ -143,6 +152,7 @@ export function ReportAgentChat({ context, onClose, active = true, config = repo
       const conversation = await getOrCreateAgentChat(agentId, config.workspace, true);
       if (useAuthStore.getState().user?.id !== userId || useAuthStore.getState().token !== token) return;
       setSession({ agent: selected, conversation });
+      try { localStorage.setItem(executorKey, selected.id); } catch { /* 存储不可用不影响切换。 */ }
     } catch (failure) { setError(failure instanceof Error ? failure.message : '切换 Agent 失败'); }
     finally { sendLock.current = false; setSending(false); }
   };

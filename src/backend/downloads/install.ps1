@@ -19,9 +19,14 @@ $StdoutLogBackup = $null
 $LegacyStartupBackup = $null
 $LegacyHomeBackup = $null
 
-function Write-Step($msg) { Write-Host "[Di Agent] $msg" -ForegroundColor Cyan }
+function Write-Step($msg) { Add-Content -Path (Join-Path $Dir 'connection-setup.log') -Value $msg }
+# 只随真实步骤推进；确认在线之前不显示 100%。
+function Show-ConnectionProgress([int]$Percent, [string]$Status) {
+  Write-Progress -Id 1 -Activity '正在连接电脑 · 步骤进度' -Status $Status -PercentComplete $Percent
+}
 
 try {
+  Show-ConnectionProgress 0 '正在准备连接'
   if (-not (Test-Path $Dir) -and (Test-Path $LegacyDir -PathType Container)) {
     Copy-Item -Path $LegacyDir -Destination $Dir -Recurse
     $MigratedLegacyHome = $true
@@ -52,15 +57,16 @@ try {
     Expand-Archive -Path $zip -DestinationPath $Dir -Force
     $NodeBin = Join-Path $Dir "node-v$NodeVer-win-x64\node.exe"
   }
-  Write-Step "Node: $NodeBin"
+  Show-ConnectionProgress 20 '环境已就绪'
 
   # --- 2. 下载 daemon 离线包（局域网服务器，无需 npm/外网）---
-  Write-Step '下载 daemon 离线包...'
   $Bundle = Join-Path $env:TEMP 'di-agent-daemon-bundle.tar.gz'
   Invoke-WebRequest -Uri "$ServerUrl/downloads/di-agent-daemon-bundle.tar.gz" -OutFile $Bundle -UseBasicParsing
+  Show-ConnectionProgress 40 '正在准备连接组件'
   tar -xzf $Bundle -C $Dir
   $DaemonJs = Join-Path $Dir 'node_modules\di-agent-daemon\bin\di-agent-daemon.js'
   if (-not (Test-Path $DaemonJs)) { throw "daemon 包解压失败：$DaemonJs 不存在" }
+  Show-ConnectionProgress 60 '正在配置连接'
 
   # --- 3. 生成启动脚本（幂等：重跑即更新 key 并重启）---
   $StartCmd = Join-Path $Dir 'start-daemon.cmd'
@@ -84,7 +90,7 @@ try {
 start "" /min cmd /c "$StartCmd"
 "@ | Set-Content -Path $AutoCmd -Encoding ASCII
 
-  Write-Step '启动 daemon...'
+  Show-ConnectionProgress 80 '正在确认电脑在线'
   Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
     Where-Object { $_.CommandLine -like '*di-agent-daemon.js*' } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
@@ -127,11 +133,16 @@ start "" /min cmd /c "$StartCmd"
   }
 
   $InstallCommitted = $true
-  Write-Host ''
-  Write-Host '[Di Agent] 安装完成！daemon 已在后台运行并注册开机自启。' -ForegroundColor Green
-  Write-Host "[Di Agent] 日志目录：$Dir\daemon.log"
-  Write-Host '[Di Agent] 现在回到浏览器，电脑状态将自动变为 Connected。'
+  Write-Progress -Id 1 -Activity '正在连接电脑 · 步骤进度' -Completed
+  if ($env:DI_AGENT_SKIP_HEALTH_CHECK -ne '1') {
+    Write-Host '[Di Agent] 100% 连接完成，可以回到 Di Agent。' -ForegroundColor Green
+  } else {
+    Write-Host '[Di Agent] 设置已完成，尚未确认连接状态。'
+  }
 } catch {
+  Write-Progress -Id 1 -Activity '正在连接电脑 · 步骤进度' -Completed
+  Write-Host '[Di Agent] 连接未完成。' -ForegroundColor Red
+  Write-Host "[Di Agent] 排查日志：$Dir\daemon.err.log"
   Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
     Where-Object { $_.CommandLine -like '*di-agent-daemon.js*' } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }

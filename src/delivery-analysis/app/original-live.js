@@ -58,7 +58,7 @@
   const emptyStages = [['进组',null],['曝光',null],['点击',null],['达成效果',null]];
   function packageMeta(task) {
     text('#audiencePackageMeta .package-heading strong', task ? (task.kind === 'coupon' ? '任务 '+task.sourceTaskId+' · 进组日 '+task.selectedDate : '近30天安心充低频购买用户') : '暂无数据');
-    const values = task ? {'分析类型':'来源分组统计','分析实体':'DUID','快照日期':task.portraitPartition,'人群时效性':'来源日快照'} : {};
+    const values = task ? {'分析类型':'来源分组统计','分析实体':'DUID','快照日期':task.portraitPartition,'人群时效性':portraitPhaseName(task)} : {};
     const crowds=task?.crowdReferences||[];
     if(crowds.length)Object.assign(values,{'整体人群包 ID':'PRD关联：'+crowds.map(c=>c.id).join(' / '),'人群包状态':crowds.map(c=>c.status).every(v=>v===crowds[0].status)?'关联包均'+crowds[0].status:'见各包详情','有效期结束':crowds.every(c=>c.validUntil===crowds[0].validUntil)?crowds[0].validUntil:'见各包详情'});
     all('#audiencePackageMeta .package-meta-row').forEach(row => {
@@ -91,11 +91,36 @@
     all('[data-task-group="recall"] .audience-option').forEach(button=>{
       const c=references.find(c=>c.prdLabel===button.dataset.audience.replaceAll(' ',''));
       button.disabled=!c;
-      if(c){delete button.dataset.liveCrowd;button.dataset.liveSelectCrowd=c.id;delete button.dataset.unavailable;button.title='切换到该人群分析';}
-      else{delete button.dataset.liveCrowd;delete button.dataset.liveSelectCrowd;button.title='包内效果组合筛选尚未接入；选择召回任务可查看已核验包信息';}
+      if(c){button.dataset.liveCrowd=c.id;delete button.dataset.liveSelectCrowd;delete button.dataset.unavailable;button.title='展开该人群包的已核验资料';}
+      else{delete button.dataset.liveCrowd;delete button.dataset.liveSelectCrowd;button.title='该人群包资料与组合筛选尚未接入';}
     });
     if(task?.deploymentReference)node.insertAdjacentHTML('beforeend','<button type="button" class="link-button" data-live-deployment="all">查看6条BOSS投放配置</button>');
     text('[data-task-group="recall"] .branch-label','人群分析');
+  }
+  function referenceBlock(id,host,afterSelector) {
+    let node=$(id);
+    if(!node){node=document.createElement('div');node.id=id;node.className='verified-reference-inline';host.querySelector(afterSelector).after(node);}
+    return node;
+  }
+  function renderVerifiedReferences(task) {
+    const ref=task?.experimentReference, crowds=task?.crowdReferences||[], deployment=task?.deploymentReference;
+    const summary=$('verifiedReferenceSummary');
+    const sample=ref?.records.find(row=>row.date===task.selectedDate);
+    const cards=[];
+    if(ref)cards.push('<button type="button" class="verified-source-card" data-live-experiment="all"><span>Apollo · 实验配置</span><strong>'+esc(ref.groups.map(g=>pct(g.allocation)).join(' / '))+'</strong><small>'+esc(ref.name)+' · '+esc(ref.status)+' · '+esc(ref.unit)+' 分流</small>'+(sample?'<small>'+esc(sample.date)+' 分流样本：对照 '+num(sample.control_group)+' / 实验 '+num(sample.treatment_group)+'</small>':'<small>所选日期暂无监测样本</small>')+'</button>');
+    for(const crowd of crowds)cards.push('<button type="button" class="verified-source-card" data-live-crowd="'+esc(crowd.id)+'"><span>Ditag · '+esc(crowd.prdLabel)+'</span><strong>'+num(crowd.currentUsers)+' 人</strong><small>当前包人数 · '+esc(crowd.updatedAt)+' · '+esc(crowd.version)+'</small><small>包 ID '+esc(crowd.id)+'</small></button>');
+    if(deployment)cards.push('<button type="button" class="verified-source-card" data-live-deployment="all"><span>BOSS · '+esc(deployment.placeholderName)+'</span><strong>'+deployment.records.length+' 条配置</strong><small>3 包 × 对照/实验 · '+esc(deployment.schedule.start.slice(0,10))+'—'+esc(deployment.schedule.end.slice(0,10))+'</small><small>'+deployment.cities.length+' 城 / '+deployment.channels.length+' 端 · '+deployment.frequency.days+' 天最多 '+deployment.frequency.max+' 次</small></button>');
+    summary.hidden=!cards.length;
+    summary.innerHTML=cards.length?'<div class="verified-reference-heading"><strong>已核验的关联资料</strong><small>配置与当前包资料独立展示；点击查看来源、规则和记录</small></div><div class="verified-source-grid">'+cards.join('')+'</div>':'';
+    const balanceNode=referenceBlock('apolloBalanceSummary',$('experimentBalance'),'.balance-summary');
+    balanceNode.hidden=!ref;
+    balanceNode.innerHTML=ref?'<strong>Apollo 计划分流：'+esc(ref.groups.map(g=>g.name+' '+pct(g.allocation)).join(' / '))+'</strong><span>'+esc(ref.toggle)+' · '+esc(ref.unit)+' · 实验 '+esc(ref.experimentId)+'</span>'+(sample?'<span>'+esc(sample.date)+' 当日监测样本：对照 '+num(sample.control_group)+' / 实验 '+num(sample.treatment_group)+'</span>':'<span>所选日期无分流监测记录</span>')+'<button type="button" class="link-button" data-live-experiment="all">查看逐日记录</button>':'';
+    const funnelNode=referenceBlock('bossFunnelSummary',$('resourceFunnelPanel'),'.panel-heading');
+    funnelNode.hidden=!deployment;
+    funnelNode.innerHTML=deployment?'<strong>BOSS 资源配置已核验：'+deployment.records.length+' 条</strong><span>'+esc(deployment.placeholderName)+' · 配置期 '+esc(deployment.schedule.start.slice(0,10))+'—'+esc(deployment.schedule.end.slice(0,10))+' · '+deployment.cities.length+' 城 / '+deployment.channels.length+' 端</span><button type="button" class="link-button" data-live-deployment="all">查看红包与六条配置</button>':'';
+    const historyNode=referenceBlock('currentExperimentReference',$('historyReference'),'.panel-heading');
+    historyNode.hidden=!ref;
+    historyNode.innerHTML=ref?'<strong>本次实验的历史分流记录</strong><span>Apollo 已核验 '+ref.records.length+' 个观测日（'+esc(ref.records[0]?.date)+'—'+esc(ref.records.at(-1)?.date)+'）；这些是分流样本，不是可比历史活动效果。</span><button type="button" class="link-button" data-live-experiment="all">查看逐日样本</button>':'';
   }
   function emptyGaps() {
     const gaps = {
@@ -131,7 +156,7 @@
     text('#experimentBalance .balance-summary p','保留原检查模块，待对应数据可用后接入。');
     text('#subview-effect > .root-cause-panel .cause-recommend p','累计归属和营销建议暂未接入。');
     for(const selector of ['#dailyFunnelNote','#dailyFunnelPanel .funnel-footnote','#dailyBreakdownPanel .data-note','#dailyInvalidDate'])text(selector,message);
-    packageMeta(null);crowdDirectory(null);emptyGaps();$('configureFunnel').disabled=true;
+    packageMeta(null);crowdDirectory(null);renderVerifiedReferences(null);emptyGaps();$('configureFunnel').disabled=true;
     for(const id of ['breakdownGroupFilter','invalidGroupFilter'])$(id).classList.add('hidden');
     all('#baselineButtons button').forEach(b=>b.disabled=true);
     text('#contextStatus',message); text('.sync-status','未加载');
@@ -143,12 +168,13 @@
   function balance(task) {
     const data=task.groupPortrait;if(!data)return;
     const available=data.dimensions.filter(d=>d.status==='available');
-    text('#experimentBalance .section-kicker','当前分组画像');
+    const pre=data.basis==='pre_entry_cohort';
+    text('#experimentBalance .section-kicker',pre?'投放前回溯分组画像':'当前分组画像');
     text('#experimentBalance .status-pill',available.length===4?'画像已接入':available.length?'部分画像已接入':'暂无画像');
-    text('#experimentBalance .balance-insight p','当前来源标签可比较两组分布；这些不是投放前快照，暂不判断实验前是否均衡。');
+    text('#experimentBalance .balance-insight p',pre?'按后来实际进组者的 8 月 11 日标签比较两组分布；不代表活动前完整目标包，也不自动判定实验均衡。':'当前来源标签可比较两组分布；这些不是投放前快照，暂不判断实验前是否均衡。');
     text('#experimentBalance .balance-summary strong',data.groups.map(g=>portraitGroupName(g.group,task.kind)+' '+num(g.users)+' 人').join(' / ')||'当前来源暂无分组人数');
     text('#experimentBalance .balance-summary p','快照分区 '+data.partition+(data.cohortDate?' · 进组日 '+data.cohortDate:' · 当前人群包快照')+'；展开查看人数和组内占比，比较始终保留全部来源组。');
-    text('#experimentBalance .balance-note p',(task.portraitSource?.overlapUsers>0?'检测到跨组重复 '+num(task.portraitSource.overlapUsers)+' 人，两组并非互斥。':'')+'分布差异仅作描述，不能据此认定随机分流或均衡通过。'+(task.experimentReference?'关联 Apollo 配置已核实为50%/50%，与当前人群的映射仍待核对。':'投放前标签及随机分流配置仍待核验。'));
+    text('#experimentBalance .balance-note p',(task.portraitSource?.overlapUsers>0?'检测到跨组重复 '+num(task.portraitSource.overlapUsers)+' 人，两组并非互斥。':'')+'分布差异仅作描述，不能据此认定随机分流或均衡通过。'+(task.experimentReference?'Apollo 计划分流与当日样本见上方，画像人数仍按来源快照呈现。':pre?'这是事后进组者的前置标签；分流主体与均衡阈值仍待核验。':'投放前标签及随机分流配置仍待核验。'));
     const keys=['charge_life_cycle','charge_freq_type','charge_duid_role_name_v2_type','member_status'];
     all('#balanceDimensions details').forEach((node,i)=>{
       const entry=data.dimensions.find(d=>d.key===keys[i]),summary=node.querySelector('summary');
@@ -156,7 +182,7 @@
       summary.querySelector('small').textContent=ok?entry.values.length+' 类 · 最大组内占比差':entry?.status==='inconsistent'?'统计不完整，待核查':'暂无该维度数据';
       summary.querySelector('strong').textContent=ok&&Number.isFinite(entry.maxShareGap)?(entry.maxShareGap*100).toFixed(2)+' 个百分点':'—';
       const tag=summary.querySelector('em');tag.className='dimension-reference';tag.textContent=ok?'描述':'待补';
-      node.title='当前标签分组分布，不是投放前均衡检验';
+      node.title=pre?'进组者的投放前回溯标签分布；未配置均衡阈值':'当前标签分组分布，不是投放前均衡检验';
       node.querySelector('.enum-table').innerHTML=ok?table(['标签枚举',...data.groups.map(g=>portraitGroupName(g.group,task.kind)+'人数 / 占比')],entry.values.map(v=>[v.value,...data.groups.map(g=>{const cell=v.groups.find(c=>c.group===g.group);return cell?num(cell.users)+' 人 · '+pct(cell.share):'—';})])):'<p>暂无数据 · '+(entry?.status==='inconsistent'?'分组人数与维度合计不一致，不能计算占比。':'该维度尚无可展示的分组统计。')+'</p>';
     });
     $('balanceDimensions').removeAttribute('data-empty-visual');
@@ -179,16 +205,19 @@
     activity_cycle:'按召回来源的流失周期分组，与业务生命周期不同',
     ds_freq_type:'按安心充购买频次分层，与总充电频次不同',
   };
-  function profileScopeLabel(task){return task.kind==='coupon'?'召回复购 · 进组日 '+task.selectedDate:'安心充低频购买人群 · 快照 '+task.portraitPartition;}
+  const portraitPhaseName=task=>task.kind!=='coupon'?'来源日快照':task.portraitPhase==='entry'?'进组日画像':task.portraitPhase==='post7d'?'个人进组后第 7 天画像':task.hasPrePortrait?'投放前 8 月 11 日回溯画像':'来源日快照';
+  function profileScopeLabel(task){return task.kind==='coupon'?'召回复购 · '+portraitPhaseName(task)+' · 进组日 '+task.selectedDate:'安心充低频购买人群 · 快照 '+task.portraitPartition;}
   function renderProfileScope(task){
     let node=$('profileScope');if(!node){node=document.createElement('div');node.id='profileScope';node.className='profile-scope';one('#audienceProfile .audience-summary').insertAdjacentElement('afterend',node);}
-    node.innerHTML='<span>'+esc(profileScopeLabel(task)+' · '+(task.selectedGroup==='all'?'全部组':portraitGroupName(task.selectedGroup,task.kind))+(task.portraitSource?.overlapUsers>0?' · 跨组重复 '+num(task.portraitSource.overlapUsers)+' 人，整体已去重':''))+'</span><button type="button" class="link-button" id="profileSourceDetails">查看数据来源与口径</button>';
+    const phases=task.kind==='coupon'&&task.hasPrePortrait?(task.availablePortraitPhases||[]):[];
+    const options=phases.map(key=>[key,({pre:'投放前 8/11',entry:'进组日',post7d:'个人 D+7'})[key]]);
+    node.innerHTML='<span>'+esc(profileScopeLabel(task)+' · '+(task.selectedGroup==='all'?'全部组':portraitGroupName(task.selectedGroup,task.kind))+(task.portraitSource?.overlapUsers>0?' · 跨组重复 '+num(task.portraitSource.overlapUsers)+' 人，整体已去重':''))+'</span><button type="button" class="link-button" id="profileSourceDetails">查看数据来源与口径</button>'+(phases.length>1?'<div class="profile-phase-switch" role="group" aria-label="画像时点">'+options.map(([key,label])=>'<button type="button" class="secondary-button compact-button '+(task.portraitPhase===key?'active':'')+'" data-portrait-phase="'+key+'" aria-pressed="'+(task.portraitPhase===key)+'">'+label+'</button>').join('')+'</div>':'')+(task.portraitSource?.labelCoverage!==null&&task.portraitSource?.labelCoverage!==undefined?'<small>该时点标签覆盖 '+num(task.portraitSource.labelCoverage)+' / '+num(task.portrait.reduce((n,r)=>n+r.users,0))+' 人；缺失标签保留为未知。</small>':'');
   }
   function showProfileSource(){
     const task=state.data?.task;if(!task)return;
     const source=task.portraitSource,fields=profilePath(task),options=profileOptions(task);
     text('#dialogTitle','画像数据来源与统计口径');
-    $('dialogBody').innerHTML='<p>'+esc(profileScopeLabel(task))+'</p>'+table(['项目','当前取值'],[['来源表',source?.sourceName||'来源信息待更新'],['快照分区',task.portraitPartition],['统计范围',task.kind==='coupon'?'来源任务所选单个进组日；未按左侧Ditag包筛选，不是任务累计或Ditag包全量':'所选人群包当前快照，独立于分日效果日期'],['去重实体','DUID；人数来自源表聚合'],['画像生成时间',source?.builtAt||state.data.builtAt]])+(source?.overlapUsers>0?'<p>检测到跨组重复 '+num(source.overlapUsers)+' 人；全部组画像已跨组独立去重，两组人数不能相加。</p>':'')+'<h4>维度字段</h4>'+table(['页面维度','来源字段'],fields.map(k=>[options[k],k]))+'<h4>实际筛选条件</h4>'+table(['字段','等于'],(source?.filters||[]).map(f=>[f.name,f.value]))+(task.kind==='coupon'?'<p>生命周期读取 charge_life_cycle（老用户、成长期用户等）；流失周期读取 activity_cycle（30–60天、60–90天、90–180天等）。两者是不同分类，不互相替代。来源任务与左侧三个私家车包的成员映射尚未核验，不能把当前结果视作这些包的画像。</p>':'')+'<p>标签名称沿用源表原值；未出现的类别不补成人数，未知状态不当作非会员。高低频阈值与生命周期规则需以源表生产定义为准。</p><p>Demo画像参考的是2026-08-26的安心充低频购买人群214,084人。当前任务、日期或人群不同，人数和分类不能直接对比。</p><p>当前标签不代表投放前状态；上游数据缺失不会用Demo数字替代。</p>';
+    $('dialogBody').innerHTML='<p>'+esc(profileScopeLabel(task))+'</p>'+table(['项目','当前取值'],[['来源表',source?.sourceName||'来源信息待更新'],['快照分区',task.portraitPartition],['画像时点',portraitPhaseName(task)],['标签覆盖',source?.labelCoverage==null?'未单独核验':num(source.labelCoverage)+' 人'],['统计范围',task.kind==='coupon'?'来源任务所选单个进组日；未按左侧Ditag包筛选，不是任务累计或Ditag包全量':'所选人群包当前快照，独立于分日效果日期'],['去重实体','DUID；人数来自源表聚合'],['画像生成时间',source?.builtAt||state.data.builtAt]])+(source?.overlapUsers>0?'<p>检测到跨组重复 '+num(source.overlapUsers)+' 人；全部组画像已跨组独立去重，两组人数不能相加。</p>':'')+'<h4>维度字段</h4>'+table(['页面维度','来源字段'],fields.map(k=>[options[k],source?.sourceFields?.[k]||k]))+'<h4>实际筛选条件</h4>'+table(['字段','等于'],(source?.filters||[]).map(f=>[f.name,f.value]))+(task.kind==='coupon'?'<p>生命周期与流失周期是不同分类。所选人群是进组者，不是三个 Ditag 包的历史成员全量。</p>':'')+'<p>缺失标签保留为未知，不并入非会员。频次按近 30 日充电订单数分档；用户身份读取 duid_role_name_v2_type_hg。多维联合只在有同一时点真实联合统计时开放。</p><p>Demo 数字只作布局参考，不用于当前任务回填。</p>';
     $('infoDialog').showModal();
   }
   const profilePath=task=>task.profileAnalysis?.dimensions||[task.portraitDimension||task.dimension];
@@ -277,13 +306,14 @@
   function profile(task) {
     profileControls(task);renderProfileScope(task);
     const rows = task.portrait, total = rows.reduce((s,r)=>s+r.users,0), label = (task.portraitDimensionOptions||task.dimensionOptions)[task.portraitDimension||task.dimension];
-    text('.audience-summary > strong',num(rows.length?total:null)); text('.audience-summary > span',task.kind==='coupon'?'DUID · 当前进组日人群':'DUID · 当前圈选人群');
+    text('.audience-summary > strong',num(rows.length?total:null)); text('.audience-summary > span',task.kind==='coupon'?'DUID · 当前进组日人群 · '+portraitPhaseName(task):'DUID · 当前圈选人群');
     text('.audience-summary .soft-tag','分区 '+task.portraitPartition);
     text('#profileDimensionTitle',label);
-    text('#profileDimensionDefinition',profileDefinitions[task.portraitDimension||task.dimension]||'按来源标签分组');
+    const selectedField=task.portraitDimension||task.dimension;
+    text('#profileDimensionDefinition',selectedField==='charge_freq_type'&&task.kind==='coupon'&&task.hasPrePortrait?'按近 30 日总充电订单数分为 0、1–9、10–19、20–29、≥30 单':selectedField==='charge_duid_role_name_v2_type'&&task.kind==='coupon'&&task.hasPrePortrait?'按 duid_role_name_v2_type_hg 用户身份分组':profileDefinitions[selectedField]||'按来源标签分组');
     text('#profileVisualCaption',chart === 'table' ? '人数与占比' : '占比结构');
     const scope=task.kind==='coupon'?'当前进组日人群中，':'当前圈选人群中，';
-    const frequencyNote=(task.portraitDimension||task.dimension)==='charge_freq_type'?(task.kind==='effect'?'圈选条件是安心充购买频次，图中是总充电频次，二者口径不同。':'此处为召回人群的总充电频次标签。'):'';
+    const frequencyNote=(task.portraitDimension||task.dimension)==='charge_freq_type'?(task.kind==='effect'?'圈选条件是安心充购买频次，图中按近 30 日总充电订单数分档，二者口径不同。':'此处按近 30 日总充电订单数分档。'):'';
     text('#profileInsight',rows.length ? scope+rows[0].value+'占比 '+pct(total ? rows[0].users/total : null)+'，共 '+num(rows[0].users)+' 人。'+frequencyNote : '所选范围暂无画像数据');
     if(task.profileAnalysis?.dimensions.length>1){renderProfileCross(task);return;}
     if (!rows.length) {emptyProfile();return;}
@@ -390,7 +420,7 @@
     text('#dailyBreakdownPanel .data-note',task.selectedDate+' · '+(task.selectedGroup==='all'?'整体':groupName(task.selectedGroup,task.kind)));
     text('#dailyInvalidTitle',coupon?'所选日领券未复购画像':'所选日未达标画像'); text('#dailyInvalidDate',task.selectedDate);
     $('dailyInvalidList').removeAttribute('data-empty-visual');
-    $('dailyInvalidList').innerHTML=breakdown.filter(r=>r.unmet>0).sort((a,b)=>b.unmet-a.unmet).map((r,i)=>'<div class="cause-row"><span class="cause-index">'+String(i+1).padStart(2,'0')+'</span><span><strong>'+esc(r.value)+'</strong><small>'+num(r.unmet)+' 人 · '+pct(s.unmet?r.unmet/s.unmet:null)+'</small></span></div>').join('') || '所选范围暂无未达成人群';
+    $('dailyInvalidList').innerHTML=!coupon && s.unmet===null?'个人目标尚未核实，暂不能计算未达标人群':breakdown.filter(r=>r.unmet>0).sort((a,b)=>b.unmet-a.unmet).map((r,i)=>'<div class="cause-row"><span class="cause-index">'+String(i+1).padStart(2,'0')+'</span><span><strong>'+esc(r.value)+'</strong><small>'+num(r.unmet)+' 人 · '+pct(s.unmet?r.unmet/s.unmet:null)+'</small></span></div>').join('') || '所选范围暂无未达成人群';
     text('#dailyFunnelPanel .section-kicker',coupon?'所选周期 · 发券复购漏斗':'所选周期 · 覆盖与个人达标');
     const available=task.periodFunnels?.dates.filter(date=>date>=period.start&&date<=period.end)||[];
     const periodKey=available.length?available[0]+'/'+available.at(-1):'';
@@ -461,8 +491,8 @@
   function renderData() {
     const d=state.data;if(!d)return;const t=d.task;
     if(t.scopeUnavailable){
-      clearData(t.scopeUnavailable);crowdDirectory(t);
-      const node=all('[data-live-select-crowd]').find(n=>n.dataset.liveSelectCrowd===t.selectedCrowd.id);if(node)selectTree(node);
+      clearData(t.scopeUnavailable);crowdDirectory(t);renderVerifiedReferences(t);
+      const node=all('[data-task-group="recall"] [data-live-crowd]').find(n=>n.dataset.liveCrowd===t.selectedCrowd.id);if(node)selectTree(node);
       text('#contextInputName',t.selectedCrowd.prdLabel+' · '+t.selectedCrowd.id);text('#contextStatus','人群已选择 · 分析数据待关联');
       banner('preOverview',t.selectedCrowd.prdLabel,t.scopeUnavailable);
       banner('effectOverview','所选人群效果尚未接入',t.scopeUnavailable);
@@ -479,14 +509,14 @@
     text('#contextInputName',t.id==='effect'?'近30天安心充低频购买用户':'进组日 '+t.selectedDate+' · 任务 '+t.sourceTaskId);
     text('#contextStatus','真实数据 · '+t.selectedDate);
     text('.mock-badge',window.deliveryOffline?'离线交互报告':'服务器真实数据');text('.sync-status','快照 '+new Date(d.builtAt).toLocaleString('zh-CN',{hour12:false}));
-    packageMeta(t);crowdDirectory(t);emptyGaps();
+    packageMeta(t);crowdDirectory(t);emptyGaps();renderVerifiedReferences(t);
     text('#historyReference .data-note','当前目标：'+t.metric);
     notice((d.status.lastError?d.status.lastError+'；保留上次快照。':'')+t.notes.join(' '));
     const groups=t.portraitGroups || t.groupSummary;
     const total=t.portrait.reduce((sum,r)=>sum+r.users,0);
-    metric('preMetrics',[['目标人群',num(t.portrait.length?total:null),'当前来源快照'],[groups[0]?groupName(groups[0].group,t.kind):'A组人数',num(groups[0]?.users),'来源分组'],[groups[1]?groupName(groups[1].group,t.kind):'B组人数',num(groups[1]?.users),'来源分组'],['均衡检查','—','投放前数据尚未接入']]);
-    text('#preOverview .section-kicker','当前数据概览');
-    banner('preOverview',t.portrait.length?'当前来源人群共 '+num(total)+' 人':'当前来源人群暂无数据','已接入画像与分日效果。投放前均衡检查、历史活动对比等待对应数据，不输出推测结论。');
+    metric('preMetrics',[['进组人群',num(t.portrait.length?total:null),portraitPhaseName(t)], [groups[0]?groupName(groups[0].group,t.kind):'A组人数',num(groups[0]?.users),'来源分组'],[groups[1]?groupName(groups[1].group,t.kind):'B组人数',num(groups[1]?.users),'来源分组'],t.experimentReference?['Apollo计划分流',t.experimentReference.groups.map(g=>pct(g.allocation)).join(' / '),'配置比例 · 不代表均衡检查结论']:['均衡检查','—',t.hasPrePortrait?'已显示差异，缺业务阈值':'投放前数据尚未接入']]);
+    text('#preOverview .section-kicker',t.hasPrePortrait?'投放前回溯画像':'当前数据概览');
+    banner('preOverview',t.portrait.length?'当前来源人群共 '+num(total)+' 人':'当前来源人群暂无数据',t.hasPrePortrait?'可查看后来进组者的投放前、进组日和个人 D+7 画像。完整目标包、历史活动和均衡判断仍需对应来源。':'已接入画像与分日效果。投放前均衡检查、历史活动对比等待对应数据，不输出推测结论。');
     banner('effectOverview','跨日累计暂未接入','各日人数及滚动订单不可直接累加；请在原“分日效果”页签查看真实数据。');
     text('#effectSettings .baseline-label','累计口径');text('#baselineSelection','累计基准暂未接入');
     $('configureFunnel').disabled=!t.cumulative;balance(t);profile(t);daily(t);cumulative(t);$('exportReport').disabled=false;$('exportDailyReport').disabled=false;
@@ -505,7 +535,7 @@
     try {
       const data=window.deliveryAPI?await window.deliveryAPI.bootstrap(next):await (async()=>{const response=await fetch('/api/bootstrap?'+new URLSearchParams(next),{headers:{Authorization:'Bearer '+(localStorage.getItem('di_agent_token')||'')},signal:controller.signal});const data=await response.json();if(!response.ok)throw new Error(data.error||'读取失败');return data;})();
       if(version!==state.request)return;if(data.env!=='live')throw new Error('接口未返回真实数据');
-      state.data=data;selection={taskId:data.analysisTask?.id||data.task.id,...(data.task.selectedCrowd?{crowdId:data.task.selectedCrowd.id}:{}),...(data.task.selectedDate?{date:data.task.selectedDate}:{} ),group:data.task.selectedGroup,dimension:data.task.dimension,...(data.task.cumulative?{cumulativeGroup:data.task.cumulative.selectedGroup,cumulativeDimension:data.task.cumulative.dimension,...(data.task.cumulative.breakdown?.filters?.length||data.task.cumulative.breakdown?.dimensions?.length>1?{cumulativeBreakdown:JSON.stringify({dimensions:data.task.cumulative.breakdown.dimensions,filters:data.task.cumulative.breakdown.filters})}:{} )}:{}),...(data.task.portraitDimension?{portraitDimension:data.task.portraitDimension}:{}),...(data.task.profileAnalysis?{profileDimensions:data.task.profileAnalysis.dimensions.join(',')}:{})};
+      state.data=data;selection={taskId:data.analysisTask?.id||data.task.id,...(data.task.selectedCrowd?{crowdId:data.task.selectedCrowd.id}:{}),...(data.task.selectedDate?{date:data.task.selectedDate}:{} ),group:data.task.selectedGroup,dimension:data.task.dimension,...(data.task.cumulative?{cumulativeGroup:data.task.cumulative.selectedGroup,cumulativeDimension:data.task.cumulative.dimension,...(data.task.cumulative.breakdown?.filters?.length||data.task.cumulative.breakdown?.dimensions?.length>1?{cumulativeBreakdown:JSON.stringify({dimensions:data.task.cumulative.breakdown.dimensions,filters:data.task.cumulative.breakdown.filters})}:{} )}:{}),...(data.task.portraitDimension?{portraitDimension:data.task.portraitDimension}:{}),...(data.task.profileAnalysis?{profileDimensions:data.task.profileAnalysis.dimensions.join(',')}:{}) ,portraitPhase:data.task.portraitPhase||'pre'};
       try{if(!window.deliveryOffline)sessionStorage.setItem('deliveryOriginalSelection',JSON.stringify(selection));}catch{}
       text('#dailyMetricSelect option[value="firstOrderRate"]',data.task.metric);
       const dates=all('#customDateRange input');if(dates[0]&&data.task.daily.length&&!dates[0].dataset.initialized){dates[0].value=data.task.daily[0].date;dates[1].value=data.task.daily.at(-1).date;dates.forEach(n=>n.dataset.initialized='true');}
@@ -529,7 +559,7 @@
     text('#contextInputName',node.dataset.audience||'任务全量');
   }
   let contextData=null,contextText='';
-  const serializeDeliveryContext=()=>state.data?.task.scopeUnavailable?JSON.stringify({crowd:state.data.task.selectedCrowd,unavailable:state.data.task.scopeUnavailable}):state.data?JSON.stringify({task:state.data.task.sourceTaskId,taskName:state.data.task.name,kind:state.data.task.kind,builtAt:state.data.builtAt,partition:state.data.task.partition,selectedGroup:state.data.task.selectedGroup,profileAnalysis:state.data.task.profileAnalysis,distribution:state.data.task.distribution,groupSummary:state.data.task.groupSummary,evidence:(state.data.task.evidence||[]).slice(0,50),evidenceTotal:state.data.task.evidenceTotal??state.data.task.evidence?.length??0,date:state.data.task.selectedDate,dimension:state.data.task.dimension,portraitDimension:state.data.task.portraitDimension,portrait:state.data.task.portrait.slice(0,50),portraitRowsTotal:state.data.task.portrait.length,portraitUsers:state.data.task.portrait.reduce((sum,row)=>sum+row.users,0),audienceFacts:state.data.task.audienceFacts,summary:state.data.task.summary,cumulative:state.data.task.cumulative,experimentReference:state.data.task.experimentReference,groupPortrait:state.data.task.groupPortrait,crowdReferences:state.data.task.crowdReferences,deploymentReference:state.data.task.deploymentReference,notes:state.data.task.notes}):'当前未选择已接入的数据';
+  const serializeDeliveryContext=()=>state.data?.task.scopeUnavailable?JSON.stringify({crowd:state.data.task.selectedCrowd,unavailable:state.data.task.scopeUnavailable}):state.data?JSON.stringify({task:state.data.task.sourceTaskId,taskName:state.data.task.name,kind:state.data.task.kind,builtAt:state.data.builtAt,partition:state.data.task.partition,selectedGroup:state.data.task.selectedGroup,profileAnalysis:state.data.task.profileAnalysis,distribution:state.data.task.distribution,groupSummary:state.data.task.groupSummary,evidence:(state.data.task.evidence||[]).slice(0,50),evidenceTotal:state.data.task.evidenceTotal??state.data.task.evidence?.length??0,date:state.data.task.selectedDate,dimension:state.data.task.dimension,portraitDimension:state.data.task.portraitDimension,portraitPhase:state.data.task.portraitPhase,portraitSource:state.data.task.portraitSource,portrait:state.data.task.portrait.slice(0,50),portraitRowsTotal:state.data.task.portrait.length,portraitUsers:state.data.task.portrait.reduce((sum,row)=>sum+row.users,0),audienceFacts:state.data.task.audienceFacts,summary:state.data.task.summary,cumulative:state.data.task.cumulative,experimentReference:state.data.task.experimentReference,groupPortrait:state.data.task.groupPortrait,crowdReferences:state.data.task.crowdReferences,deploymentReference:state.data.task.deploymentReference,notes:state.data.task.notes}):'当前未选择已接入的数据';
   // 数据对象仅在成功加载/切换时替换；轮询无需反复序列化相同快照。
   window.deliveryContext=()=>{if(contextData!==state.data||!contextText){contextData=state.data;contextText=serializeDeliveryContext();}return contextText;};
   window.askAi=async question=>{state.ai={question,answer:{title:'分析暂不可用',answer:'当前没有可用 Agent，请先连接 Agent 后重试。'}};window.render();};
@@ -598,11 +628,12 @@
       const n=event.target.closest('button,[data-live-date],.profile-pie-item,.profile-pie-segment');if(!n)return;
       if(n.classList.contains('funnel-stage')){event.stopImmediatePropagation();text('#dialogTitle',n.querySelector('span').textContent);$('dialogBody').innerHTML='<p>人数：'+esc(n.querySelector('strong').textContent)+'；占首阶段比例：'+esc(n.querySelector('em').textContent)+'</p><p>'+esc(n.closest('section').querySelector('.funnel-definition-note')?.textContent||'当前所选日期与人群范围')+'</p><p>基于源表阶段标记按 DUID 去重；此处展示集合关系，不代表新增订单或因果增量。</p>';$('infoDialog').showModal();return;}
       if(n.dataset.liveDeployment&&state.data?.task.deploymentReference){event.stopImmediatePropagation();text('#dialogTitle','BOSS投放配置');$('dialogBody').innerHTML=deploymentDetails(state.data.task.deploymentReference);$('infoDialog').showModal();return;}
-      if(n.dataset.liveSelectCrowd){event.stopImmediatePropagation();selectTree(n);load({taskId:'coupon',crowdId:n.dataset.liveSelectCrowd});return;}
+      if(n.dataset.liveExperiment&&state.data?.task.experimentReference){event.stopImmediatePropagation();const ref=state.data.task.experimentReference;text('#dialogTitle','Apollo实验配置与逐日分流样本');$('dialogBody').innerHTML='<p>'+esc(ref.name)+' · '+esc(ref.toggle)+' · '+esc(ref.status)+' · '+esc(ref.unit)+' 分流</p><p>'+ref.groups.map(g=>esc(g.name)+' '+pct(g.allocation)+' · '+esc(g.strategy)).join('；')+'</p>'+table(['日期','对照组样本','实验组样本'],ref.records.map(r=>[r.date,num(r.control_group),num(r.treatment_group)]))+'<p>分流样本按天读取，不累计为活动人数。'+esc(ref.captureMode)+' · '+esc(ref.observedOn)+'</p><a href="'+esc(ref.monitoringURL)+'" target="_blank" rel="noopener noreferrer">查看 Apollo 来源</a>';$('infoDialog').showModal();return;}
       if(n.dataset.liveCrowd){event.stopImmediatePropagation();const crowd=state.data?.task.crowdReferences?.find(c=>c.id===n.dataset.liveCrowd);if(crowd){text('#dialogTitle',crowd.prdLabel+' · Ditag详情');$('dialogBody').innerHTML=crowdDetails(crowd,state.data.task.deploymentReference);$('infoDialog').showModal();}return;}
       if(n.dataset.task){event.stopImmediatePropagation();selectTree(n);const id={summer:'effect',recall:'coupon'}[n.dataset.task];if(id)load({taskId:id});else{unsupported('该任务尚未接入真实数据');text('#contextTaskName',n.dataset.taskName);}return;}
       if(n.classList.contains('audience-option')){event.stopImmediatePropagation();selectTree(n);if(n.closest('.task-group').dataset.taskGroup==='summer')load({taskId:'effect'});else{unsupported('该人群的组合筛选尚未接入，点击召回任务名称可查看任务全量数据。');text('#contextInputName',n.dataset.audience);}return;}
       if(n.dataset.profileDimension){event.stopImmediatePropagation();chooseProfile([dimensions[n.dataset.profileDimension]||n.dataset.profileDimension]);return;}
+      if(n.dataset.portraitPhase&&state.data){event.stopImmediatePropagation();const next={...selection,portraitPhase:n.dataset.portraitPhase,portraitDimension:'charge_life_cycle'};delete next.profileDimensions;load(next);return;}
       if(n.dataset.dailyBreakdown){if(state.data)load({...selection,dimension:dimensions[n.dataset.dailyBreakdown]});}
       if(n.dataset.livePortrait&&state.data){event.stopImmediatePropagation();$('infoDialog').close();load({...selection,portraitDimension:n.dataset.livePortrait});return;}
       if(n.dataset.liveBreakdown&&state.data){event.stopImmediatePropagation();$('infoDialog').close();load({...selection,dimension:n.dataset.liveBreakdown});return;}

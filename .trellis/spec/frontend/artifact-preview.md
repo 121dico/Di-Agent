@@ -80,6 +80,24 @@
 - Unit test for `.html` / `.htm` detection and default view mode.
 - Frontend build/type check must pass because `FilesDrawer` owns the Ant Design segmented control and `WebpageFrame` integration.
 
+### Direct HTML file references (2026-10-20)
+
+- `FilesDrawer({ ..., initialPath? })` reads an explicitly selected file on opening; HTML type detection uses that path even when directory listing fails. Requests from a previous selection/closed drawer must not replace current content.
+- Both ordinary Markdown and persisted/streamed `TextBlock` links/inline-code paths use `HtmlFileLink` under `HtmlFileMessageContext`. `htmlFileReference.ts` resolves full paths with assistant identity and same-conversation file cards. Exact cross-Agent ownership overrides the summarizing Agent; ambiguous matches must not pick arbitrarily. Relative names require an exact current-message diff file or a current-message project workspace; a diff directory alone must not resolve unrelated comparison filenames. Extension-only strings such as `.html` are not file links.
+- HTML entries in `diff` cards open the existing file preview, without git-diff prefetch; non-HTML retains `DiffViewer`. Single HTML summary buttons open directly; multi-file lists retain expansion.
+- Only click initiates authenticated `readFile`. Never navigate `/var/.../page.html` on the server: HTTP 200 may just be SPA fallback. Do not expose arbitrary filesystem paths as static routes.
+- Reject traversal/unsafe schemes and preserve normal web URLs plus application upload routes. Local read failure shows an inline error and retry; binary/oversized files never run as HTML. Keep the existing `srcDoc` sandbox without `allow-same-origin`.
+- Required tests: ordinary/streamed/persisted Markdown, inline path, cross-Agent exact/ambiguous matching, offline/retry, late old reads, failed directory + successful HTML read, non-HTML diff preservation. Real acceptance clicks the original file and its summary link, tests interaction, then reloads.
+- Scope limitation: live local files require their source computer to remain connected; project-relative CSS/assets need a separate project-serving contract.
+
+### Internal file RPC boundary (2026-10-20)
+
+- `BrowseAgentFiles` registers task ownership through `CreateDaemonTask` before dispatch, then binds/removes the result promise. Completion retains user/machine authorization; do not resolve arbitrary unregistered task IDs.
+- Internal browse/open-path/install-skill/model-discovery prompts are JSON payloads, not model prose: no image-return instructions or result artifact/image parsing.
+- File browsing completions never create task-board items. Completion logs contain IDs and lengths only, never file bodies.
+- File boundaries compare canonical real paths, so macOS `/var` and `/private/var` aliases are equivalent. Resolve the nearest existing ancestor for deleted historical files; reject external and dangling symlinks. Cover these cases through the RPC dispatch boundary.
+- Regression tests must enter `handleTaskDispatch`, not just the inner file reader, and cover machine-owned completion → promise resolution without board writes. Existing HTML containing Markdown image text must be returned byte-for-byte.
+
 ### 7. Wrong vs Correct
 
 #### Wrong
@@ -91,3 +109,37 @@
 ```tsx
 <WebpageFrame srcDoc={fileContent.content} />
 ```
+
+## Scenario: Generated Images in Chat Markdown
+
+### 1. Scope / Trigger
+- Generated image artifacts can arrive after streamed text. Persisted `blocks_json` may still contain daemon-local paths even when `content` has an image placeholder.
+
+### 2. Signatures
+- `resolveMarkdownImageUrl(source, artifacts)` and `markdownImageUrlTransform(artifacts)` in `components/chat/markdownImages.tsx`.
+- `TextBlock` receives same-message `ctx.artifacts`; ordinary and embedded Markdown receive the same message artifact list.
+
+### 3. Contracts
+- Resolve local references only against an unambiguous exact image artifact filename within the current message, and only to its same-origin uploaded URL. Never guess from alt text or another message.
+- Apply resolution at ReactMarkdown's image URL transform, before unsupported local schemes are removed. Non-image links retain the default URL sanitizer.
+- Render through `MessageImage`, so clicking opens a preview instead of downloading. Token attachment remains limited to the existing same-origin protected attachment routes.
+- Artifact-only updates must refresh resolution without changing text; a changed image URL must clear stale image failure state.
+
+### 4. Validation & Error Matrix
+- Missing/ambiguous local reference or unsafe scheme -> existing unavailable indicator, never a raw filesystem request.
+- External HTTP(S) image -> allowed by the existing preview contract, without the Di Agent token.
+- Known same-origin upload/preview/static routes -> preserve their existing behavior.
+
+### 5. Good/Base/Bad Cases
+- Good: `![duck](</var/folders/task/little-duck.png>)` resolves to this message's uploaded `little-duck.png`.
+- Base: direct uploaded image URL still opens the existing preview.
+- Bad: choosing an arbitrary image because it is the only visible card or has matching alt text.
+
+### 6. Tests Required
+- Render real `MessageBubble` with persisted blocks, not only the resolver; assert uploaded `img.src`, preview button, and absence of local path requests.
+- Cover streamed/late artifacts, ordinary/embedded Markdown, missing and duplicate names, unsafe protocols, protected routes, external token isolation, and preview click.
+- Revisit the original production conversation, open the image, reload, and verify the image still works without modifying stored messages.
+
+### 7. Wrong vs Correct
+- Wrong: fix only `message.content` or artifact cards while `TextBlock` renders raw Markdown images.
+- Correct: both block and ordinary Markdown renderers share resolution and the existing preview component.

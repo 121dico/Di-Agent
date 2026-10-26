@@ -18,12 +18,13 @@ import {
   LinkOutlined,
   PushpinOutlined,
   BranchesOutlined,
+  CrownOutlined,
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import { useConversation } from '@/hooks/useConversation';
 import { useAuthStore } from '@/store/authStore';
 import { useConversationStore } from '@/store/conversationStore';
-import { useWsStore } from '@/store/wsStore';
+import { onConversationRoleChanged, useWsStore } from '@/store/wsStore';
 import { useMessageStore } from '@/store/messageStore';
 import { leaveGroup, dissolveGroup } from '@/api/group';
 import type { Message, PinnedMessage } from '@/types/message';
@@ -111,6 +112,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onOpenPersonalReport, pe
   const [contextDrawerOpen, setContextDrawerOpen] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [conversationAgents, setConversationAgents] = useState<ConversationAgent[]>([]);
+  const [agentsConversationId, setAgentsConversationId] = useState<string | null>(null);
+  const agentRequestEpoch = useRef(0);
   const [forkLineage, setForkLineage] = useState<ConversationFork | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeIdRef = useRef<string | null>(activeId ?? null);
@@ -151,6 +154,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onOpenPersonalReport, pe
   }, [activeId]);
 
   const fetchConversationAgents = useCallback((conversationId?: string) => {
+    const epoch = ++agentRequestEpoch.current;
     const targetId = conversationId ?? activeId;
     if (!targetId || activeConv?.type !== 'group') {
       setConversationAgents([]);
@@ -158,20 +162,25 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onOpenPersonalReport, pe
     }
     getConversationAgents(targetId)
       .then((items) => {
-        if (activeIdRef.current === targetId) {
+        if (activeIdRef.current === targetId && agentRequestEpoch.current === epoch) {
           setConversationAgents(items);
+          setAgentsConversationId(targetId);
         }
       })
       .catch(() => {
-        if (activeIdRef.current === targetId) {
+        if (activeIdRef.current === targetId && agentRequestEpoch.current === epoch) {
           setConversationAgents([]);
+          setAgentsConversationId(null);
         }
       });
   }, [activeId, activeConv?.type]);
 
   useEffect(() => {
     fetchConversationAgents();
-  }, [fetchConversationAgents]);
+    return onConversationRoleChanged(payload => {
+      if (payload.conversationId === activeId) fetchConversationAgents();
+    });
+  }, [activeId, fetchConversationAgents]);
 
   const refreshBlackboardPinned = useCallback(async (conversationId: string) => {
     const pinned = await getPinnedContext(conversationId);
@@ -583,6 +592,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onOpenPersonalReport, pe
               <span className={styles.conversationKind}>
                 {isAgent ? '智能体对话' : isGroup ? '协作对话' : '用户对话'}
               </span>
+              {isGroup && agentsConversationId === activeId && conversationAgents.filter(agent => agent.role === 'orchestrator').map(agent => (
+                <span key={agent.agent_id} className={styles.orchaBadge} data-testid="group-orcha" title={`Orcha · ${agent.name}`}><CrownOutlined />Orcha · {agent.name}</span>
+              ))}
             </div>
             {forkLineage && (
               <Tooltip title={`来源：${forkLineage.parent_title || '父对话'}`}>
@@ -713,6 +725,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onOpenPersonalReport, pe
         </div>
       )}
       <ChatInput
+        key={`composer:${activeConv.id}`}
         conversationId={activeConv.id}
         replyTo={replyTo}
         onCancelReply={() => setReplyTo(null)}

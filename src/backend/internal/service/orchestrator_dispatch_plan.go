@@ -40,10 +40,23 @@ func (p WorkerDispatchPlan) HasWorkers() bool {
 	return len(p.Tasks) > 0
 }
 
+// eligibleWorkerAgents excludes the active coordinator by identity as well as
+// role. A stale conversation role must never turn the coordinator into a worker.
+func eligibleWorkerAgents(convAgents []model.ConversationAgent, orchestratorID string) []model.ConversationAgent {
+	workers := make([]model.ConversationAgent, 0, len(convAgents))
+	for _, ca := range convAgents {
+		if ca.AgentID == orchestratorID || ca.Role == "orchestrator" {
+			continue
+		}
+		workers = append(workers, ca)
+	}
+	return workers
+}
+
 func buildAgentNameIDMap(convAgents []model.ConversationAgent) map[string]string {
 	agentNameToID := make(map[string]string, len(convAgents)*2)
 	for _, ca := range convAgents {
-		if ca.Name == "" || ca.AgentID == "" {
+		if ca.Name == "" || ca.AgentID == "" || ca.Role == "orchestrator" {
 			continue
 		}
 		agentNameToID[ca.Name] = ca.AgentID

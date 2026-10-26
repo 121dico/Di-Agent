@@ -305,7 +305,16 @@ func (s *AgentService) DeleteDaemonMachine(ctx context.Context, id, userID strin
 	if !deleted {
 		return ErrAgentNotFound
 	}
+	// 可选生命周期端口：测试替身无需实现；生产 Hub 立即撤销旧连接及等待任务。
+	if revoker, ok := s.daemonHub.(interface{ RevokeMachine(string) }); ok {
+		revoker.RevokeMachine(id)
+	}
 	return nil
+}
+
+// GetDaemonMachineByID 用于已有连接在处理消息前复核电脑是否仍存在。
+func (s *AgentService) GetDaemonMachineByID(ctx context.Context, id string) (*model.DaemonMachine, error) {
+	return s.repo.GetDaemonMachineByID(ctx, id)
 }
 
 // GetDaemonMachineByAPIKey 根据明文 machine key 查找对应电脑。

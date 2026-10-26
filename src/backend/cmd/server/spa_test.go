@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"image"
+	"image/png"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +13,64 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+func TestRegisterSPARoutesServesAvatarsAndRejectsMissingImages(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	distDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(distDir, "index.html"), []byte("<!doctype html><div id=\"root\"></div>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(distDir, "avatars"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var pngImage bytes.Buffer
+	if err := png.Encode(&pngImage, image.NewRGBA(image.Rect(0, 0, 1, 1))); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"Chatgpt.png", "user1.png"} {
+		if err := os.WriteFile(filepath.Join(distDir, "avatars", name), pngImage.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	svgImage := []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>`)
+	if err := os.WriteFile(filepath.Join(distDir, "avatars", "group-1.svg"), svgImage, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	router := gin.New()
+	registerSPARoutes(router, distDir)
+	for _, tc := range []struct {
+		path string
+		mime string
+		body []byte
+	}{
+		{"/avatars/Chatgpt.png", "image/png", pngImage.Bytes()},
+		{"/avatars/user1.png", "image/png", pngImage.Bytes()},
+		{"/avatars/group-1.svg", "image/svg+xml", svgImage},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, tc.path, nil))
+			if w.Code != http.StatusOK || !bytes.Equal(w.Body.Bytes(), tc.body) || !strings.HasPrefix(w.Header().Get("Content-Type"), tc.mime) {
+				t.Fatalf("avatar returned status=%d type=%q body=%q", w.Code, w.Header().Get("Content-Type"), w.Body.String())
+			}
+			if w.Header().Get("Cache-Control") != "no-cache" {
+				t.Fatalf("unhashed avatar must revalidate: %q", w.Header().Get("Cache-Control"))
+			}
+		})
+	}
+	for _, url := range []string{"/avatars/missing.png", "/avatars/missing-user.png", "/avatars/missing-group.svg"} {
+		t.Run(url, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, url, nil))
+			if w.Code != http.StatusNotFound || strings.Contains(w.Body.String(), `id="root"`) {
+				t.Fatalf("missing avatar returned status=%d body=%q; want 404 without SPA", w.Code, w.Body.String())
+			}
+			if w.Header().Get("Cache-Control") != "no-store" {
+				t.Fatalf("missing avatar must not be cached: %q", w.Header().Get("Cache-Control"))
+			}
+		})
+	}
+}
 
 func TestRegisterSPARoutesServesAssetsAndHistoryFallback(t *testing.T) {
 	gin.SetMode(gin.TestMode)

@@ -191,16 +191,39 @@ describe('report chart interactions', () => {
     const sectors = Array.from(container.querySelectorAll('[data-donut-sector]'));
     expect(sectors).toHaveLength(3);
 
-    const lengths = sectors.map((sector) => Number(sector.getAttribute('stroke-dasharray')?.split(' ')[0]));
-    const totalLength = lengths.reduce((sum, length) => sum + length, 0);
-    expect(lengths[0]! / totalLength).toBeCloseTo(0.2, 3);
-    expect(lengths[1]! / totalLength).toBeCloseTo(0.5, 3);
-    expect(lengths[2]! / totalLength).toBeCloseTo(0.3, 3);
+    const arcs = sectors.map((sector) => sector.getAttribute('d')!);
+    expect(sectors.every((sector) => !sector.hasAttribute('stroke-dasharray'))).toBe(true);
+    const ends = arcs.map((arc) => arc.trim().split(/\s+/).slice(-2).map(Number));
+    // 20%、70%、100% 对应的已知圆周坐标，隐藏等级仍占原来的角度。
+    expect(ends[0]![0]).toBeCloseTo(155.957, 2);
+    expect(ends[0]![1]).toBeCloseTo(209.889, 2);
+    expect(ends[1]![0]).toBeCloseTo(104.043, 2);
+    expect(ends[1]![1]).toBeCloseTo(50.111, 2);
+    expect(ends[2]).toEqual([214, 130]);
+    expect(arcs[1]!.split(/\s+/).slice(1, 3)).toEqual(arcs[0]!.split(/\s+/).slice(-2));
 
     expect(sectors[1]!.getAttribute('data-state')).toBe('disabled');
     expect(sectors[1]!.getAttribute('stroke')).toBe('var(--report-donut-muted)');
     expect(sectors[0]!.getAttribute('data-state')).toBe('enabled');
     expect(sectors[0]!.getAttribute('stroke')).toBe('#D75A50');
+  });
+
+  it('supports a full-circle sector with keyboard toggling and a zero-only empty ring', () => {
+    const onToggle = vi.fn();
+    act(() => root.render(<DonutChart distribution={[{ label: '高价敏', value: 0 }, { label: '低价敏', value: 100 }]} hidden={new Set()} onToggle={onToggle} />));
+    const sectors = container.querySelectorAll('[data-donut-sector]');
+    expect(sectors).toHaveLength(1);
+    expect(sectors[0]!.getAttribute('d')).toBe('M 214 130 A 84 84 0 0 1 46 130 A 84 84 0 0 1 214 130');
+    for (const key of ['Enter', ' ']) {
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      act(() => { sectors[0]!.dispatchEvent(event); });
+      expect(event.defaultPrevented).toBe(true);
+    }
+    expect(onToggle).toHaveBeenCalledTimes(2);
+    expect(onToggle).toHaveBeenLastCalledWith('低价敏');
+    act(() => root.render(<DonutChart distribution={[{ label: '高价敏', value: 0 }]} hidden={new Set()} onToggle={onToggle} />));
+    expect(container.querySelectorAll('[data-donut-sector]')).toHaveLength(0);
+    expect(container.innerHTML).not.toMatch(/NaN|Infinity/);
   });
 
   it('renders signed daily net growth around a real zero baseline', () => {

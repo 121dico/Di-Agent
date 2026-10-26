@@ -11,7 +11,7 @@
 //   - 预创建 streaming placeholder message（status=streaming）
 //   - 注册 daemonHub task 映射（taskID→messageID / taskID→agentName）
 //   - defer 清理（promise / taskMessages / taskAgents / streamingBuffer）
-//   - FinalizeStreaming 落库（success: content/blocks_json/cards；error: 空内容 + status=error）
+//   - FinalizeStreaming 落库（success: content/blocks_json/cards；error: 保留输出并追加安全错误）
 //   - 失败时 broadcastStreamingTerminal 让前端切到终态
 package service
 
@@ -133,7 +133,7 @@ func SetupStreamingPipeline(
 	if taskAgentIndex != nil {
 		taskAgentIndex.RegisterTaskAgent(taskID, agentName)
 	}
-	return &StreamingHandle{
+	handle := &StreamingHandle{
 		TaskID:        taskID,
 		MessageID:     streamingMsg.ID,
 		AgentID:       agentID,
@@ -142,18 +142,51 @@ func SetupStreamingPipeline(
 		ReplyTo:       replyTo,
 		ArtifactsJSON: string(artifacts),
 		CreatedAt:     streamingMsg.CreatedAt,
-	}, nil
+	}
+	// 模型可能很久才产生第一个 token。先把已经持久化的占位消息推给群聊，
+	// 让工人立即出现；后续真实 delta 继续更新同一个 message_id。
+	broadcastStreamingStarted(ctx, deps, handle, cliTool)
+	return handle, nil
+}
+
+func broadcastStreamingStarted(ctx context.Context, deps StreamingPipelineDeps, handle *StreamingHandle, cliTool string) {
+	if deps.Notifier == nil || deps.ConvRepo == nil {
+		return
+	}
+	listCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	memberIDs, err := deps.ConvRepo.ListMemberIDs(listCtx, handle.ConvID)
+	if err != nil {
+		slog.Warn("streaming pipeline: list members for start failed", "conversation_id", handle.ConvID, "error", err)
+		return
+	}
+	if len(memberIDs) == 0 {
+		return
+	}
+	deps.Notifier.PushCustomEvent(handle.ConvID, memberIDs, ws.TypeMessageStreaming, map[string]interface{}{
+		"message_id":      handle.MessageID,
+		"conversation_id": handle.ConvID,
+		"task_id":         handle.TaskID,
+		"agent_id":        handle.AgentID,
+		"agent_name":      handle.AgentName,
+		"cli_tool":        cliTool,
+		"reply_to":        handle.ReplyTo,
+		"created_at":      handle.CreatedAt,
+		"deltas":          []model.AgentEvent{},
+	})
 }
 
 // FinalizeStreamingPipelineOptions 控制 FinalizeStreamingPipeline 的行为。
-// zero value（Cards=nil, BlocksJSON=""）用于失败路径：只 UPDATE status 不重写 content。
+// 失败/取消路径先恢复已输出内容，再保存终态。
 type FinalizeStreamingPipelineOptions struct {
-	Status        string // model.MessageStatusComplete / model.MessageStatusError
-	Content       string // 失败路径传空串
-	BlocksJSON    string // 失败路径传空串；成功路径来自 streamingBuffer.GetState
-	ArtifactsJSON string // 失败路径传空串；成功路径重写 artifacts
-	Cards         []map[string]any
-	Artifacts     []model.Artifact // 持久化到独立 artifacts 表（成功路径）
+	Status          string // model.MessageStatusComplete / model.MessageStatusError
+	Content         string // 最终正文，失败时也可传入已输出的部分正文。
+	ErrorReason     string // 仅在持久化边界统一脱敏、限长。
+	BlocksJSON      string // 失败路径传空串；成功路径来自 streamingBuffer.GetState
+	ArtifactsJSON   string // 失败路径传空串；成功路径重写 artifacts
+	Cards           []map[string]any
+	Artifacts       []model.Artifact // 持久化到独立 artifacts 表（成功路径）
+	previousMessage *model.Message   // 保存失败前的关联信息，供提交后重读失败时回退。
 }
 
 // FinalizeStreamingPipeline 完成 streaming placeholder 的最终化：
@@ -165,8 +198,7 @@ type FinalizeStreamingPipelineOptions struct {
 // 失败路径（Status=Error）调用方仍应额外调 BroadcastStreamingTerminal 让前端
 // 切到终态（本函数只做 DB UPDATE，不广播）。
 //
-// 返回 (*model.Message, error)：msg 在 GetByID 失败时 fallback 到由 handle 字段
-// 拼出的最小 message（不含关联字段，与 createAgentReply 1356-1364 行为一致）。
+// 返回重新加载的消息；提交后重读失败或查无记录时使用已保存字段和原关联回退。
 func FinalizeStreamingPipeline(
 	ctx context.Context,
 	deps StreamingPipelineDeps,
@@ -176,26 +208,51 @@ func FinalizeStreamingPipeline(
 	if deps.MsgRepo == nil || handle == nil {
 		return nil, fmt.Errorf("streaming pipeline: nil deps or handle")
 	}
+	if opts.Status == model.MessageStatusError || opts.Status == model.MessageStatusCanceled {
+		// 超时已取消原 context，保存终态必须使用独立且有限时的 context。
+		terminalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		ctx = terminalCtx
+		if err := prepareStreamingFailure(ctx, deps, handle, &opts); err != nil {
+			return nil, err
+		}
+	}
 	if err := deps.MsgRepo.FinalizeStreaming(ctx, handle.MessageID, opts.Status, opts.Content, opts.BlocksJSON, opts.ArtifactsJSON); err != nil {
 		return nil, fmt.Errorf("finalize streaming message: %w", err)
 	}
 	fullMsg, err := deps.MsgRepo.GetByID(ctx, handle.MessageID)
 	if err != nil {
-		return nil, fmt.Errorf("reload finalized message: %w", err)
+		// UPDATE 已成功，不得因为补全关联信息失败而丢掉已保存的终态。
+		slog.Warn("streaming pipeline: reload finalized message failed", "message_id", handle.MessageID, "error", err)
 	}
 	var msg *model.Message
 	if fullMsg != nil {
 		msg = fullMsg
 	} else {
-		// fallback：与 createAgentReply 1356-1364 一致——拼最小 message
+		// 使用刚成功保存的字段；保留已有回复关联，不依赖第二次数据库读取。
 		msg = &model.Message{
 			ID:             handle.MessageID,
 			ConversationID: handle.ConvID,
 			Role:           "assistant",
 			Content:        opts.Content,
+			BlocksJSON:     opts.BlocksJSON,
 			ArtifactsJSON:  opts.ArtifactsJSON,
 			Status:         opts.Status,
 			CreatedAt:      handle.CreatedAt,
+			ReplyTo:        handle.ReplyTo,
+		}
+		if opts.previousMessage != nil {
+			previous := *opts.previousMessage
+			msg = &previous
+		}
+		msg.Status = opts.Status
+		msg.Content = opts.Content
+		msg.BlocksJSON = opts.BlocksJSON
+		if opts.ArtifactsJSON != "" {
+			msg.ArtifactsJSON = opts.ArtifactsJSON
+		}
+		if msg.ArtifactsJSON == "" {
+			msg.ArtifactsJSON = handle.ArtifactsJSON
 		}
 	}
 
@@ -229,7 +286,7 @@ func FinalizeStreamingPipeline(
 //
 // best-effort：notifier / convRepo 任一为 nil 直接 no-op；ListMemberIDs 失败
 // 也只 log warn 不传播错误。
-func BroadcastStreamingTerminal(deps StreamingPipelineDeps, handle *StreamingHandle, status string) {
+func BroadcastStreamingTerminal(deps StreamingPipelineDeps, handle *StreamingHandle, status string, saved ...*model.Message) {
 	if deps.Notifier == nil || deps.ConvRepo == nil || handle == nil {
 		return
 	}
@@ -244,6 +301,11 @@ func BroadcastStreamingTerminal(deps StreamingPipelineDeps, handle *StreamingHan
 	if len(memberIDs) == 0 {
 		return
 	}
+	// 调用方已经拿到提交后的快照，不再重复读取数据库。
+	if len(saved) > 0 && saved[0] != nil {
+		deps.Notifier.PushCustomEvent(handle.ConvID, memberIDs, ws.TypeMessageComplete, saved[0])
+		return
+	}
 	payload := map[string]interface{}{
 		"id":              handle.MessageID,
 		"conversation_id": handle.ConvID,
@@ -255,6 +317,16 @@ func BroadcastStreamingTerminal(deps StreamingPipelineDeps, handle *StreamingHan
 		"cards_json":      "[]",
 		"created_at":      handle.CreatedAt,
 		"sender_id":       nil,
+	}
+	if deps.MsgRepo != nil {
+		msg, err := deps.MsgRepo.GetByID(ctx, handle.MessageID)
+		if err != nil {
+			slog.Warn("BroadcastStreamingTerminal: reload failed", "message_id", handle.MessageID, "error", err)
+		}
+		if msg != nil {
+			deps.Notifier.PushCustomEvent(handle.ConvID, memberIDs, ws.TypeMessageComplete, msg)
+			return
+		}
 	}
 	deps.Notifier.PushCustomEvent(handle.ConvID, memberIDs, ws.TypeMessageComplete, payload)
 }

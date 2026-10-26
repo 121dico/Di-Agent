@@ -40,5 +40,17 @@ bash scripts/dev.sh
 
 ## ops/ — 线上维护
 
+### 头像发布验证
+
+```bash
+# 发布前：以仓库原始头像清单逐文件核对 dist，缺失或内容不一致即退出 1。
+python3 scripts/verify_avatar_release.py src/frontend/dist
+# 发布后：再逐文件验证线上 HTTP 200、图片 MIME 和内容哈希。
+python3 scripts/verify_avatar_release.py src/frontend/dist --base-url http://10.190.43.41:8080
+python3 scripts/test_verify_avatar_release.py
+```
+
+脚本只读、不发布、不写线上文件。不能用只有 `index.html` 和 `assets/` 的包代替完整 Vite dist；`public/avatars/` 也必须随包发布。`--source-dir` 可指定经核验的源头像目录，默认是仓库 `src/frontend/public/avatars`。
+
 `python3 scripts/ops/archive_legacy_deployments.py` 预览旧发布残留；`--apply` 可恢复归档，`--restore <manifest.json>` 预览恢复。
 目录职责和发布检查见 [线上目录与发布规则](../doc/operations/production-layout.md)。

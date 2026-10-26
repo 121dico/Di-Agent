@@ -2,9 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Input, Modal, Popconfirm, Select, Tag, Tooltip } from 'antd';
 import { message } from '@/utils/message';
 import { copyText } from '@/utils/clipboard';
+import { computerDisplayName, defaultComputerName } from '@/utils/computerNames';
 import {
   AppleOutlined,
-  CheckCircleOutlined,
   CopyOutlined,
   DeleteOutlined,
   DesktopOutlined,
@@ -26,7 +26,8 @@ import {
   runtimeCandidateLabel,
   runtimeVariant,
 } from './agentRuntimeCandidates';
-import { DAEMON_VERSION } from '@/utils/connectCommand';
+import { useBrowserMachine } from '@/hooks/useBrowserMachine';
+import { BrowserMachineRecognition } from './BrowserMachineRecognition';
 import { downloadMachineLauncher, getMachineConnectCommand } from '@/api/agent';
 import styles from './ConnectComputerModal.module.css';
 
@@ -35,6 +36,8 @@ interface ConnectComputerModalProps {
   machines: DaemonMachine[];
   candidates: AgentCandidate[];
   loading: boolean;
+  /** 兼容旧入口；连接帮助现统一按需展开。 */
+  allowConnectedUpgrade?: boolean;
   onClose: () => void;
   onCreate: (name: string) => Promise<CreateDaemonMachineResponse>;
   onAddCandidate: (id: string, body: AddCandidateAgentRequest) => Promise<Agent>;
@@ -42,19 +45,11 @@ interface ConnectComputerModalProps {
   onRefresh: () => Promise<void>;
 }
 
-function defaultComputerName(): string {
-  const timestamp = new Date().toLocaleTimeString('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-  return `computer-${timestamp.replace(':', '')}`;
-}
-
 function getStatusTag(machine: DaemonMachine): React.ReactNode {
   if (machine.status === 'connected') {
-    return <Tag color="success">Connected</Tag>;
+    return <Tag color="success">已连接</Tag>;
   }
-  return <Tag color="warning">Waiting</Tag>;
+  return <Tag color="warning">{machine.status === 'offline' ? '离线' : '等待连接'}</Tag>;
 }
 
 function getErrorMessage(err: unknown, fallback: string): string {
@@ -103,7 +98,9 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
   onDeleteMachine,
   onRefresh,
 }) => {
-  const [name, setName] = useState(defaultComputerName());
+  const [name, setName] = useState(() => defaultComputerName(machines ?? []));
+  const [nameEdited, setNameEdited] = useState(false);
+  const [createdMachines, setCreatedMachines] = useState<Pick<DaemonMachine, 'id' | 'name'>[]>([]);
   const [creating, setCreating] = useState(false);
   const [addingID, setAddingID] = useState<string | null>(null);
   const [deletingMachineID, setDeletingMachineID] = useState<string | null>(null);
@@ -114,14 +111,24 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
   const [selectedRuntimeCandidates, setSelectedRuntimeCandidates] = useState<Record<string, string>>({});
   const safeMachines = machines ?? [];
   const safeCandidates = candidates ?? [];
+  const suggestedName = defaultComputerName([...safeMachines, ...createdMachines]);
+  const candidateComputerName = (candidate: AgentCandidate) => computerDisplayName(
+    safeMachines.find((machine) => machine.id === candidate.machine_id)
+      ?? { id: candidate.machine_id, name: candidate.machine_name || '未命名电脑' },
+  );
+  const browserMachine = useBrowserMachine(safeMachines, !loading, open);
   const candidateGroups = useMemo(
     () => groupAgentRuntimeCandidates(safeCandidates),
     [candidates],
   );
   const hasConnectedMachine = safeMachines.some((machine) => machine.status === 'connected');
   const machinePanelTitle = hasConnectedMachine
-    ? 'Connected computers'
-    : 'Waiting for computer to connect...';
+    ? '已连接的电脑'
+    : '等待电脑连接';
+
+  useEffect(() => {
+    if (open && !nameEdited) setName(suggestedName);
+  }, [open, nameEdited, suggestedName]);
 
   const refreshQuietly = async () => {
     try {
@@ -170,6 +177,8 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
     try {
       const result = await onCreate(name.trim());
       setCreated(result);
+      setCreatedMachines((current) => [...current, { id: result.machine.id, name: result.machine.name }]);
+      setNameEdited(false);
       await handleRefresh();
       message.success('连接命令已生成');
     } catch (err) {
@@ -192,7 +201,7 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
     }
   };
 
-  // Mac 一键安装：复制 curl|bash 安装命令到剪贴板（绕开 Gatekeeper 对下载脚本的拦截）。
+  // Mac 一键安装只复制命令，由用户在所选电脑确认并执行。
   // 已有 installCommand 时直接用（创建连接后的面板）；否则先调 connect 接口获取。
   // 无论复制成败，都会把下方 Install 命令框高亮选中作为 ⌘C 兜底。
   const handleMacInstall = async (machineId: string, installCommand?: string) => {
@@ -238,9 +247,7 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
         </Button>
       </div>
       <div className={styles.launcherNote}>
-        Mac：点按钮复制安装命令 → 打开「终端」(Terminal) → 粘贴 (⌘V) → 回车，之后全自动；
-        Windows：双击下载的 Di-Agent-Setup.bat 运行，若弹出蓝色 SmartScreen 提示：点「更多信息」→「仍要运行」。
-        安装是幂等的，重复运行只会更新密钥并重启服务。
+        Mac：复制命令，在「终端」粘贴并回车。Windows：下载后按安装器提示完成连接。
       </div>    </div>
   );
 
@@ -273,7 +280,7 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
     try {
       await onDeleteMachine(machine.id);
       await handleRefresh();
-      message.success(`${machine.name} 已删除`);
+      message.success(`${computerDisplayName(machine)} 已删除`);
     } catch (err) {
       message.error(getErrorMessage(err, '删除电脑连接失败'));
     } finally {
@@ -288,7 +295,7 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
       footer={null}
       onCancel={onClose}
       open={open}
-      title="CONNECT COMPUTER"
+      title="连接电脑"
       width={640}
     >
       <div className={styles.content}>
@@ -297,7 +304,8 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
             maxLength={100}
             prefix={<DesktopOutlined />}
             value={name}
-            onChange={(event) => setName(event.target.value)}
+            disabled={creating}
+            onChange={(event) => { setName(event.target.value); setNameEdited(true); }}
           />
           <Button
             icon={<PlusOutlined />}
@@ -311,8 +319,7 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
 
         <div className={styles.commandPanel}>
           <div className={styles.commandHeader}>
-            <span>CONNECT COMMAND</span>
-            <Tag color="blue" className={styles.versionTag}>Daemon v{DAEMON_VERSION}</Tag>
+            <span>连接方式</span>
           </div>
           {created ? (
             <div className={styles.commandList}>
@@ -321,16 +328,21 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
                 command={created.install_command}
                 hint="Mac 一键安装命令（终端粘贴运行）"
                 label="一键安装"
-                tag="Install"
+                tag="安装命令"
                 tagColor="green"
               />
             </div>
           ) : (
             <div className={styles.commandEmpty}>
-              点击“创建连接”生成接入命令。支持 Mac 一键安装命令与 Windows 安装器两种方式，已创建连接的 machine key 不会再次显示。
+              给电脑起个名字，点击“创建连接”，再按提示完成安装。
             </div>
           )}
         </div>
+
+        <details className={styles.connectionHelp} aria-label="连接帮助">
+          <summary>连接帮助</summary>
+          <BrowserMachineRecognition identity={browserMachine} />
+        </details>
 
         <div className={styles.waitingPanel}>
           <div className={styles.waitingTitle}>
@@ -354,40 +366,56 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
               safeMachines.map((machine) => (
                 <div className={styles.machineItem} key={machine.id}>
                   <div>
-                    <strong>{machine.name}</strong>
+                    <strong>{computerDisplayName(machine)}</strong>
                     <span className={styles.machineMeta}>
-                      {machine.machine_id || '等待 daemon 上报主机名'}
+                      {machine.machine_id || '等待电脑连接'}
                     </span>
                   </div>
-                  {machine.status !== 'connected' ? (
+                  <details className={styles.connectionHelp} aria-label={`${computerDisplayName(machine)}连接帮助`} open={machine.status !== 'connected'}>
+                    <summary>{machine.status === 'connected' ? '重新连接' : '安装连接程序'}</summary>
                     <div className={styles.machineLauncherButtons}>
+                      <Popconfirm
+                        disabled={machine.status !== 'connected'}
+                        title="确认这台电脑上的任务已结束？"
+                        description="重新连接会重启连接程序，可能中断当前任务。这里只复制命令，不会立即执行。"
+                        okText="任务已结束，复制命令" cancelText="取消"
+                        onConfirm={() => handleMacInstall(machine.id)}
+                      >
                       <Tooltip title="Mac：复制一键安装命令">
                         <Button
                           icon={<AppleOutlined />}
                           loading={launcherBusy === `${machine.id}:mac`}
                           size="small"
                           type="text"
-                          onClick={() => handleMacInstall(machine.id)}
-                        />
+                          aria-label={machine.status === 'connected' ? `重新连接 ${computerDisplayName(machine)} 的 Mac 电脑` : `安装 ${computerDisplayName(machine)} 的 Mac 连接程序`}
+                          onClick={machine.status !== 'connected' ? () => handleMacInstall(machine.id) : undefined}
+                        >Mac</Button>
                       </Tooltip>
+                      </Popconfirm>
+                      <Popconfirm
+                        disabled={machine.status !== 'connected'}
+                        title="确认这台电脑上的任务已结束？"
+                        description="运行安装器会重启连接程序。这里只下载安装器，不会立即运行。"
+                        okText="任务已结束，下载安装器" cancelText="取消"
+                        onConfirm={() => handleDownloadLauncher(machine.id, 'win')}
+                      >
                       <Tooltip title="Windows：下载一键安装器">
                         <Button
                           icon={<WindowsOutlined />}
                           loading={launcherBusy === `${machine.id}:win`}
                           size="small"
                           type="text"
-                          onClick={() => handleDownloadLauncher(machine.id, 'win')}
-                        />
+                          aria-label={machine.status === 'connected' ? `重新连接 ${computerDisplayName(machine)} 的 Windows 电脑` : `安装 ${computerDisplayName(machine)} 的 Windows 连接程序`}
+                          onClick={machine.status !== 'connected' ? () => handleDownloadLauncher(machine.id, 'win') : undefined}
+                        >Windows</Button>
                       </Tooltip>
+                      </Popconfirm>
                     </div>
-                  ) : null}
-                  {machine.status === 'connected' ? (
-                    <CheckCircleOutlined className={styles.connectedIcon} />
-                  ) : null}
+                  </details>
                   {getStatusTag(machine)}
-                  <Tag color={machine.is_local ? 'blue' : undefined}>
-                    {machine.is_local ? '本地' : '远程'}
-                  </Tag>
+                  {browserMachine.verified && browserMachine.label(machine) !== '待识别' && <Tag color={browserMachine.label(machine) === '本机' ? 'blue' : undefined}>
+                    {browserMachine.label(machine)}
+                  </Tag>}
                   <Popconfirm
                     cancelText="取消"
                     okText="删除"
@@ -410,15 +438,15 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
 
         <div className={styles.candidatePanel}>
           <div className={styles.candidateTitle}>
-            <span>DETECTED AGENT RUNTIMES</span>
-            <span>{candidateGroups.length} Tools</span>
+            <span>可用的智能体工具</span>
+            <span>{candidateGroups.length} 个</span>
           </div>
           <div className={styles.candidateList}>
             {candidateGroups.length === 0 ? (
               <div className={styles.candidateEmpty}>
                 {hasConnectedMachine
-                  ? '电脑已连接，暂无可用 Agent 运行时。请重新运行上方安装命令扫描 CLI 和桌面应用。'
-                  : '电脑连接成功后，会在这里显示可用 CLI 和桌面端运行时。你可以基于同一个工具添加多个 Agent。'}
+                  ? '电脑已连接，暂未发现可用工具。请确认这台电脑已安装 Codex 或 Claude Code，再刷新。'
+                  : '电脑连接后，这里会显示已安装的智能体工具，你可以选择并添加。'}
               </div>
             ) : (
               candidateGroups.map((group) => {
@@ -431,7 +459,7 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
                     <div className={styles.candidateMeta}>
                       <strong>{group.name}</strong>
                       <span>
-                        {candidate.cli_tool} · {candidate.machine_name}
+                        {candidate.cli_tool} · {candidateComputerName(candidate)}
                       </span>
                       {capabilities.length > 0 && (
                         <div className={styles.candidateTags}>
@@ -486,7 +514,7 @@ export const ConnectComputerModal: React.FC<ConnectComputerModalProps> = ({
     </Modal>
     <AgentCreateModal
       open={createCandidate !== null}
-      machineName={createCandidate?.machine_name ?? ''}
+      machineName={createCandidate ? candidateComputerName(createCandidate) : ''}
       candidates={createCandidate ? [createCandidate] : []}
       onClose={() => setCreateCandidate(null)}
       onCreate={async (candidateId, displayName, systemPrompt, toolsConfig, customSkills) => {

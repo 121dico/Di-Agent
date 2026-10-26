@@ -33,3 +33,21 @@ python3 scripts/ops/archive_legacy_deployments.py --restore /root/di-agent-archi
 4. 新的发布备份放到归档批次目录；活动入口保持稳定，`runtime`、数据库和上传目录不参与覆盖。
 5. 变更投放数据接口要检查首屏响应大小，查询完整留痕只保留在快照/导出中；UI返回有界预览及总数。
 6. 发布后验证健康检查、投放数据、电脑列表与浏览器导航；不要只验 HTTP 200。
+
+## 双边工作树整合（2026-10-13）
+
+本地与线上都有未提交修改时，构建来源是逐项融合后的候选，不是任一方目录的整包覆盖。先冻结线上/本地/共同 Git 基线并记录哈希，备份应用和数据库；语义冲突保留线上行为，未合入部分明确记录。配置、数据库、上传文件和 Delivery `runtime/` 不参加源码融合。
+
+- `/root/energy_tag_agent/RELEASE.json`：当前成功发布的简要版本指针。
+- `/root/energy_tag_agent/.releases/<release_id>/manifest.json`：选定源码、运行产物 SHA256、保留/延期功能与测试结果。
+- 同批次 `previous/`、`previous-files.json`：本次替换前的运行文件与源码，可回滚；`verification.json` 仅在运行指纹和健康检查通过后生成。
+- `.release-backups/<batch>/`：仅服务器可读的完整应用/数据库备份；不进入 Git。既有历史归档不自动删除。
+- `frontend-dist/release.json`：供浏览器核对的非敏感版本信息，不包含配置、账户或凭据。
+
+发布前重新验证冻结哈希和活动任务；发现并发线上修改或正在执行的任务立即停止发布。保留旧哈希静态资源以兼容已打开的页面。Delivery 实际运行目录与仓库副本分别核对，运行副本已一致时只补齐仓库，不重启 Delivery。
+
+## 2026-10-19 Cooper 接入发布
+
+当前验收版本 `managed-mcp-20261019T101750Z`，daemon 0.4.10。完整的本次融合候选为 `.scratch/managed-mcp-20261019T095454Z/candidate/`，以服务器实际源码和产物指纹为准；根工作区仍有既有未提交差异，不能从根目录直接全量构建覆盖线上。新功能源码已在该候选与服务器保存，不覆盖根工作区不相关修改。
+
+本次包含两段发布：`managed-mcp-20261019T095454Z` 增加目录与本机桥，`managed-mcp-20261019T101750Z` 补齐权限注册及运行产物。后者 manifest 记录最终后端哈希，父发布记录 daemon 包和完整新增源码。见 [Cooper 发布及验收记录](./releases/managed-mcp-cooper-20261019.md)。没有提交或推送 Git。

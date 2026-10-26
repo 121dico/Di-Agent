@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { message as antdMessage } from '@/utils/message';
-import type { Message, MessageBlock, OptimisticMessage, ReplyToPreview, AgentEvent, MessageStatus } from '@/types/message';
+import type { Message, MessageBlock, OptimisticMessage, ReplyToPreview, AgentEvent, MessageStatus, MessageDelivery } from '@/types/message';
+import { mergeMessageDelivery, readMessageDelivery } from '@/utils/messageDelivery';
 import type { AttachmentPayload } from '@/types/attachment';
 import type { AgentRuntimeConfig } from '@/types/agentRuntime';
 import * as msgApi from '@/api/message';
@@ -10,6 +11,9 @@ import { reduceEvents, initialStreamingState } from './streamingReducer';
 interface MessageState {
   /** conversationId → 消息列表（含 streaming placeholder，单一数据源） */
   messages: Record<string, Message[]>;
+  /** 回执可能先于原消息到达，暂存至消息落入列表。 */
+  pendingDeliveries: Record<string, MessageDelivery>;
+  updateDelivery: (conversationId: string, messageId: string, delivery: MessageDelivery) => void;
   /** messageId → task_id（StopButton 取消时回传后端定位 daemon task） */
   streamingTaskIds: Record<string, string>;
   /** conversationId → 是否还有更早的消息可加载 */
@@ -43,7 +47,7 @@ interface MessageState {
     conversationId: string,
     messageId: string,
     deltas: AgentEvent[],
-    meta?: { taskId?: string; agentId?: string; agentName?: string },
+    meta?: { taskId?: string; agentId?: string; agentName?: string; cliTool?: string; replyTo?: string | null; createdAt?: string },
   ) => void;
   completeStreaming: (
     conversationId: string,
@@ -135,6 +139,7 @@ setInterval(() => {
 
 export const useMessageStore = create<MessageState>((set, get) => ({
   messages: {},
+  pendingDeliveries: {},
   streamingTaskIds: {},
   hasMore: {},
   loading: {},
@@ -153,9 +158,13 @@ export const useMessageStore = create<MessageState>((set, get) => ({
       set((state) => {
         const current = state.messages[conversationId] ?? [];
         const localById = new Map(current.map((message) => [message.id, message]));
-        const fetched = before
+        const fetched = (before
           ? list
-          : list.map((message) => reconcileStreamingMessage(message, localById.get(message.id)));
+          : list.map((message) => reconcileStreamingMessage(message, localById.get(message.id))))
+          .map((message) => mergeMessageDelivery(
+            mergeMessageDelivery(message, readMessageDelivery(localById.get(message.id)?.artifacts_json)),
+            state.pendingDeliveries[`${conversationId}:${message.id}`],
+          ));
         const fetchedIds = new Set(fetched.map((message) => message.id));
         // 翻页时拼接全部现有消息；首次刷新也要保留尚未出现在服务端列表里的本地流式消息。
         const existing = before
@@ -324,9 +333,25 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     }
   },
 
-  addMessage: (conversationId, message) => {
+  updateDelivery: (conversationId, messageId, delivery) => {
+    set((state) => {
+      const messages = state.messages[conversationId] ?? [];
+      if (messages.some((message) => message.id === messageId)) {
+        return { messages: { ...state.messages, [conversationId]: messages.map((message) => message.id === messageId ? mergeMessageDelivery(message, delivery) : message) } };
+      }
+      const key = `${conversationId}:${messageId}`;
+      if ((state.pendingDeliveries[key]?.updated_at ?? -1) >= delivery.updated_at) return state;
+      const pendingDeliveries = { ...state.pendingDeliveries, [key]: delivery };
+      const keys = Object.keys(pendingDeliveries);
+      for (const expired of keys.slice(0, Math.max(0, keys.length - MAX_MESSAGES))) delete pendingDeliveries[expired];
+      return { pendingDeliveries };
+    });
+  },
+
+  addMessage: (conversationId, incomingMessage) => {
     set((state) => {
       const existing = state.messages[conversationId] ?? [];
+      const message = mergeMessageDelivery(incomingMessage, state.pendingDeliveries[`${conversationId}:${incomingMessage.id}`]);
       const dupIdx = existing.findIndex((m) => m.id === message.id);
       if (dupIdx !== -1) {
         const dup = existing[dupIdx]!;
@@ -358,7 +383,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
           blocks: mergedBlocks,
         };
         const next = [...existing];
-        next[dupIdx] = merged;
+        next[dupIdx] = mergeMessageDelivery(merged, readMessageDelivery(dup.artifacts_json));
         // 当服务端推送终态 status（complete/error/canceled）时，清理 streamingTaskIds。
         // message.complete 全量推送走 addMessage 而非 completeStreaming，若不在此清理，
         // 占位符虽切到 complete，streamingTaskIds[messageId] 残留 → StopButton 不卸载。
@@ -387,10 +412,11 @@ export const useMessageStore = create<MessageState>((set, get) => ({
   },
 
   appendDeltas: (conversationId, messageId, deltas, meta) => {
-    if (!deltas || deltas.length === 0) return;
+    if (!deltas) return;
     set((state) => {
       const existing = state.messages[conversationId] ?? [];
       const placeholderIdx = existing.findIndex((m) => m.id === messageId);
+      if (placeholderIdx >= 0 && existing[placeholderIdx]?.status !== 'streaming') return state;
 
       // 用 prev blocks 作为 reducer 起点（流式期间持续累积）。
       // PR1 后统一走 reduceEvents，消除 inline switch-case 的 dual-implementation drift。
@@ -412,10 +438,11 @@ export const useMessageStore = create<MessageState>((set, get) => ({
       let nextMessages: Record<string, Message[]>;
       let nextTaskIds = state.streamingTaskIds;
 
-      const agentArtifacts = meta?.agentName || meta?.agentId
+      const agentArtifacts = meta?.agentName || meta?.agentId || meta?.cliTool
         ? JSON.stringify({
             ...(meta?.agentId ? { agent_id: meta.agentId } : {}),
             ...(meta?.agentName ? { agent_name: meta.agentName } : {}),
+            ...(meta?.cliTool ? { cli_tool: meta.cliTool } : {}),
           })
         : undefined;
 
@@ -426,9 +453,10 @@ export const useMessageStore = create<MessageState>((set, get) => ({
           role: 'assistant',
           content: '',
           artifacts_json: agentArtifacts ?? null,
-          created_at: new Date().toISOString(),
+          created_at: meta?.createdAt ?? new Date().toISOString(),
           status: 'streaming' as MessageStatus,
           blocks: next,
+          ...(meta?.replyTo ? { reply_to: meta.replyTo } : {}),
           ...(meta?.taskId ? { task_id: meta.taskId } : {}),
           ...(meta?.agentName ? { username: meta.agentName } : {}),
         };
@@ -450,6 +478,9 @@ export const useMessageStore = create<MessageState>((set, get) => ({
               ...m,
               blocks: next,
               ...(m.task_id === undefined && meta?.taskId ? { task_id: meta.taskId } : {}),
+              ...(!m.artifacts_json && agentArtifacts ? { artifacts_json: agentArtifacts } : {}),
+              ...(!m.username && meta?.agentName ? { username: meta.agentName } : {}),
+              ...(!m.reply_to && meta?.replyTo ? { reply_to: meta.replyTo } : {}),
               // 不覆盖 username——首次设置后保留（防止后续批次 meta 为空时把 username 清掉）。
             };
           }),

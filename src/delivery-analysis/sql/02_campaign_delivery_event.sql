@@ -1,0 +1,2 @@
+-- 已撤回：旧路径不再提供可运行 SQL。
+-- 请改用同目录中的 02_axc_effect_daily.sql；先运行 00_recall_source_preflight.sql。

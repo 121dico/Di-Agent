@@ -11,6 +11,14 @@ export interface AuthResponse {
   user: User;
 }
 
+export interface AuthProviders {
+  mode: 'local' | 'hybrid' | 'boss';
+  login_url: string;
+  local_login_enabled: boolean;
+  boss_enabled: boolean;
+  boss_ready: boolean;
+}
+
 export interface LoginRequest {
   username: string;
   password: string;

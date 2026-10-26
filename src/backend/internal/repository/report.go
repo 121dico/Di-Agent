@@ -15,7 +15,7 @@ type ReportRepo struct{ db *sqlx.DB }
 
 func NewReportRepo(db *sqlx.DB) *ReportRepo { return &ReportRepo{db: db} }
 
-const reportDataSourceBaseColumns = `id, name, description, endpoint, api_name, app_key_env,
+const reportDataSourceBaseColumns = `id, name, description, folder, endpoint, api_name, app_key_env,
 	app_secret_env, signature_env, x_date_env, enabled, created_by, created_at, updated_at`
 
 func (r *ReportRepo) ListReportDataSources(ctx context.Context) ([]model.ReportDataSource, error) {
@@ -26,9 +26,9 @@ func (r *ReportRepo) ListReportDataSources(ctx context.Context) ([]model.ReportD
 
 func (r *ReportRepo) CreateReportDataSource(ctx context.Context, source *model.ReportDataSource) error {
 	err := r.db.QueryRowxContext(ctx, `INSERT INTO report_data_sources
-		(name, description, endpoint, api_name, app_key_env, app_secret_env, signature_env, x_date_env, enabled, created_by)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id, created_at, updated_at`,
-		source.Name, source.Description, source.Endpoint, source.APIName, source.AppKeyEnv, source.AppSecretEnv, source.SignatureEnv, source.XDateEnv, source.Enabled, source.CreatedBy,
+		(name, description, folder, endpoint, api_name, app_key_env, app_secret_env, signature_env, x_date_env, enabled, created_by)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id, created_at, updated_at`,
+		source.Name, source.Description, source.Folder, source.Endpoint, source.APIName, source.AppKeyEnv, source.AppSecretEnv, source.SignatureEnv, source.XDateEnv, source.Enabled, source.CreatedBy,
 	).Scan(&source.ID, &source.CreatedAt, &source.UpdatedAt)
 	return wrapReportRepoErr("create report data source", err)
 }
@@ -47,7 +47,7 @@ func (r *ReportRepo) GetReportDataSource(ctx context.Context, id string) (*model
 
 func (r *ReportRepo) GetReportDataSourceContract(ctx context.Context, sourceID string) (*model.ReportDataSourceContract, error) {
 	var contract model.ReportDataSourceContract
-	err := r.db.GetContext(ctx, &contract, `SELECT id AS source_id, name, description, endpoint, api_name,
+	err := r.db.GetContext(ctx, &contract, `SELECT id AS source_id, name, description, folder, endpoint, api_name,
 		app_key_env, app_secret_env, signature_env, x_date_env, api_example, response_example, hive_table, hive_ddl, hive_example, enabled, updated_at
 		FROM report_data_sources WHERE id=$1`, sourceID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -72,9 +72,9 @@ func (r *ReportRepo) ReplaceReportDataSourceContract(ctx context.Context, contra
 	defer func() { _ = tx.Rollback() }()
 
 	err = tx.QueryRowxContext(ctx, `UPDATE report_data_sources SET
-		name=$2, description=$3, endpoint=$4, api_name=$5, app_key_env=$6, app_secret_env=$7, signature_env=$8, x_date_env=$9,
-		api_example=$10, response_example=$11, hive_table=$12, hive_ddl=$13, hive_example=$14, updated_at=NOW()
-		WHERE id=$1 RETURNING updated_at`, contract.SourceID, contract.Name, contract.Description,
+		name=$2, description=$3, folder=$4, endpoint=$5, api_name=$6, app_key_env=$7, app_secret_env=$8, signature_env=$9, x_date_env=$10,
+		api_example=$11, response_example=$12, hive_table=$13, hive_ddl=$14, hive_example=$15, updated_at=NOW()
+		WHERE id=$1 RETURNING updated_at`, contract.SourceID, contract.Name, contract.Description, contract.Folder,
 		contract.Endpoint, contract.APIName, contract.AppKeyEnv, contract.AppSecretEnv, contract.SignatureEnv, contract.XDateEnv,
 		contract.APIExample, contract.ResponseExample, contract.HiveTable, contract.HiveDDL, contract.HiveExample).Scan(&contract.UpdatedAt)
 	if err != nil {
@@ -106,7 +106,7 @@ func (r *ReportRepo) ReplaceReportDataSourceContract(ctx context.Context, contra
 
 func (r *ReportRepo) ListReportDataSourceContracts(ctx context.Context) ([]model.ReportDataSourceContract, error) {
 	var contracts []model.ReportDataSourceContract
-	err := r.db.SelectContext(ctx, &contracts, `SELECT id AS source_id, name, description, endpoint, api_name,
+	err := r.db.SelectContext(ctx, &contracts, `SELECT id AS source_id, name, description, folder, endpoint, api_name,
 		app_key_env, app_secret_env, signature_env, x_date_env, api_example, response_example, hive_table, hive_ddl, hive_example, enabled, updated_at
 		FROM report_data_sources WHERE enabled=TRUE ORDER BY name`)
 	if err != nil {

@@ -1,0 +1,13 @@
+.recognition {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+.hint, .error {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+.error { color: var(--color-warning, #ad6800); }

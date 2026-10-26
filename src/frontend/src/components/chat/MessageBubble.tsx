@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect, type ReactNode } from
 import { Avatar, Typography, Spin, Button, Tooltip, Dropdown } from 'antd';
 import { message as antMessage } from '@/utils/message';
 import { copyText } from '@/utils/clipboard';
+import { deliveryLabels, readMessageDelivery } from '@/utils/messageDelivery';
 import type { MenuProps } from 'antd';
 import { renderCards, getCardSpec } from './cards/CardRegistry';
 import type { InteractiveCard } from '@/types/card';
@@ -34,7 +35,8 @@ import { truncateGraphemes } from '@/utils/truncateText';
 import { MessageAttachmentView } from './MessageAttachmentView';
 import { CodeBlock, extractText } from './CodeBlock';
 import { ArtifactCard } from './ArtifactCard';
-import { MessageImage } from './MessageImage';
+import { markdownImageComponents, markdownImageUrlTransform } from './markdownImages';
+import { HtmlFileLink, HtmlFileMessageContext } from './HtmlFileLink';
 import { DeployStatusCard } from './DeployStatusCard';
 import { StopButton } from './StopButton';
 import { MessageFooterActions } from './MessageFooterActions';
@@ -278,10 +280,11 @@ function markdownDocumentContent(content: string): string {
   return content;
 }
 
-function buildMarkdownComponents(codeArtifacts: Artifact[]): Components {
+function buildMarkdownComponents(codeArtifacts: Artifact[], imageArtifacts: Artifact[]): Components {
   // 预构建查找表，纯计算，无 mutation，StrictMode 双调用安全。
   const contentRootMap = buildContentRootMap(codeArtifacts);
   let codeBlockIndex = 0;
+  const embeddedDocumentComponents = buildEmbeddedDocumentComponents(imageArtifacts);
   return {
     code({ className, children, node, ...rest }) {
       const isBlock = className?.startsWith('language-');
@@ -291,7 +294,7 @@ function buildMarkdownComponents(codeArtifacts: Artifact[]): Components {
         if ((lang === 'markdown' || lang === 'md') && looksLikeMarkdownDocument(ct)) {
           return (
             <div className={styles.embeddedMarkdownDocument}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={embeddedDocumentComponents}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={embeddedDocumentComponents} urlTransform={markdownImageUrlTransform(imageArtifacts)}>
                 {markdownDocumentContent(ct.trim())}
               </ReactMarkdown>
             </div>
@@ -307,9 +310,9 @@ function buildMarkdownComponents(codeArtifacts: Artifact[]): Components {
         );
       }
       return (
-        <code className={styles.inlineCode} {...rest}>
+        <HtmlFileLink reference={extractText(children)} inline><code className={styles.inlineCode} {...rest}>
           {children}
-        </code>
+        </code></HtmlFileLink>
       );
     },
     pre({ children }) {
@@ -321,19 +324,9 @@ function buildMarkdownComponents(codeArtifacts: Artifact[]): Components {
 }
 
 const sharedMarkdownComponents: Components = {
-  img({ src, alt }) {
-    return src ? <MessageImage src={src} name={alt || 'Agent 图片'} /> : <span>图片地址不可用</span>;
-  },
-  a({ href, children, node, ...rest }) {
-    const safeHref =
-      href && (/^https?:\/\//i.test(href) || /^mailto:/i.test(href))
-        ? href
-        : '#';
-    return (
-      <a href={safeHref} target="_blank" rel="noopener noreferrer" {...rest}>
-        {children}
-      </a>
-    );
+  ...markdownImageComponents,
+  a({ href, children }) {
+    return <HtmlFileLink reference={href}>{children}</HtmlFileLink>;
   },
   p({ children }) {
     return <p>{renderChildrenWithMentions(children)}</p>;
@@ -346,34 +339,38 @@ const sharedMarkdownComponents: Components = {
   },
 };
 
-const embeddedDocumentComponents: Components = {
-  ...sharedMarkdownComponents,
-  code({ children }) {
-    return <span className={styles.documentCodeText}>{children}</span>;
-  },
-  pre({ children }) {
-    const text = markdownText(children);
-    if (looksLikeMarkdownDocument(text)) {
-      return (
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={embeddedDocumentComponents}>
-          {markdownDocumentContent(text)}
-        </ReactMarkdown>
-      );
-    }
-    return <div className={styles.documentPlainText}>{text}</div>;
-  },
-};
+function buildEmbeddedDocumentComponents(imageArtifacts: Artifact[]): Components {
+  const embeddedDocumentComponents: Components = {
+    ...sharedMarkdownComponents,
+    code({ children }) {
+      return <HtmlFileLink reference={extractText(children)} inline><span className={styles.documentCodeText}>{children}</span></HtmlFileLink>;
+    },
+    pre({ children }) {
+      const text = markdownText(children);
+      if (looksLikeMarkdownDocument(text)) {
+        return (
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={embeddedDocumentComponents} urlTransform={markdownImageUrlTransform(imageArtifacts)}>
+            {markdownDocumentContent(text)}
+          </ReactMarkdown>
+        );
+      }
+      return <div className={styles.documentPlainText}>{text}</div>;
+    },
+  };
+  return embeddedDocumentComponents;
+}
 
 /** Renders markdown content with full GFM support. Memoized to prevent
  *  re-render storms during streaming (only re-renders when content changes). */
 const REMARK_PLUGINS = [remarkGfm];
-const MarkdownRenderer = React.memo<{ content: string; codeArtifacts: Artifact[] }>(
-  ({ content, codeArtifacts }) => {
+const MarkdownRenderer = React.memo<{ content: string; codeArtifacts: Artifact[]; imageArtifacts: Artifact[] }>(
+  ({ content, codeArtifacts, imageArtifacts }) => {
     // codeArtifacts 改变时才重建 components，避免每次 re-render 都重建。
     const components = React.useMemo(
-      () => buildMarkdownComponents(codeArtifacts),
-      [codeArtifacts],
+      () => buildMarkdownComponents(codeArtifacts, imageArtifacts),
+      [codeArtifacts, imageArtifacts],
     );
+    const urlTransform = React.useMemo(() => markdownImageUrlTransform(imageArtifacts), [imageArtifacts]);
     const knowledgeContext = React.useMemo(
       () => simplifyKnowledgeContextText(content),
       [content],
@@ -381,7 +378,7 @@ const MarkdownRenderer = React.memo<{ content: string; codeArtifacts: Artifact[]
     return (
       <>
         {knowledgeContext.summary && <KnowledgeContextCompact summary={knowledgeContext.summary} />}
-        <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={components}>
+        <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={components} urlTransform={urlTransform}>
           {knowledgeContext.text}
         </ReactMarkdown>
       </>
@@ -580,7 +577,10 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
     }
   }, [message.blocks, message.blocks_json]);
   const hasBlocks = parsedBlocks.some((block) => block.kind !== 'usage');
-  const isStreaming = message.status === 'streaming' || streaming;
+  // 终态优先于父级尚未清理的 streaming 标记，失败后不能继续显示运行光标。
+  const delivery = message.role === 'user' ? readMessageDelivery(message.artifacts_json) : undefined;
+  const isTerminal = message.status === 'error' || message.status === 'canceled' || message.status === 'complete';
+  const isStreaming = !isTerminal && (message.status === 'streaming' || streaming);
 
   // 本地卡片状态：用户交互后的乐观覆盖层。
   // 采用 override 模式而非直接镜像 parsedCards——外部推送（其他用户解决卡片、
@@ -725,6 +725,7 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
   }
 
   return (
+    <HtmlFileMessageContext.Provider value={message}>
     <Dropdown menu={{ items: contextMenuItems }} trigger={['contextMenu']}>
       <div
         className={`${styles.bubble} ${isOwn ? styles.bubbleUser : styles.bubbleAssistant} ${isGrouped ? styles.bubbleGrouped : ''}`}
@@ -849,7 +850,19 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
             {hasBlocks ? (
               <div className={styles.markdownBody}>
                 {parsedBlocks.map((block, i) => {
-                  if (block.kind === 'tool_use' || block.kind === 'tool_result' || block.kind === 'usage') return null;
+                  if (block.kind === 'tool_use') {
+                    // 只展示有结构化 MCP 标记的调用；普通工具仍留在执行链路中。
+                    if (block.tool_kind !== 'mcp') return null;
+                    return (
+                      <div className={styles.mcpCall} data-mcp-call="true" key={block.index ?? i}>
+                        <span className={styles.mcpCallBadge}>MCP</span>
+                        <span className={styles.mcpCallName}>{block.server_name || 'MCP 服务'}</span>
+                        <span className={styles.mcpCallSeparator} aria-hidden="true">/</span>
+                        <span className={styles.mcpCallTool}>{block.tool_name || '工具调用'}</span>
+                      </div>
+                    );
+                  }
+                  if (block.kind === 'tool_result' || block.kind === 'usage' || block.kind === 'error') return null;
                   // 最后一个 block（且属于可累积 kind）在 streaming 时显示光标。
                   // renderBlock 内部把 streaming prop 传给组件（tool_result / error 忽略之）。
                   const isLast = i === parsedBlocks.length - 1;
@@ -877,7 +890,7 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
                 {segments.map((seg, i) => {
                   if (seg.type === 'markdown') {
                     if (!seg.content) return null;
-                    return <MarkdownRenderer key={i} content={seg.content} codeArtifacts={codeArtifacts} />;
+                    return <MarkdownRenderer key={i} content={seg.content} codeArtifacts={codeArtifacts} imageArtifacts={message.artifacts ?? []} />;
                   }
                   // 卡片段：渲染匹配到的单张卡片
                   return (
@@ -886,6 +899,11 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
                     </div>
                   );
                 })}
+              </div>
+            ) : isStreaming ? (
+              <div className={styles.waitingStatus} role="status">
+                <Spin size="small" />
+                <span>已接单，等待模型输出…</span>
               </div>
             ) : null}
             {deployment && (
@@ -900,11 +918,27 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
               </div>
             )}
             {collapsed && <div className={styles.fadeMask} />}
-            {(streaming || (hasBlocks && isStreaming)) && <span className={styles.streamingCursor} aria-hidden />}
+            {isStreaming && <span className={styles.streamingCursor} aria-hidden />}
             {isOptimisticSending && (
               <Spin size="small" className={styles.sendingSpin} />
             )}
           </div>
+          {/* 失败原因不跟随长正文折叠，避免再次看起来像没有输出。 */}
+          {parsedBlocks.filter(block => block.kind === 'error').map(block => (
+            <React.Fragment key={`error-${block.index}`}>
+              {renderBlock(block, false, {
+                conversationId: message.conversation_id, messageId: message.id,
+                agentName: resolvedAgentName ?? undefined, onAction: handleCardAction,
+              })}
+            </React.Fragment>
+          ))}
+          {message.role === 'assistant' && message.status === 'error' && !parsedBlocks.some(block => block.kind === 'error') && renderBlock({
+            index: -1, kind: 'error', text: '本次执行未完成，未保存具体失败原因。请重试。',
+          }, false, {
+            conversationId: message.conversation_id, messageId: message.id,
+            agentName: resolvedAgentName ?? undefined, onAction: handleCardAction,
+          })}
+          {delivery && <span className={styles.deliveryStatus} aria-label="指令状态" role="status">{deliveryLabels[delivery.status]}</span>}
           {message.role === 'assistant' && <ExecutionTraceButton blocks={parsedBlocks} status={isStreaming ? 'streaming' : message.status} input={traceInput} />}
           {isStreaming && !isOptimisticSending && !isOptimisticFailed && (
             <StopButton
@@ -980,6 +1014,7 @@ const MessageBubbleInner: React.FC<MessageBubbleProps> = ({
         </div>
       </div>
     </Dropdown>
+    </HtmlFileMessageContext.Provider>
   );
 };
 

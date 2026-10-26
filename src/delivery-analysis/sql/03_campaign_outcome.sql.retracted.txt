@@ -1,0 +1,105 @@
+-- 投放分析：投放后效果事实
+-- 按每个用户的 entry_dt 计算 D+1~D+7/D+14，不用滚动 30d 字段冒充投放效果。
+-- 运行前必须绑定 ORDER_SOURCE_TABLE；要求字段 duid, order_dt, order_id,
+-- is_trd, is_cbill, is_test。
+
+-- 仅本次重建执行；日常调度/分区补跑必须注释 DROP，避免移除历史分区元数据。
+-- 当前仍为待绑定源表的模板，不能仅替换日期后直接运行。
+DROP TABLE IF EXISTS epower_platform.ads_delivery_campaign_outcome_di;
+
+CREATE EXTERNAL TABLE IF NOT EXISTS epower_platform.ads_delivery_campaign_outcome_di (
+    campaign_id                       string,
+    resource_id                       string,
+    crowd_id                          string,
+    duid                              bigint,
+    group_type                        string,
+    entry_dt                          string,
+    observation_dt                    string,
+    observation_days                  int,
+    is_coupon_issued                  int,
+    is_full_coupon                    int,
+    order_cnt_before                  bigint,
+    order_cnt_during                  bigint,
+    order_cnt_after                   bigint,
+    axc_order_cnt_before              bigint,
+    axc_order_cnt_during              bigint,
+    axc_order_cnt_after               bigint,
+    is_repurchase_7d                  int,
+    is_repurchase_14d                 int,
+    is_full_coupon_repurchase_7d      int,
+    is_full_coupon_repurchase_14d     int,
+    first_order_after_dt               string,
+    last_order_after_dt                string
+)
+PARTITIONED BY (dt string)
+STORED AS ORC;
+
+WITH base AS (
+    SELECT campaign_id, resource_id, crowd_id, duid, group_type,
+           min(entry_dt) AS entry_dt
+    FROM epower_platform.ads_delivery_campaign_audience_baseline_di
+    WHERE dt = '${BIZ_DATE_LINE}'
+      AND entry_dt IS NOT NULL
+    GROUP BY campaign_id, resource_id, crowd_id, duid, group_type
+),
+coupon AS (
+    SELECT campaign_id, resource_id, crowd_id, duid,
+           max(is_coupon_issued) AS is_coupon_issued,
+           max(CASE WHEN is_coupon_issued = 1
+                     AND is_coupon_received = 1
+                     AND is_coupon_used = 1 THEN 1 ELSE 0 END) AS is_full_coupon
+    FROM epower_platform.ads_delivery_campaign_delivery_event_di
+    WHERE dt = '${BIZ_DATE_LINE}'
+    GROUP BY campaign_id, resource_id, crowd_id, duid
+),
+orders AS (
+    SELECT
+        b.campaign_id, b.resource_id, b.crowd_id, b.duid, b.group_type,
+        b.entry_dt, o.order_dt, o.order_id,
+        CASE WHEN o.order_dt < b.entry_dt THEN 'before'
+             WHEN o.order_dt BETWEEN b.entry_dt AND '${CAMPAIGN_END_DT}' THEN 'during'
+             WHEN o.order_dt > '${CAMPAIGN_END_DT}' THEN 'after'
+             ELSE 'other' END AS period,
+        datediff(o.order_dt, b.entry_dt) AS days_from_entry
+    FROM base b
+    LEFT JOIN ${ORDER_SOURCE_TABLE} o
+      ON b.duid = o.duid
+     AND o.order_dt BETWEEN date_sub('${BASELINE_DT}', 30)
+                         AND date_add('${CAMPAIGN_END_DT}', 14)
+     AND o.is_trd = 1
+     AND coalesce(o.is_cbill, 1) = 1
+     AND coalesce(o.is_test, 0) = 0
+),
+agg AS (
+    SELECT
+        campaign_id, resource_id, crowd_id, duid, group_type, entry_dt,
+        count(DISTINCT CASE WHEN period = 'before' THEN order_id END) AS order_cnt_before,
+        count(DISTINCT CASE WHEN period = 'during' THEN order_id END) AS order_cnt_during,
+        count(DISTINCT CASE WHEN period = 'after' THEN order_id END) AS order_cnt_after,
+        max(CASE WHEN days_from_entry BETWEEN 1 AND 7 THEN 1 ELSE 0 END) AS is_repurchase_7d,
+        max(CASE WHEN days_from_entry BETWEEN 1 AND 14 THEN 1 ELSE 0 END) AS is_repurchase_14d,
+        min(CASE WHEN period = 'after' THEN order_dt END) AS first_order_after_dt,
+        max(CASE WHEN period = 'after' THEN order_dt END) AS last_order_after_dt
+    FROM orders
+    GROUP BY campaign_id, resource_id, crowd_id, duid, group_type, entry_dt
+)
+INSERT OVERWRITE TABLE epower_platform.ads_delivery_campaign_outcome_di
+PARTITION (dt = '${BIZ_DATE_LINE}')
+SELECT
+    a.campaign_id, a.resource_id, a.crowd_id, a.duid, a.group_type,
+    a.entry_dt, '${CAMPAIGN_END_DT}',
+    7, coalesce(c.is_coupon_issued, 0), coalesce(c.is_full_coupon, 0),
+    a.order_cnt_before, a.order_cnt_during, a.order_cnt_after,
+    0, 0, 0,
+    a.is_repurchase_7d, a.is_repurchase_14d,
+    CASE WHEN coalesce(c.is_full_coupon, 0) = 1
+              AND a.is_repurchase_7d = 1 THEN 1 ELSE 0 END,
+    CASE WHEN coalesce(c.is_full_coupon, 0) = 1
+              AND a.is_repurchase_14d = 1 THEN 1 ELSE 0 END,
+    a.first_order_after_dt, a.last_order_after_dt
+FROM agg a
+LEFT JOIN coupon c
+  ON a.campaign_id = c.campaign_id
+ AND a.resource_id = c.resource_id
+ AND a.crowd_id = c.crowd_id
+ AND a.duid = c.duid;

@@ -32,3 +32,20 @@ type PersonalReport struct {
 	CreatedAt      time.Time       `json:"created_at" db:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at" db:"updated_at"`
 }
+
+// ReportAgentQueryReceipt is a bounded, owner-scoped copy of a successful
+// governed query. Personal reports bind to this receipt, never to numbers
+// supplied by the model in its save request.
+type ReportAgentQueryReceipt struct {
+	ID              string          `json:"id" db:"id"`
+	OwnerUserID     string          `json:"owner_user_id" db:"owner_user_id"`
+	SourceID        string          `json:"source_id" db:"source_id"`
+	SourceName      string          `json:"source_name" db:"source_name"`
+	RequestJSON     json.RawMessage `json:"request" db:"request_json"`
+	RowsJSON        json.RawMessage `json:"rows" db:"rows_json"`
+	PaginationJSON  json.RawMessage `json:"pagination" db:"pagination_json"`
+	SourcePartition string          `json:"source_partition" db:"source_partition"`
+	UpstreamQueryID string          `json:"upstream_query_id" db:"upstream_query_id"`
+	DurationMS      int64           `json:"duration_ms" db:"duration_ms"`
+	CreatedAt       time.Time       `json:"created_at" db:"created_at"`
+}

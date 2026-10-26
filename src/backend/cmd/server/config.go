@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/121dico/Di-Agent/src/backend/internal/bossauth"
+
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
@@ -16,6 +18,7 @@ import (
 
 // Config 应用配置结构
 type Config struct {
+	Boss   bossauth.Config `koanf:"boss"`
 	Server struct {
 		Port        int    `koanf:"port"`
 		ExternalURL string `koanf:"external_url"` // 局域网/公网可达地址；为空时仅生成本机 127.0.0.1 连接命令
@@ -108,6 +111,8 @@ func loadConfig(path string) (*Config, error) {
 	}
 	cfg.applyRAGDefaults(k.Exists("rag.enabled"), k.Exists("rag.reranker_enabled"))
 	cfg.applyTLSDefaults()
+	cfg.Boss.Defaults()
+	cfg.Boss.OriginSecret = os.Getenv("DI_AGENT_BOSS_ORIGIN_SECRET")
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
@@ -263,6 +268,12 @@ func applyPositiveIntEnv(suffix string, target *int) {
 }
 
 func (c *Config) validate() error {
+	if err := c.Boss.Validate(); err != nil {
+		return err
+	}
+	if c.Boss.Enabled && len(c.JWT.Secret) < 32 {
+		return fmt.Errorf("Boss mode requires jwt.secret of at least 32 characters")
+	}
 	if c.JWT.Secret == "" {
 		return fmt.Errorf("jwt.secret is required")
 	}

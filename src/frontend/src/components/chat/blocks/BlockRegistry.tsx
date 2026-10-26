@@ -40,6 +40,7 @@ export interface BlockRenderContext {
   conversationId: string;
   messageId: string;
   agentId?: string;
+  agentName?: string;
   artifacts?: Artifact[];
   onAction: (cardId: string, action: string, data?: Record<string, unknown>) => void;
 }

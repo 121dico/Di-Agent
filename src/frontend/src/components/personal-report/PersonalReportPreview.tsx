@@ -1,6 +1,7 @@
 import React from 'react';
 import { BarChart3, Database, Sparkles } from 'lucide-react';
 import type { PersonalReport } from '@/types/personalReport';
+import { TemplatePersonalReport } from './TemplatePersonalReport';
 import styles from './PersonalReportPreview.module.css';
 
 interface Props {
@@ -37,6 +38,8 @@ export const PersonalReportPreview: React.FC<Props> = ({ report }) => {
       </div>
     );
   }
+
+  if (report.document?.template_id === 'template-1') return <TemplatePersonalReport report={report} />;
 
   const sections = report.document?.sections ?? [];
   const provenance = report.provenance ?? {};

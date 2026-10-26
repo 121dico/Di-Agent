@@ -8,13 +8,14 @@ import {
   GlobalOutlined,
   LockOutlined,
   RobotOutlined,
+  CrownOutlined,
   UpOutlined,
   DownOutlined,
   ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import { useMessages } from '@/hooks/useMessages';
 import { useMessageStore } from '@/store/messageStore';
-import { useWsStore } from '@/store/wsStore';
+import { onConversationRoleChanged, useWsStore } from '@/store/wsStore';
 import { useConversationStore } from '@/store/conversationStore';
 import { useAgentStore } from '@/store/agentStore';
 import { useAuthStore } from '@/store/authStore';
@@ -66,6 +67,7 @@ function imageInputError(files: File[]): string | null {
 }
 const REPLY_PREVIEW_LIMIT = 50;
 const EMPTY_MESSAGES: Message[] = [];
+class RecipientRoutingError extends Error {}
 
 type MentionTarget =
   | { id: string; label: string; mentionLabel: string; kind: 'user'; user: GroupMember }
@@ -122,10 +124,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [mentionVisible, setMentionVisible] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [recipientOpen, setRecipientOpen] = useState(false);
+  const recipientRevisionRef = useRef(0);
+  const mentionRequestEpochRef = useRef(0);
+  const latestAgentMembersRef = useRef<ConversationAgent[]>([]);
+  const [mentionLoadError, setMentionLoadError] = useState(false);
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [agentMembers, setAgentMembers] = useState<ConversationAgent[]>([]);
   const [mentionTargetsLoaded, setMentionTargetsLoaded] = useState(false);
@@ -187,18 +195,29 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   }, [conversationId, directAgentId, runtimePreferenceIdentity]);
 
   const fetchMentionTargets = useCallback(async () => {
-    if (!isGroup) return { members, agentMembers };
+    if (!isGroup) return { members, agentMembers, current: true };
+    const requestEpoch = ++mentionRequestEpochRef.current;
     const [nextMembers, nextAgents] = await Promise.all([
       getGroupMembers(conversationId),
       getConversationAgents(conversationId),
     ]);
     const safeMembers = nextMembers ?? [];
     const safeAgents = nextAgents ?? [];
-    setMembers(safeMembers);
-    setAgentMembers(safeAgents);
-    setMentionTargetsLoaded(true);
-    return { members: safeMembers, agentMembers: safeAgents };
-  }, [agentMembers, conversationId, isGroup, members]);
+    const current = activeConversationIdRef.current === conversationId && mentionRequestEpochRef.current === requestEpoch;
+    if (current) {
+      setMembers(safeMembers);
+      setAgentMembers(safeAgents);
+      latestAgentMembersRef.current = safeAgents;
+      setMentionTargetsLoaded(true);
+      setMentionLoadError(false);
+      const selected = useConversationStore.getState().directAgentChats[conversationId];
+      if (selected && !safeAgents.some(agent => agent.agent_id === selected)) {
+        recipientRevisionRef.current += 1;
+        unbindDirectAgentChat(conversationId);
+      }
+    }
+    return { members: safeMembers, agentMembers: safeAgents, current };
+  }, [agentMembers, conversationId, isGroup, members, unbindDirectAgentChat]);
 
   const loadMentionTargets = useCallback(() => {
     if (!isGroup || mentionTargetsLoaded) return;
@@ -254,8 +273,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     setPendingFiles([]);
     setAttachmentError(null);
     knowledgeRequestEpochRef.current += 1;
+    mentionRequestEpochRef.current += 1;
+    recipientRevisionRef.current += 1;
+    setRecipientOpen(false);
+    setMentionVisible(false);
+    setMentionLoadError(false);
+    setValue('');
     setMembers([]);
     setAgentMembers([]);
+    latestAgentMembersRef.current = [];
     setMentionTargetsLoaded(false);
     setKnowledgeBases([]);
     setKbLoaded(false);
@@ -264,15 +290,26 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     setKbVisible(false);
     setSelectedKnowledgeBases([]);
     setSendError(null);
-    return () => { attachmentEpochRef.current += 1; };
+    return () => {
+      attachmentEpochRef.current += 1;
+      mentionRequestEpochRef.current += 1;
+      recipientRevisionRef.current += 1;
+    };
   }, [conversationId]);
 
-  // Proactively load agent names when there's an active target (for the target bar display)
+  // 群成员是路由和角色的权威来源，进入会话和角色变化时刷新。
   useEffect(() => {
-    if (isGroup && boundAgentId && !mentionTargetsLoaded) {
-      loadMentionTargets();
-    }
-  }, [isGroup, boundAgentId, mentionTargetsLoaded, loadMentionTargets]);
+    if (!isGroup) return;
+    const refresh = () => { void fetchMentionTargets().catch(() => {
+      if (activeConversationIdRef.current === conversationId) setMentionLoadError(true);
+    }); };
+    refresh();
+    return onConversationRoleChanged(payload => {
+      if (payload.conversationId === conversationId) refresh();
+    });
+    // 只随会话身份重订阅，成员结果不能反向触发重新请求。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId, isGroup]);
 
   // Resolve the display name for the currently targeted agent
   const targetAgentName = useMemo(() => {
@@ -483,8 +520,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   }, [value, mentionStart, mentionQuery]);
 
   const hasMention = useCallback((content: string, label: string) => {
-    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`(^|\\s)@${escaped}(?=\\s|$)`, 'i').test(content);
+    // 与后端 ParseMentions / normalizeMentionName 完全一致，避免追加第二个目标。
+    return Array.from(content.matchAll(/@([\p{L}\p{N}_\-.]+)/gu))
+      .some(match => match[1]?.toLowerCase() === label.toLowerCase());
   }, []);
 
   // KB targets with dedup
@@ -542,33 +580,21 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   }, [loadKnowledgeBases]);
 
   const handleSubmit = useCallback(async () => {
-    if (sending || pendingImageError || pendingFiles.some((file) => file.status !== 'done' || !file.payload)) return;
+    if (sendingRef.current || pendingImageError || pendingFiles.some((file) => file.status !== 'done' || !file.payload)) return;
     const submitConversationId = conversationId;
+    const submitRecipientRevision = recipientRevisionRef.current;
     const trimmed = value.trim();
     const knowledgeBasesForSend = selectedKnowledgeBases;
     const pendingFilesForSend = pendingFiles;
-    const persistedContent = appendKnowledgeRefs(trimmed, knowledgeBasesForSend);
+    let persistedContent = appendKnowledgeRefs(trimmed, knowledgeBasesForSend);
     const attachments: AttachmentPayload[] = pendingFiles
       .filter((p) => p.status === 'done' && p.payload)
       .map((p) => p.payload!);
 
     if (!persistedContent && !attachments.length) return;
-    if (isStreaming) return;
 
-    // Extract mentions from content for group chats
-    let mentions: string[] | undefined;
-    let mentionedAgentId: string | undefined;
-    if (isGroup) {
-      const targetLists = trimmed.includes('@') && !mentionTargetsLoaded
-        ? await fetchMentionTargets()
-        : { members, agentMembers };
-      const userMentions = targetLists.members
-        .filter((member) => member.username && hasMention(trimmed, toMentionLabel(member.username)))
-        .map((member) => member.user_id);
-      mentions = userMentions.length > 0 ? userMentions : undefined;
-      mentionedAgentId = targetLists.agentMembers.find((agent) => hasMention(trimmed, toMentionLabel(agent.name)))?.agent_id;
-    }
-
+    // 同步占位，避免 React 下一次渲染前双击造成重复发送。
+    sendingRef.current = true;
     setSending(true);
     setSendError(null);
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
@@ -582,6 +608,38 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     onCancelReply?.();
 
     try {
+      let mentions: string[] | undefined;
+      let mentionedAgentId: string | undefined;
+      let clearRecipient = false;
+      if (isGroup) {
+        const targetLists = (trimmed.includes('@') || boundAgentId)
+          ? await fetchMentionTargets()
+          : { members, agentMembers, current: true };
+        if (!targetLists.current) throw new RecipientRoutingError('群成员已更新，请重新发送。草稿已保留。');
+        const userMentions = targetLists.members
+          .filter((member) => member.username && hasMention(trimmed, toMentionLabel(member.username)))
+          .map((member) => member.user_id);
+        mentions = userMentions.length > 0 ? userMentions : undefined;
+        const mentionedAgents = targetLists.agentMembers.filter((agent) => hasMention(trimmed, toMentionLabel(agent.name)));
+        mentionedAgentId = mentionedAgents.length === 1 ? mentionedAgents[0]?.agent_id : undefined;
+        clearRecipient = mentionedAgents.length > 1;
+        const selected = targetLists.agentMembers.find((agent) => agent.agent_id === boundAgentId);
+        const hasExplicitMention = mentionedAgents.length > 0 || userMentions.length > 0 || /(^|[^\p{L}\p{N}_@])@\S+/u.test(trimmed);
+        if (boundAgentId && !selected && !hasExplicitMention) {
+          throw new RecipientRoutingError('对话对象已不在群中，请重新选择。草稿已保留。');
+        }
+        // 群聊仍走服务端 @ 路由，不能用直聊 agent_id 绕过 Orcha 和引导队列。
+        if (selected && !hasExplicitMention) {
+          const label = toMentionLabel(selected.name);
+          if (!/^[\p{L}\p{N}_\-.]+$/u.test(label)) {
+            throw new RecipientRoutingError('Agent 名称包含暂不支持的字符，请先修改名称。草稿已保留。');
+          }
+          if (targetLists.agentMembers.filter(agent => toMentionLabel(agent.name).toLowerCase() === label.toLowerCase()).length !== 1) {
+            throw new RecipientRoutingError('群内存在同名 Agent，请先区分名称。草稿已保留。');
+          }
+          persistedContent = `@${label} ${persistedContent}`;
+        }
+      }
       const replyPreview: ReplyToPreview | undefined = replyTo
         ? {
             id: replyTo.id,
@@ -610,10 +668,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           : !isGroup && selectedAgent?.cli_tool === 'claude' ? { ...DEFAULT_AGENT_RUNTIME_CONFIG, model: runtimeConfig.model } : undefined,
       );
       // Persist the @mentioned agent as sticky target for subsequent messages
-      if (isGroup && mentionedAgentId) {
-        bindDirectAgentChat(conversationId, mentionedAgentId);
+      if (isGroup && activeConversationIdRef.current === submitConversationId && recipientRevisionRef.current === submitRecipientRevision) {
+        if (mentionedAgentId && latestAgentMembersRef.current.some(agent => agent.agent_id === mentionedAgentId)) bindDirectAgentChat(conversationId, mentionedAgentId);
+        else if (clearRecipient) unbindDirectAgentChat(conversationId);
       }
-    } catch {
+    } catch (error) {
       // 发送失败时恢复输入内容，方便用户重试
       if (activeConversationIdRef.current === submitConversationId) {
         // 请求等待期间仍可编辑下一条草稿；恢复失败内容时合并，不能覆盖新输入。
@@ -623,12 +682,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         )]);
         attachmentInputsRef.current = [...pendingFilesForSend, ...attachmentInputsRef.current];
         setPendingFiles((draft) => [...pendingFilesForSend, ...draft]);
-        setSendError('发送失败，草稿和附件已保留。');
+        setSendError(error instanceof RecipientRoutingError ? error.message : '发送失败，草稿和附件已保留。');
       }
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
-  }, [value, selectedKnowledgeBases, pendingFiles, pendingImageError, sending, isStreaming, send, sendTypingStop, replyTo, onCancelReply, isGroup, mentionTargetsLoaded, fetchMentionTargets, members, agentMembers, hasMention, directAgentId, bindDirectAgentChat, conversationId, globalAgents, runtimeConfig]);
+  }, [value, selectedKnowledgeBases, pendingFiles, pendingImageError, send, sendTypingStop, replyTo, onCancelReply, isGroup, fetchMentionTargets, members, agentMembers, hasMention, directAgentId, boundAgentId, bindDirectAgentChat, unbindDirectAgentChat, conversationId, globalAgents, runtimeConfig]);
 
   const lastSendAtRef = useRef(0);
 
@@ -713,7 +773,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const canSend = Boolean(
     value.trim() || selectedKnowledgeBases.length > 0 || pendingFiles.some((p) => p.status === 'done'),
-  ) && !pendingImageError && !pendingFiles.some((file) => file.status !== 'done' || !file.payload) && !isStreaming && !sending;
+  ) && !pendingImageError && !pendingFiles.some((file) => file.status !== 'done' || !file.payload) && !sending;
 
   // 点击下拉列表外部关闭 mention 和 KB 下拉
   useEffect(() => {
@@ -735,21 +795,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         <div className={styles.typingIndicator}>
           <Spin size="small" />
           <span>{targetAgentName ?? (conversation?.peer_name ?? 'Agent')} 正在思考...</span>
-        </div>
-      )}
-      {isGroup && boundAgentId && (
-        <div className={styles.targetBar}>
-          <RobotOutlined className={styles.targetBarIcon} />
-          <span className={styles.targetBarName}>{targetAgentName ?? 'Agent'}</span>
-          <Tooltip title="停止@此智能体" mouseEnterDelay={0.8}>
-            <Button
-              type="text"
-              size="small"
-              icon={<CloseOutlined />}
-              className={styles.targetBarClear}
-              onClick={() => unbindDirectAgentChat(conversationId)}
-            />
-          </Tooltip>
         </div>
       )}
       {replyTo && (
@@ -813,6 +858,48 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <button type="button" className={styles.sendErrorDismiss} onClick={() => setSendError(null)} aria-label="关闭发送错误提示">
             <CloseOutlined />
           </button>
+        </div>
+      )}
+      {isGroup && (
+        <div className={styles.recipientArea} onBlur={event => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setRecipientOpen(false);
+        }}>
+          <div className={styles.targetBar}>
+            <Button type="text" size="small" aria-label="选择对话 Agent" aria-expanded={recipientOpen}
+              aria-haspopup="listbox" title={targetAgentName ?? '选择对话 Agent'} icon={<RobotOutlined />} onClick={() => {
+                setRecipientOpen(open => !open);
+                void fetchMentionTargets().catch(() => {
+                  if (activeConversationIdRef.current === conversationId) setMentionLoadError(true);
+                });
+              }}>
+              <span className={styles.targetBarName}>{boundAgentId && targetAgentName ? `正在和 ${targetAgentName} 对话` : '选择对话 Agent'}</span>
+              {agentMembers.find(agent => agent.agent_id === boundAgentId)?.role === 'orchestrator' && <span className={styles.orchaBadge}><CrownOutlined /> Orcha</span>}
+              <DownOutlined />
+            </Button>
+            {boundAgentId && <Button type="text" size="small" aria-label="取消对话对象" icon={<CloseOutlined />}
+              onClick={() => { recipientRevisionRef.current += 1; unbindDirectAgentChat(conversationId); setRecipientOpen(false); }} />}
+          </div>
+          {recipientOpen && <div className={styles.recipientMenu} role="listbox" aria-label="对话 Agent" onKeyDown={event => {
+            if (event.key === 'Escape') {
+              event.currentTarget.parentElement?.querySelector<HTMLButtonElement>('[aria-label="选择对话 Agent"]')?.focus();
+              setRecipientOpen(false);
+              return;
+            }
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+              event.preventDefault();
+              const options = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="option"]'));
+              const index = options.indexOf(document.activeElement as HTMLButtonElement);
+              options[(index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length]?.focus();
+            }
+          }}>
+            {agentMembers.map(agent => <button type="button" role="option" data-agent-id={agent.agent_id}
+              aria-selected={agent.agent_id === boundAgentId} className={styles.mentionItem} key={agent.agent_id}
+              onClick={() => { recipientRevisionRef.current += 1; bindDirectAgentChat(conversationId, agent.agent_id); setRecipientOpen(false); textareaRef.current?.focus(); }}>
+              <RobotOutlined /> <span className={styles.recipientName} title={agent.name}>{agent.name}</span>
+              {agent.role === 'orchestrator' && <span className={styles.orchaBadge}><CrownOutlined /> Orcha</span>}
+            </button>)}
+            {!agentMembers.length && <span className={styles.recipientEmpty}>{mentionLoadError ? '成员加载失败，请重试' : mentionTargetsLoaded ? '暂无 Agent' : '加载中…'}</span>}
+          </div>}
         </div>
       )}
       <div className={styles.inputRow}>
@@ -892,7 +979,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               }}
             >
               @{target.mentionLabel}
-              {target.kind === 'agent' ? ' · Agent' : ''}
+              {target.kind === 'agent' && (target.agent.role === 'orchestrator'
+                ? <span className={styles.orchaBadge}><CrownOutlined /> Orcha</span> : ' · Agent')}
             </button>
           ))}
         </div>

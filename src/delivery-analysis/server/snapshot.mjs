@@ -28,6 +28,9 @@ export function summarize(kind, rows) {
     total.eligible = total.users;
   }
   if (kind === 'effect') {
+    if(rows.some(r=>r.achieved===null || r.unmet===null)){
+      total.achieved=null;total.unmet=null;
+    }
     for(const key of ['target_count','rate_sum','rate_count'])total[key]=rows.length && rows.every(r=>Object.hasOwn(r,key))?rows.reduce((sum,r)=>sum+Number(r[key]||0),0):null;
     const range = key => rows.map(r=>r[key]).filter(v=>v!==null && v!==undefined && Number.isFinite(Number(v))).map(Number);
     const min = key => range(key).length ? Math.min(...range(key)) : null;
@@ -45,6 +48,10 @@ const FLAGS=['is_entry','is_coupon','is_full_coupon','is_repurchase_7d','is_full
 const field=(name,aggregation,alias)=>({name,...(aggregation?{aggregation,alias}: {})});
 const filter=(name,value)=>({name,operator:'EQ',value});
 const finite=(value)=>{const n=Number(value);if(value===null || value===undefined || !Number.isFinite(n) || n<0)throw new Error('invalid aggregate');return n;};
+const PHASE_FIELDS={
+  entry:{label:'entry_label_dt',dimensions:{charge_life_cycle:'entry_charge_life_cycle',charge_freq_type:'entry_charge_freq_type',charge_duid_role_name_v2_type:'entry_user_identity_prd',member_status:'entry_member_status',city_name:'entry_city_name',city_fenkuang:'entry_city_fenkuang',charge_region:'entry_charge_region'}},
+  post7d:{label:'post_7d_label_dt',dimensions:{charge_life_cycle:'post_7d_charge_life_cycle',charge_freq_type:'post_7d_charge_freq_type',charge_duid_role_name_v2_type:'post_7d_user_identity_prd',member_status:'post_7d_member_status',city_name:'post_7d_city_name',city_fenkuang:'post_7d_city_fenkuang',charge_region:'post_7d_charge_region'}},
+};
 
 function normalize(kind,row) {
   const users=finite(row.users),records=finite(row.records);
@@ -56,8 +63,15 @@ function normalize(kind,row) {
     if(Number(row.is_entry)!==1 || full>coupon || Number(row.is_full_coupon_repurchase_7d)>Math.min(full,repurchase))throw new Error('invalid coupon stages');
     Object.assign(out,{coupon:users*coupon,full:users*full,repurchase:users*repurchase,coupon_repurchase:users*coupon*repurchase,full_repurchase:users*Number(row.is_full_coupon_repurchase_7d)});
   } else if(kind==='effect') {
-    for(const key of ['axc','charge','achieved','unmet'])out[key]=finite(row[key]);
-    if(out.achieved+out.unmet!==users)throw new Error('invalid achievement coverage');
+    for(const key of ['axc','charge'])out[key]=finite(row[key]);
+    const targetMissing=row.achieved===null && row.unmet===null;
+    if(targetMissing){
+      if(Number(row.target_count)!==0)throw new Error('invalid achievement coverage');
+      out.achieved=null;out.unmet=null;
+    }else{
+      for(const key of ['achieved','unmet'])out[key]=finite(row[key]);
+      if(out.achieved+out.unmet!==users)throw new Error('invalid achievement coverage');
+    }
     for(const prefix of ['target','rate']) {
       const count=finite(row[prefix+'_count']);
       if(!Number.isInteger(count) || count>users)throw new Error('invalid personal metric coverage');
@@ -113,6 +127,8 @@ export async function buildSnapshot(gateway) {
     const rows=(await query(kind,groups,conditions,metrics)).map(r=>normalize(kind,{...r,date:r[day]}));
     const dates=[...new Set(rows.map(r=>r.date))].sort();
     if(!dates.length)throw new Error('empty task');
+    const targetKnown=kind!=='effect'||rows.every(r=>r.achieved!==null&&r.unmet!==null);
+    if(kind==='effect'&&!targetKnown&&rows.some(r=>r.achieved!==null||r.unmet!==null))throw new Error('inconsistent target coverage');
     if(kind==='coupon') {
       // 检查跨标记桶也没有同用户重复，防止求和掩盖源表粒度错误。
       const control=await query(kind,[day,'group_type'],conditions,counts);
@@ -132,19 +148,55 @@ export async function buildSnapshot(gateway) {
         }
       }
     }
+    const declared=new Set(sources[kind].fields.filter(f=>f.capabilities.includes('select')).map(f=>f.name));
+    const hasPrePortrait=kind==='coupon'&&declared.has('label_dt');
+    const prePortraitCoverage=hasPrePortrait?(await query(kind,[day,'group_type','label_dt'],conditions,counts)).map(r=>({date:r[day],group_type:r.group_type,labelDate:r.label_dt,users:finite(r.users),records:finite(r.records)})):null;
+    const portraitPhases={};
+    if(hasPrePortrait){
+      // 新表每个进组日 / DUID 一行。逐阶段按同一批人核对人数，缺标签作为“未知”保留。
+      const phaseBase=(await query(kind,[day,'group_type'],conditions,counts)).map(r=>({date:r[day],group_type:r.group_type,users:finite(r.users)}));
+      for(const b of phaseBase){
+        const same=prePortraitCoverage.filter(r=>r.date===b.date&&r.group_type===b.group_type);
+        if(same.reduce((n,r)=>n+r.users,0)!==b.users||same.some(r=>r.users!==r.records||r.labelDate&&r.labelDate!=='2026-08-11'))throw new Error('pre portrait coverage mismatch');
+      }
+      for(const [phase,definition] of Object.entries(PHASE_FIELDS)){
+        if(![definition.label,...Object.values(definition.dimensions)].every(name=>declared.has(name)))continue;
+        const coverage=(await query(kind,[day,'group_type',definition.label],conditions,counts)).map(r=>({date:r[day],group_type:r.group_type,labelDate:r[definition.label],users:finite(r.users),records:finite(r.records)}));
+        const phaseDimensions={};
+        for(const [canonical,sourceField] of Object.entries(definition.dimensions)){
+          phaseDimensions[canonical]=(await query(kind,[day,'group_type',sourceField],conditions,counts)).map(r=>({date:r[day],group_type:r.group_type,value:r[sourceField]??'未知',users:finite(r.users),records:finite(r.records)}));
+        }
+        for(const b of phaseBase){
+          const same=rows=>rows.filter(r=>r.date===b.date&&r.group_type===b.group_type);
+          if(same(coverage).reduce((n,r)=>n+r.users,0)!==b.users||same(coverage).some(r=>r.users!==r.records))throw new Error('portrait phase coverage mismatch');
+          for(const values of Object.values(phaseDimensions))if(same(values).reduce((n,r)=>n+r.users,0)!==b.users||same(values).some(r=>r.users!==r.records))throw new Error('portrait phase dimension mismatch');
+        }
+        portraitPhases[phase]={rows:phaseBase,dimensions:phaseDimensions,coverage,sourceFields:definition.dimensions,labelField:definition.label};
+      }
+    }
     const profileCube=kind==='coupon'?await buildProfileCube({query,kind,conditions,source:{rows,dimensions},keys:Object.keys(dimensions),day}):null;
-    const cumulative=await buildCumulative({query,kind,conditions,dimensions:Object.keys(dimensions),dates});
-    cumulative.observedThrough=partitions[kind];
+    const cumulative=targetKnown?await buildCumulative({query,kind,conditions,dimensions:Object.keys(dimensions),dates}):null;
+    if(cumulative)cumulative.observedThrough=partitions[kind];
     const allGroupPortrait=kind==='coupon'?await buildAllGroupPortrait({query,kind,conditions,source:{rows,dimensions,profileCube},keys:Object.keys(dimensions),day}):null;
+    if(kind==='coupon'&&Object.keys(portraitPhases).length){
+      if(allGroupPortrait.rows.some(r=>r.overlapUsers!==0))throw new Error('portrait phase requires exclusive groups');
+      for(const phase of Object.values(portraitPhases)){
+        phase.allGroupPortrait={dimensions:Object.fromEntries(Object.entries(phase.dimensions).map(([key,values])=>{
+          const combined=new Map();
+          for(const r of values){const id=JSON.stringify([r.date,r.value]);const item=combined.get(id)||{date:r.date,value:r.value,users:0};item.users+=r.users;combined.set(id,item);}
+          return [key,[...combined.values()]];
+        }))};
+      }
+    }
     const dailyUnion=await buildDailyUnion({query,kind,conditions,dimensions:Object.keys(dimensions),day,source:{rows,dimensions},control:allGroupPortrait});
-    const periodFunnels=await buildPeriodFunnels({query,kind,conditions,dates,cumulative,day});
-    tasks.push({periodFunnels,dailyUnion,allGroupPortrait,profileCube,cumulative,id:kind,name:kind==='coupon'?'召回复购发券实验':'安心充低频人群分析',kind,
+    const periodFunnels=targetKnown?await buildPeriodFunnels({query,kind,conditions,dates,cumulative,day}):null;
+    tasks.push({periodFunnels,dailyUnion,allGroupPortrait,profileCube,portraitPhases,hasPrePortrait,prePortraitCoverage,cumulative,id:kind,name:kind==='coupon'?'召回复购发券实验':'安心充低频人群分析',kind,
       metric:kind==='coupon'?'发券后 7 日复购率':'近 30 天订单渗透率',
       sourceId:sources[kind].source_id,sourceName:sources[kind].name,partition:partitions[kind],
       sourceTaskId:kind==='coupon'?'184765378':'crowd_axc_low_freq',dates,rows,dimensions,
       notes:kind==='coupon'?
-        ['按单个进组日独立统计，观察入组后第 1–7 天；累计由源表跨进组日独立去重，不能相加分日人数。','发券后复购率 = 领券且复购人数 / 领券人数；整体复购率另以入组人数为分母。','画像取当前数据源标签快照，不能视为投放前快照；城市为源表高频城市。']:
-        ['每天的订单数是近 30 天滚动值，不能跨日相加；渗透率为安心充订单合计 / 充电订单合计。','个人达标人数沿用源表 achieved_flag；不等同于整体渗透率是否达标。','源表 target_rate 是个人目标；effect_rate 是个人渗透率，均值不能替代订单合计比率；超过 100% 的原值需核查源表。','来源组别用于观察，真实随机分流尚未核验，不作实验因果结论。'],
+        ['按单个进组日独立统计，观察入组后第 1–7 天；累计由源表跨进组日独立去重，不能相加分日人数。','发券后复购率 = 领券且复购人数 / 领券人数；整体复购率另以入组人数为分母。',hasPrePortrait?'画像分别取 8 月 11 日、进组日和个人 D+7；仅覆盖后来进组者，不代表投放前完整 Ditag 目标包。':'画像取当前数据源标签快照，不能视为投放前快照；城市为源表高频城市。']:
+        ['每天的订单数是近 30 天滚动值，不能跨日相加；渗透率为安心充订单合计 / 充电订单合计。',targetKnown?'个人达标人数沿用源表 achieved_flag；不等同于整体渗透率是否达标。':'个人目标尚未核实，达标与未达标人数、期间达标模块暂不计算。','源表 target_rate 是个人目标；effect_rate 是个人渗透率，均值不能替代订单合计比率；超过 100% 的原值需核查源表。','来源组别用于观察，真实随机分流尚未核验，不作实验因果结论。'],
     });
   }
   const audienceConditions=[filter('dt',partitions.audience),filter('crowd_id','crowd_axc_low_freq')];
@@ -183,7 +235,7 @@ function groupPortrait(task,selectedDate) {
     const gaps=groups.length===2?values.map(v=>v.groups.every(g=>g.share!==null)?Math.abs(v.groups[0].share-v.groups[1].share):null).filter(v=>v!==null):[];
     return {...entry,status:'available',values,maxShareGap:gaps.length?Math.max(...gaps):null};
   });
-  return {basis:'current_snapshot',conclusion:null,partition:source.partition,sourceName:source.sourceName,cohortDate:task.audience?null:selectedDate,groups,dimensions};
+  return {basis:task.hasPrePortrait?'pre_entry_cohort':'current_snapshot',conclusion:null,partition:source.partition,sourceName:source.sourceName,cohortDate:task.audience?null:selectedDate,groups,dimensions};
 }
 
 export function unavailableCrowd(task,crowd,references=[]){
@@ -195,7 +247,7 @@ export function unavailableCrowd(task,crowd,references=[]){
       notes:['Ditag当前人数为人工核验资料，不是投放期进组人数。'],evidence:[],fieldCoverage:[]};
 }
 
-export function selectTask(snapshot,id,{date,group='all',dimension='charge_life_cycle',portraitDimension,profileDimensions,cumulativeGroup='all',cumulativeDimension='charge_life_cycle',cumulativeBreakdown,crowdId}={}) {
+export function selectTask(snapshot,id,{date,group='all',dimension='charge_life_cycle',portraitDimension,profileDimensions,portraitPhase='pre',cumulativeGroup='all',cumulativeDimension='charge_life_cycle',cumulativeBreakdown,crowdId}={}) {
   const task=snapshot.tasks.find(t=>t.id===id);
   if(!task)return null;
   if(crowdId){
@@ -207,7 +259,9 @@ export function selectTask(snapshot,id,{date,group='all',dimension='charge_life_
   const selectedDate=date || task.dates.at(-1);
   const selectedProfile=typeof profileDimensions==='string'?profileDimensions.split(','):profileDimensions;
   const portraitKey=selectedProfile?.[0] || portraitDimension || dimension;
-  const portraitDimensions=task.audience?.dimensions || task.dimensions;
+  if(!['pre','entry','post7d'].includes(portraitPhase)||portraitPhase!=='pre'&&!task.portraitPhases?.[portraitPhase])throw new Error('invalid portrait phase');
+  const phaseSource=portraitPhase==='pre'?null:task.portraitPhases[portraitPhase];
+  const portraitDimensions=phaseSource?.dimensions || task.audience?.dimensions || task.dimensions;
   if(!Object.hasOwn(portraitDimensions,portraitKey))throw new Error('invalid portrait selection');
   if(!task.dates.includes(selectedDate) || !Object.keys(task.dimensions).includes(dimension))throw new Error('invalid selection');
   const groups=[...new Set(task.rows.map(r=>r.group_type))];
@@ -218,12 +272,12 @@ export function selectTask(snapshot,id,{date,group='all',dimension='charge_life_
   const comparisonRows=task.dimensions[dimension].filter(r=>r.date===selectedDate);
   const comparisonValues=[...new Set(comparisonRows.map(r=>r.value))];
   const distribution=group==='all'&&task.dailyUnion?task.dailyUnion.dimensions[dimension].rows.filter(r=>r.date===selectedDate).slice().sort((a,b)=>b.users-a.users):[...new Set(dimensionRows.map(r=>r.value))].map(value=>({value,...summarize(task.kind,dimensionRows.filter(r=>r.value===value))})).sort((a,b)=>b.users-a.users);
-  const portraitSourceData=groupProfileSource(task.audience||task,group);
+  const portraitSourceData=groupProfileSource(phaseSource||task.audience||task,group);
   const selectedPortraitDimensions=portraitSourceData?.dimensions||{};
   const audienceRows=task.audience?(selectedPortraitDimensions[portraitKey]||[]).filter(r=>group==='all'||r.group_type===group):scoped(selectedPortraitDimensions[portraitKey]||[]);
   const portrait=audienceRows?[...new Set(audienceRows.map(r=>r.value))].map(value=>({value,...summarize('audience',audienceRows.filter(r=>r.value===value))})).sort((a,b)=>b.users-a.users):distribution;
-  const profileAnalysis=selectProfile(task.audience||task,{dimensions:selectedProfile||[portraitKey],group,date:selectedDate,hasAudience:!!task.audience});
-  const {rows,dimensions,audience,cumulative,profileCube,allGroupPortrait,dailyUnion,...metadata}=task;
+  const profileAnalysis=phaseSource&&selectedProfile?.length>1?{status:'missing',dimensions:selectedProfile,rows:[],total:null,basis:'phase_joint_not_available'}:selectProfile(phaseSource||task.audience||task,{dimensions:selectedProfile||[portraitKey],group,date:selectedDate,hasAudience:!!task.audience});
+  const {rows,dimensions,audience,cumulative,profileCube,allGroupPortrait,dailyUnion,portraitPhases,prePortraitCoverage,...metadata}=task;
   const audienceFacts=audience?.orderCoverage && audience.rows.every(r=>Object.hasOwn(r,'axc') && Object.hasOwn(r,'charge'))?{
     partition:audience.partition,summary:summarize('audience',audience.rows.filter(r=>group==='all'||r.group_type===group)),
     orderCoverage:Object.fromEntries(Object.entries(audience.orderCoverage||{}).map(([name,values])=>[name,summarize('audience',values.filter(r=>group==='all'||r.group_type===group)).users])),
@@ -231,14 +285,16 @@ export function selectTask(snapshot,id,{date,group='all',dimension='charge_life_
   const portraitSource={
     sourceName:audience?.sourceName||task.sourceName,sourceId:audience?.sourceId||task.sourceId,
     builtAt:(task.audience?.allGroupPortrait||task.allGroupPortrait)?.builtAt||snapshot.builtAt,
-    partition:audience?.partition||task.partition,scope:audience?'crowd_snapshot':'entry_day',group,
+    partition:audience?.partition||task.partition,scope:audience?'crowd_snapshot':phaseSource?portraitPhase:task.hasPrePortrait?'pre_entry_cohort':'entry_day',group,
     fields:selectedProfile||[portraitKey],
     overlapUsers:(task.audience?.allGroupPortrait||task.allGroupPortrait)?.rows.filter(r=>task.audience||r.date===selectedDate).reduce((n,r)=>n+r.overlapUsers,0)??null,
+    labelCoverage:(phaseSource?.coverage||prePortraitCoverage)?.filter(r=>r.date===selectedDate&&(group==='all'||r.group_type===group)).reduce((n,r)=>n+(r.labelDate?r.users:0),0)??null,
+    sourceFields:phaseSource?.sourceFields||null,
     filters:[{name:'dt',value:audience?.partition||task.partition},
       {name:audience?'crowd_id':'source_task_id',value:task.sourceTaskId},
       ...(!audience?[{name:'entry_dt',value:selectedDate}]:[]),...(group!=='all'?[{name:'group_type',value:group}]:[])],
   };
-  return {...metadata,portraitSource,profileAnalysis,profileCrossDimensions:(task.audience||task).profileCube?.keys||[],deploymentReference:deploymentReference(task),crowdReferences:crowdReferences(task),groupPortrait:groupPortrait(task,selectedDate),experimentReference:experimentReference(task),cumulative:selectCumulative(cumulative,{group:cumulativeGroup,dimension:cumulativeDimension,breakdown:cumulativeBreakdown}),audienceFacts,fieldCoverage:snapshot.fieldCoverage || [],portraitDimension:portraitKey,
+  return {...metadata,portraitSource,profileAnalysis,profileCrossDimensions:phaseSource?[]:(task.audience||task).profileCube?.keys||[],deploymentReference:deploymentReference(task),crowdReferences:crowdReferences(task),groupPortrait:groupPortrait(task,selectedDate),experimentReference:experimentReference(task),cumulative:selectCumulative(cumulative,{group:cumulativeGroup,dimension:cumulativeDimension,breakdown:cumulativeBreakdown}),audienceFacts,fieldCoverage:snapshot.fieldCoverage || [],portraitDimension:portraitKey,portraitPhase,availablePortraitPhases:['pre',...Object.keys(task.portraitPhases||{})],
     portraitDimensionOptions:Object.fromEntries(Object.keys(portraitDimensions).map(key=>[key,({...DIMENSIONS,...AUDIENCE_DIMENSIONS,activity_cycle:'流失周期'})[key] || key])),selectedDate,selectedGroup:group,dimension,dimensionOptions:{...DIMENSIONS,...(task.kind==='coupon'?{activity_cycle:'流失周期'}:{})},groups,
     groupDistribution:groups.map(g=>({group:g,rows:comparisonValues.map(value=>({value,...summarize(task.kind,comparisonRows.filter(r=>r.value===value && r.group_type===g))}))})),
     summary,distribution,portrait,portraitPartition:audience?.partition || task.partition,

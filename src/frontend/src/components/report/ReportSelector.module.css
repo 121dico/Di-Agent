@@ -1,0 +1,9 @@
+.directory { min-width: 0; display: flex; align-items: center; gap: 9px; }
+.label { flex: 0 0 auto; color: var(--wb-text-tertiary); font-size: 11px; }
+.select { width: 240px; max-width: 100%; min-width: 0; font-size: 12px; }
+.select :global(.ant-select-prefix) { color: var(--wb-focus); }
+
+@media (max-width: 680px) {
+  .directory { width: 100%; }
+  .select { flex: 1; width: auto; }
+}

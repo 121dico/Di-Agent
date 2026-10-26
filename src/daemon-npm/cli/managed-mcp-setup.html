@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>数梦本机配置 · Di Agent</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body><main>
+  <header><span class="brand">D</span><div><p class="eyebrow">DI AGENT · 本机配置</p><h1>连接数梦</h1></div></header>
+  <p class="intro">使用你自己的公司身份。API Key 只保存在这台电脑，不会上传至 Di Agent 服务器。</p>
+  <section class="statusSection" aria-labelledby="status-heading"><div class="sectionTitle"><h2 id="status-heading">连接检查</h2><span id="checked-at" class="muted">尚未检测</span></div><ul id="checks"><li>正在读取本机状态…</li></ul><p class="muted">代理可达不代表已登录；MCP 连接通过也不代表拥有所有项目、表和 SQL 权限。</p></section>
+  <form id="configuration" autocomplete="off">
+    <details id="identity-guide"><summary><span class="step">1</span>准备公司身份</summary><div class="detailBody"><p>启动滴滴安全助手，登录本人账号，在「智能体安全」确认防护开启。检测失败时请同时核对新 API Key；此处不会代你登录或输入 D 盾。</p><nav><a href="https://lca.xiaojukeji.com/" target="_blank" rel="noopener noreferrer">安装安全助手 ↗</a><a href="https://cooper.didichuxing.com/knowledge/share/page/uRaZEPYXmPfm" target="_blank" rel="noopener noreferrer">身份配置指南 ↗</a></nav></div></details>
+    <details id="key-guide"><summary><span class="step">2</span>填写个人 API Key</summary><div class="detailBody"><p>在 MCP Hub 的「访问令牌」创建新版 Key，按公司流程完成验证后复制。不要使用他人的 Key。</p><a href="https://mcphub.intra.xiaojukeji.com/square?action=open_tokens" target="_blank" rel="noopener noreferrer">创建 API Key ↗</a><label for="api-key">API Key <span id="key-hint" class="muted"></span></label><input id="api-key" name="apiKey" type="password" maxlength="4103" autocomplete="new-password" spellcheck="false" placeholder="粘贴本人 API Key（可含 Bearer）" disabled><p class="muted">macOS 保存到钥匙串；Linux 保存到仅本人可读的文件。原值不会回填。Windows 暂不支持页面保存。</p></div></details>
+    <details id="project-guide"><summary><span class="step">3</span>确认数梦项目</summary><div class="detailBody"><p>打开数梦项目设置，复制「项目 Code」。它不是数字 projectId（例如 839），也不一定与数据库名称相同。</p><nav><a href="https://studio.data.didichuxing.com/" target="_blank" rel="noopener noreferrer">打开数梦 ↗</a><a href="https://cooper.didichuxing.com/knowledge/2199579337142/2207638044119" target="_blank" rel="noopener noreferrer">在哪里找项目 Code ↗</a></nav><label for="project-code">项目 Code</label><input id="project-code" name="projectCode" type="text" maxlength="128" pattern="(?![0-9]+$)[A-Za-z0-9_\-]+" autocomplete="off" spellcheck="false" placeholder="从项目设置复制 Code，不能是纯数字 ID" required disabled><p class="muted">保存不会自动申请项目或数据权限；真实查询仍由数梦鉴权。</p></div></details>
+    <section id="storage-notice" class="notice" hidden><strong>此设备暂不支持页面保存个人凭据</strong><p>Windows 请勿在本页粘贴 Key。请在本人电脑的用户环境变量中设置：</p><ul><li><code>DI_AGENT_DATADREAM_API_KEY</code><span>本人新版 API Key，不含 Bearer</span></li><li><code>DI_AGENT_DATADREAM_PROJECT_CODE</code><span>数梦项目 Code，不是数字 ID</span></li></ul><p>可从 Windows 搜索「编辑账户的环境变量」进入，仅配置本人用户变量，不配置系统共享变量。环境变量仍是敏感信息，请勿截图、分享或写进项目文件。等运行中的 Agent 任务结束，再退出并重新启动 Di Agent 连接程序，使新进程读取变量，然后回平台重新检测。</p></section>
+    <p id="source-notice" class="notice" hidden></p>
+    <p id="feedback" role="status" aria-live="polite"></p>
+    <footer><button type="submit" id="save" disabled>保存到本机</button><button type="button" id="inspect" class="primary">检测连接</button></footer>
+  </form>
+  <p class="closing muted">完成后返回 Di Agent，点击「检查连接」刷新状态。本配置页 15 分钟后失效；刷新后需从平台重新打开。</p>
+</main></body></html>

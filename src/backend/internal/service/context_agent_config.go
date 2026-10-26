@@ -19,7 +19,12 @@ var reportTaskKeywords = []string{
 }
 
 const compactReportMCPContext = `[真实数据报表能力]
-平台已提供 discover_report_data、query_report_data、save_personal_report。用户要求查真实数据、做图表/看板/报表时必须使用这些 MCP 工具，不得用常识或示例数字代替真实查询。
+平台已提供 discover_report_data、get_report_template、query_report_data、save_personal_report。用户要求查真实数据、做图表/看板/报表时必须使用这些 MCP 工具，不得用常识或示例数字代替真实查询。
+
+`
+
+const hiveProbeMCPContext = `[个人 Hive 真实数据探测]
+用户明确询问 HiveServer2 表的读取权限或分区中是否有真实数据时，先调用 discover_internal_sources，再只展开 hive_data 的 get_internal_source_guide，随后按指南调用 probe_hive_data。这个通道只对已批准表执行固定的 SELECT dt ... LIMIT 1，只能证明 dt 列可读及指定分区是否有行；不能推断其他列权限，也不能用数据地图资产搜索代替真实查询。若连接未配置、权限不足或查询失败，如实说明，不得编造数值。
 
 `
 
@@ -28,9 +33,10 @@ const fullReportMCPManual = `[真实数据报表 MCP 强制说明书]
 
 强制调用顺序：
 1. discover_report_data：获取 source_id、数据源用途、字段名和 capabilities。
-2. query_report_data：只使用 discover 返回且具备相应 capability 的字段执行真实查询。
-3. 如需多个指标或图表，可按同一 source_id 分多次真实查询；所有展示数字必须来自工具返回的 rows 或 pagination。
-4. 需要交付个人报表时，使用本轮成功查询返回的真实 query_id 调用 save_personal_report；保存成功后平台会生成当前用户可打开的报表卡片。
+2. get_report_template：读取默认 template-1 的固定 V1.2 基础图表样式。Agent 决定数据加工、字段、图表类型和板块顺序；曲线、柱状、饼/环图颜色、几何、交互和卡片样式不能由模型修改。V1.2 是视觉模板，不要求所有数据复制价敏业务板块。
+3. query_report_data：只使用 discover 返回且具备相应 capability 的字段执行真实查询。价敏 V1.2 亿级源需要生成同版报表时，设置 prepared_view=v12_dashboard，读取现有公共报表已核验的预计算快照；不要即时对全表 COUNT DISTINCT duid（会超过查询内存上限）。
+4. 如需多个指标或图表，可按同一 source_id 分多次真实查询；所有展示数字必须来自工具返回的 rows 或 pagination。
+5. 需要交付个人报表时，默认使用 template-1。只有 V1.2 预计算查询返回的 query_id 应保存为唯一 v12_dashboard 板块；其他数据按指标、时间序列、类别分布或明细分别查询并绑定。Agent 不提交 data/rows/数值/颜色；平台从当前用户查询凭证装配数据并用固定图表组件渲染。保存后显示可打开的报表卡片。
 
 字段能力规则：
 - select：字段可放进 fields。
@@ -41,6 +47,14 @@ const fullReportMCPManual = `[真实数据报表 MCP 强制说明书]
 
 query_report_data 通用格式：
 {"source_id":"<discover 返回的 source_id>","fields":[{"name":"dt"},{"name":"duid","alias":"user_count","aggregation":"COUNT_DISTINCT"}],"filters":[{"name":"price_sensitivity_level","operator":"IN","value":["HIGH","MEDIUM","LOW"]}],"group_by":["dt"],"order_by":"dt ASC","page":1,"page_size":100}
+
+价敏 V1.2 同版快照格式：
+query_report_data: {"source_id":"<V1.2 source_id>","fields":[{"name":"dt"}],"prepared_view":"v12_dashboard"}
+save_personal_report: {"title":"价敏用户报表 V1.2 个人快照","data_source_id":"<V1.2 source_id>","query_id":"<预计算查询凭证>","document":{"template_id":"template-1","sections":[{"id":"v12_snapshot","type":"v12_dashboard","title":"价敏用户报表 V1.2"}]}}
+
+save_personal_report 模板示例（字段名与凭证必须替换成真实查询返回值）：
+{"title":"用户趋势报表","data_source_id":"<source_id>","query_id":"<指标查询凭证>","document":{"template_id":"template-1","sections":[{"id":"overview","type":"metrics","title":"指标概览","metrics":[{"field":"user_count","label":"用户数","suffix":"人"}]},{"id":"trend","type":"chart","title":"每日趋势","query_id":"<趋势查询凭证>","chart_type":"line","x_field":"dt","series":[{"field":"user_count","label":"用户数"}]},{"id":"detail","type":"table","title":"数据明细","query_id":"<明细查询凭证>","columns":[{"field":"dt","label":"日期"},{"field":"user_count","label":"用户数"}]}]}}
+metrics 查询必须只有一行；趋势/分布查询必须返回完整聚合结果（最多100行），不可把不完整分页画成完整图。line/bar 用 x_field + series，donut 用 label_field + value_field，table 用 columns。图表基础视觉由 V1.2 模板固定，报表内容、图表种类和板块分布可以变化；不要给非价敏数据加价敏专有模块。模型不可输出 HTML/CSS/颜色代替模板。
 
 价敏用户明细格式：
 {"source_id":"<discover 返回的 source_id>","fields":[{"name":"duid"},{"name":"price_sensitivity_level"},{"name":"price_sensitivity_score"},{"name":"user_city_name"}],"filters":[{"name":"price_sensitivity_level","operator":"IN","value":["HIGH","MEDIUM","LOW"]}],"order_by":"duid ASC","page":1,"page_size":100}
@@ -109,11 +123,14 @@ func BuildAgentConfigText(agent *model.Agent, contextStr string, taskText string
 		}
 	}
 	sb.WriteString("[内部资料渐进发现]\n内部问题缺少线索时，可调用 discover_internal_sources 查看资料源的简短用途和真实接入状态；仅在选定一个来源后调用 get_internal_source_guide 展开该来源指南。按问题与新线索决定下一步，不按固定顺序查找；未接入来源不可声称已检索或获得用户权限。\n\n")
+	sb.WriteString("[平台托管的本机 MCP / mcphub]\n公司内部数据、文档或内网页面问题，先检查已有工具；缺少适用工具时调用 list_managed_mcps 搜索 mcphub 已审核连接器，再按需 get_managed_mcp_tools 加载和 call_managed_mcp_tool 真实调用。已审核连接器没有匹配时，可提示用户 mcphub 官方目录 https://mcphub.intra.xiaojukeji.com/square；若内网页面检索已接入，也可用它只读浏览目录和服务详情，给出候选链接，未经审核的服务不能直接安装执行。未接入时说明状态，只有用户要求接入才可用 set_managed_mcp_enabled。数梦适合数据地图和只读 SQL，Cooper 适合文档，内网页面检索适合用户指定的内网 URL。个人凭据和 Chrome 登录态只留本人电脑；上游无权、未连接或调用失败时不得声称查到数据。下述报表工具顺序只适用于平台报表源。\n\n")
 
 	// Report data is a governed platform capability rather than free-form web
 	// research. Keep a compact reminder on every task, then inject the full MCP
 	// manual only when the actual user request carries report/data intent.
-	if hasReportTaskIntent(taskText) {
+	if hasHiveProbeIntent(taskText) {
+		sb.WriteString(hiveProbeMCPContext)
+	} else if hasReportTaskIntent(taskText) {
 		sb.WriteString(fullReportMCPManual)
 	} else {
 		sb.WriteString(compactReportMCPContext)
@@ -193,6 +210,19 @@ func hasReportTaskIntent(taskText string) bool {
 	}
 	for _, keyword := range reportTaskKeywords {
 		if strings.Contains(normalized, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasHiveProbeIntent(taskText string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(taskText))
+	if !strings.Contains(normalized, "hive") && !strings.Contains(normalized, "hadoop") {
+		return false
+	}
+	for _, action := range []string{"读", "查", "权限", "访问", "探测", "select", "query", "access", "read"} {
+		if strings.Contains(normalized, action) {
 			return true
 		}
 	}

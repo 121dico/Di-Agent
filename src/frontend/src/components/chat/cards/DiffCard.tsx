@@ -14,6 +14,8 @@ import { ApiError } from '@/api/client';
 import { message as antMessage } from '@/utils/message';
 import { asyncPool } from '@/utils/asyncPool';
 import { DiffViewer } from '@/components/chat/DiffViewer';
+import { FilesDrawer } from '@/components/chat/FilesDrawer';
+import { isHtmlPreviewFile } from '@/components/chat/filePreview';
 import styles from './Cards.module.css';
 
 const STATUS_ICON: Record<ChangeStatus, React.ReactNode> = {
@@ -86,14 +88,15 @@ export const DiffCard: React.FC<CardProps<DiffCardData>> = ({ card, agentId }) =
     // 失败静默——DiffViewer 打开时若缓存缺失会自行兜底再请求一次。
     // 同样用 fetchId guard：旧批次完成后若 fetchId 已过期，不写缓存（避免覆盖新批次的最新值）。
     void asyncPool(
-      card.files,
+      card.files.filter(f => !isHtmlPreviewFile(f)),
       (f) => fileDiff(agentId, card.workDir, f),
       3,
     ).then((results) => {
       if (cancelled || fetchId !== fetchIdRef.current) return;
+      const diffFiles = card.files.filter(f => !isHtmlPreviewFile(f));
       results.forEach((r, i) => {
         if (r.status === 'fulfilled') {
-          diffCacheRef.current.set(card.files[i]!, r.value);
+          diffCacheRef.current.set(diffFiles[i]!, r.value);
         }
       });
     });
@@ -134,7 +137,15 @@ export const DiffCard: React.FC<CardProps<DiffCardData>> = ({ card, agentId }) =
                 key={`${s.path}-${idx}`}
                 className={styles.diffItem}
                 onClick={() => handleClickFile(s.path)}
-                title="点击查看前后对比"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    handleClickFile(s.path);
+                  }
+                }}
+                title={isHtmlPreviewFile(s.path) ? '点击预览网页' : '点击查看前后对比'}
               >
                 {STATUS_ICON[s.status]}
                 <span className={styles.diffPath}>{s.path}</span>
@@ -148,14 +159,28 @@ export const DiffCard: React.FC<CardProps<DiffCardData>> = ({ card, agentId }) =
           <button
             type="button"
             className={styles.diffSummary}
-            onClick={() => setExpanded(true)}
+            onClick={() => {
+              const onlyFile = card.files[0];
+              if (card.files.length === 1 && onlyFile && isHtmlPreviewFile(onlyFile)) handleClickFile(onlyFile);
+              else setExpanded(true);
+            }}
           >
             <span>{statuses[0]?.path || '查看文件变更'}</span>
             {statuses.length > 1 && <span>另有 {statuses.length - 1} 个文件</span>}
           </button>
         )}
       </div>
-      {agentId && selectedFile && (
+      {agentId && selectedFile && isHtmlPreviewFile(selectedFile) ? (
+        <FilesDrawer
+          key={`${agentId}:${card.workDir}:${selectedFile}`}
+          open={viewerOpen}
+          onClose={() => setViewerOpen(false)}
+          agentId={agentId}
+          workDir={card.workDir}
+          initialPath={selectedFile.startsWith('/') || /^[a-z]:[\\/]/i.test(selectedFile)
+            ? selectedFile : `${card.workDir.replace(/\/$/, '')}/${selectedFile}`}
+        />
+      ) : agentId && selectedFile && (
         <DiffViewer
           open={viewerOpen}
           onClose={() => setViewerOpen(false)}

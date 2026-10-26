@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Empty, Spin } from 'antd';
+import { buildDonutArcPath } from './donutArc';
 import styles from './ReportCohortComparison.module.css';
 
 type Item = { label: string; value: number };
@@ -27,15 +28,15 @@ export function ReportCohortComparison({ all, orders, ordersLabel = '有订单�
           <circle cx="130" cy="130" r="84" fill="none" stroke="var(--wb-surface-hover)" strokeWidth="30" />
           <g transform="rotate(-90 130 130)">{group.items.filter((item) => item.value > 0).map((item) => {
             const key = `${group.key}:${item.label}`;
-            const length = item.value / total * 2 * Math.PI * 84;
-            const offset = -consumed; consumed += length;
-            return <circle key={key} cx="130" cy="130" r="84" fill="none" stroke={hidden.has(key) ? '#DDE1E7' : colors[item.label] ?? '#8B8E95'} strokeWidth={active === key ? 35 : 30}
-              strokeDasharray={`${length} ${2 * Math.PI * 84 - length}`} strokeDashoffset={offset} className={styles.sector}
+            const start = consumed / total;
+            consumed += item.value;
+            return <path key={key} d={buildDonutArcPath(start, consumed / total)} fill="none" stroke={hidden.has(key) ? '#DDE1E7' : colors[item.label] ?? '#8B8E95'} strokeWidth={active === key ? 35 : 30}
+              className={styles.sector}
               role="button" tabIndex={0} aria-pressed={!hidden.has(key)} aria-label={`${group.title} ${item.label}`}
               onClick={() => toggle(key)} onMouseEnter={() => setActive(key)} onMouseLeave={() => setActive(null)} onFocus={() => setActive(key)} onBlur={() => setActive(null)}
               onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(key); } }}>
               <title>{`${item.label}：${count(item.value)} 人 · ${(item.value / total * 100).toFixed(precision)}%`}</title>
-            </circle>;
+            </path>;
           })}</g>
           <text x="130" y="128" textAnchor="middle" className={styles.value}>{compactCount(activeItem?.value ?? total)}</text>
           <text x="130" y="151" textAnchor="middle" className={styles.caption}>{activeItem?.label ?? group.title}</text>

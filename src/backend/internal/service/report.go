@@ -40,14 +40,23 @@ type ReportUserStore interface {
 }
 
 type ReportService struct {
-	sourceTimeMu sync.Mutex
-	store        ReportStore
-	users        ReportUserStore
-	runner       *ReportRunner
+	sourceTimeMu  sync.Mutex
+	store         ReportStore
+	users         ReportUserStore
+	runner        *ReportRunner
+	agentReceipts reportAgentReceiptWriter
+}
+
+type reportAgentReceiptWriter interface {
+	Create(context.Context, *model.ReportAgentQueryReceipt) error
 }
 
 func NewReportService(store ReportStore, users ReportUserStore, runner *ReportRunner) *ReportService {
 	return &ReportService{store: store, users: users, runner: runner}
+}
+
+func (s *ReportService) SetAgentReceiptStore(store reportAgentReceiptWriter) {
+	s.agentReceipts = store
 }
 
 func (s *ReportService) requireAdmin(ctx context.Context, userID string) error {
@@ -78,6 +87,11 @@ func (s *ReportService) CreateSource(ctx context.Context, userID string, source 
 	source.AppSecretEnv = strings.TrimSpace(source.AppSecretEnv)
 	source.SignatureEnv = strings.TrimSpace(source.SignatureEnv)
 	source.XDateEnv = strings.TrimSpace(source.XDateEnv)
+	folder, err := normalizeSourceFolder(source.Folder)
+	if err != nil {
+		return nil, err
+	}
+	source.Folder = folder
 	parsed, err := url.Parse(source.Endpoint)
 	if source.Name == "" || source.APIName == "" || err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
 		return nil, ErrReportInvalid
@@ -127,6 +141,10 @@ func (s *ReportService) SaveSourceContract(ctx context.Context, userID, sourceID
 	input.AppSecretEnv = firstNonEmpty(strings.TrimSpace(input.AppSecretEnv), source.AppSecretEnv)
 	input.SignatureEnv = firstNonEmpty(strings.TrimSpace(input.SignatureEnv), source.SignatureEnv)
 	input.XDateEnv = firstNonEmpty(strings.TrimSpace(input.XDateEnv), source.XDateEnv)
+	input.Folder, err = normalizeSourceFolder(input.Folder)
+	if err != nil {
+		return nil, err
+	}
 	input.APIExample = strings.TrimSpace(input.APIExample)
 	input.ResponseExample = strings.TrimSpace(input.ResponseExample)
 	input.HiveTable = strings.TrimSpace(input.HiveTable)
@@ -223,7 +241,23 @@ var reportAgentAliasPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}$`
 // QueryAgentData executes a real upstream query through a deliberately small
 // DSL. Physical endpoints, Hive metadata and credentials never cross this seam.
 func (s *ReportService) QueryAgentData(ctx context.Context, request model.ReportAgentQueryRequest) (*model.ReportAgentQueryResult, error) {
+	return s.queryAgentData(ctx, "", request)
+}
+
+// QueryAgentDataForUser persists a query receipt so later report generation can
+// resolve rows from the server, scoped to the user who executed the query.
+func (s *ReportService) QueryAgentDataForUser(ctx context.Context, userID string, request model.ReportAgentQueryRequest) (*model.ReportAgentQueryResult, error) {
+	if strings.TrimSpace(userID) == "" || s.agentReceipts == nil {
+		return nil, fmt.Errorf("%w: 查询凭证服务未就绪", ErrReportInvalid)
+	}
+	return s.queryAgentData(ctx, userID, request)
+}
+
+func (s *ReportService) queryAgentData(ctx context.Context, userID string, request model.ReportAgentQueryRequest) (*model.ReportAgentQueryResult, error) {
 	request.SourceID = strings.TrimSpace(request.SourceID)
+	if request.PreparedView != "" {
+		return s.queryPreparedAgentData(ctx, userID, request)
+	}
 	if request.SourceID == "" || len(request.Fields) == 0 || len(request.Fields) > 30 {
 		return nil, fmt.Errorf("%w: 数据源和 1 至 30 个查询字段为必填", ErrReportInvalid)
 	}
@@ -333,11 +367,36 @@ func (s *ReportService) QueryAgentData(ctx context.Context, request model.Report
 	if err != nil {
 		return nil, err
 	}
-	return &model.ReportAgentQueryResult{
+	result := &model.ReportAgentQueryResult{
 		SourceID: request.SourceID, SourceName: contract.Name, Rows: upstream.Rows,
 		Pagination: upstream.Pagination, SourcePartition: upstream.Partition,
 		QueryID: upstream.QueryID, DurationMS: upstream.Duration.Milliseconds(),
-	}, nil
+	}
+	if userID != "" {
+		requestJSON, marshalErr := json.Marshal(request)
+		if marshalErr != nil {
+			return nil, fmt.Errorf("encode agent query receipt request: %w", marshalErr)
+		}
+		rowsJSON, marshalErr := json.Marshal(upstream.Rows)
+		if marshalErr != nil {
+			return nil, fmt.Errorf("encode agent query receipt rows: %w", marshalErr)
+		}
+		paginationJSON, marshalErr := json.Marshal(upstream.Pagination)
+		if marshalErr != nil {
+			return nil, fmt.Errorf("encode agent query receipt pagination: %w", marshalErr)
+		}
+		receipt := &model.ReportAgentQueryReceipt{
+			OwnerUserID: userID, SourceID: request.SourceID, SourceName: contract.Name,
+			RequestJSON: requestJSON, RowsJSON: rowsJSON, PaginationJSON: paginationJSON,
+			SourcePartition: upstream.Partition, UpstreamQueryID: upstream.QueryID,
+			DurationMS: upstream.Duration.Milliseconds(),
+		}
+		if err := s.agentReceipts.Create(ctx, receipt); err != nil {
+			return nil, err
+		}
+		result.QueryID = receipt.ID
+	}
+	return result, nil
 }
 
 func reportUpstreamAggregation(aggregation string) string {
@@ -394,6 +453,14 @@ func firstNonEmpty(value, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func normalizeSourceFolder(folder string) (string, error) {
+	folder = strings.TrimSpace(folder)
+	if len([]rune(folder)) > 80 {
+		return "", fmt.Errorf("%w: 文件夹名称不能超过 80 个字符", ErrReportInvalid)
+	}
+	return folder, nil
 }
 
 func validateSourceContract(contract *model.ReportDataSourceContract) error {

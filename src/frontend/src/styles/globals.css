@@ -197,6 +197,11 @@ html {
   scrollbar-color: rgba(0, 0, 0, 0.12) transparent;
 }
 
+/* 鼠标点击不显示浏览器默认黑框，键盘导航保留组件焦点提示。 */
+:where(:focus:not(:focus-visible)) {
+  outline: none;
+}
+
 /* Keyboard focus indicator */
 :focus-visible {
   outline: 3px solid rgba(15, 118, 110, 0.42);

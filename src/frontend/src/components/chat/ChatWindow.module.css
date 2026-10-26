@@ -92,6 +92,18 @@
   font-weight: 600;
 }
 
+.orchaBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
 .titleBlock {
   display: flex;
   flex-direction: column;

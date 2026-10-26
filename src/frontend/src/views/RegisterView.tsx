@@ -4,12 +4,14 @@ import AuthLayout from '@/layout/AuthLayout';
 import Input from '@/components/common/Input';
 import Button from '@/components/common/Button';
 import { useAuth } from '@/hooks/useAuth';
+import { useAuthProviders } from '@/hooks/useAuthProviders';
 import { AlertCircle, ArrowRight } from 'lucide-react';
 import styles from './RegisterView.module.css';
 
 const RegisterView: React.FC = () => {
   const navigate = useNavigate();
   const { register, loading, error } = useAuth();
+  const { localEnabled, loading: providersLoading } = useAuthProviders();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -18,6 +20,7 @@ const RegisterView: React.FC = () => {
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
+      if (!localEnabled || providersLoading) return;
       setLocalError('');
       if (!username.trim() || !password.trim()) {
         setLocalError('请输入用户名和密码');
@@ -34,7 +37,7 @@ const RegisterView: React.FC = () => {
         setLocalError('注册失败，用户名可能已存在');
       }
     },
-    [username, password, confirmPassword, register, navigate],
+    [username, password, confirmPassword, register, navigate, localEnabled, providersLoading],
   );
 
   return (
@@ -43,7 +46,7 @@ const RegisterView: React.FC = () => {
         <div className={styles.intro}>
           <span>创建账户</span>
           <h2>加入工作区</h2>
-          <p>创建账户，开始组织你的 Agent 协作流程。</p>
+          <p>{localEnabled ? '创建本地测试账号，与公司账号独立。' : '当前仅开放公司账号登录，本地注册已关闭。'}</p>
         </div>
         {(error || localError) && (
           <div className={styles.error} role="alert">
@@ -51,7 +54,7 @@ const RegisterView: React.FC = () => {
             <span>{localError || error}</span>
           </div>
         )}
-        <Input
+        {localEnabled && <><Input
           label="用户名"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
@@ -78,10 +81,10 @@ const RegisterView: React.FC = () => {
           autoComplete="new-password"
           className={styles.input}
         />
-        <Button type="submit" disabled={loading} className={styles.submitButton}>
+        <Button type="submit" disabled={loading || providersLoading} className={styles.submitButton}>
           <span>{loading ? '正在创建' : '创建并进入'}</span>
           <ArrowRight size={16} strokeWidth={2} aria-hidden="true" />
-        </Button>
+        </Button></>}
         <div className={styles.footer}>
           已有账号？<Link to="/login">登录</Link>
         </div>

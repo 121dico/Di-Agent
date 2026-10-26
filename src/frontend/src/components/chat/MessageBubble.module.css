@@ -89,6 +89,16 @@
   box-shadow: none;
 }
 
+/* 深色气泡不能沿用浅色页面的深色选区文字，嵌套文本也须显式覆盖。 */
+.innerUser::selection,
+.innerUser *::selection,
+.innerSending::selection,
+.innerSending *::selection {
+  color: #ffffff;
+  background: #335d87;
+  text-shadow: none;
+}
+
 .innerAssistant {
   color: var(--color-text);
   background: transparent;
@@ -109,6 +119,51 @@
 }
 
 .markdownBody { max-width: 100%; }
+.mcpCall {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 100%;
+  width: fit-content;
+  margin: 10px 0;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, #1677d2 35%, var(--color-bg-chat));
+  border-left: 3px solid #1677d2;
+  border-radius: 9px;
+  background: color-mix(in srgb, #1677d2 9%, var(--color-bg-chat));
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.mcpCallBadge {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #1269bc;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .04em;
+}
+.mcpCallName { color: #1269bc; font-weight: 700; }
+html.dark .mcpCallName { color: #73beff; }
+.mcpCallSeparator { color: var(--color-text-secondary); }
+.mcpCallTool { min-width: 0; color: var(--color-text-secondary); }
+.deliveryStatus {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+.waitingStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--wb-text-tertiary);
+  font-size: 13px;
+}
 .markdownBody > :first-child { margin-top: 0; }
 .markdownBody > :last-child { margin-bottom: 0; }
 

@@ -50,6 +50,20 @@ func (h *PersonalReportHandler) Create(c *gin.Context) {
 	middleware.CreatedResponse(c, row)
 }
 
+func (h *PersonalReportHandler) CreateAgent(c *gin.Context) {
+	var input service.AgentPersonalReportInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, 40071, "个人报表参数错误")
+		return
+	}
+	row, err := h.svc.CreateAgent(c.Request.Context(), middleware.GetUserID(c), input)
+	if err != nil {
+		h.writeError(c, err)
+		return
+	}
+	middleware.CreatedResponse(c, row)
+}
+
 func (h *PersonalReportHandler) Update(c *gin.Context) {
 	var input model.PersonalReport
 	if err := c.ShouldBindJSON(&input); err != nil {

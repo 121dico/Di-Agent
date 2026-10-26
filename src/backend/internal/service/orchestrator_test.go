@@ -179,6 +179,91 @@ func TestRouteMention_EmptyContent_ReturnsNil(t *testing.T) {
 	}
 }
 
+func TestOrchestratorDirectReplyStreamsIntoOneMessage(t *testing.T) {
+	agent := &model.Agent{ID: "orch-stream", Name: "Orch", CLITool: "codex", MachineID: stringPtr("machine-stream")}
+	const taskID = "task-orch-stream"
+	resultCh := make(chan *ws.TaskResult, 1)
+	resultCh <- &ws.TaskResult{TaskID: taskID, Result: "逐段完成的回答"}
+	var dispatched ws.WSMessage
+	hub := &fakeDaemonDispatcher{
+		isConnected:         func(string) bool { return true },
+		registerTaskPromise: func(string) chan *ws.TaskResult { return resultCh },
+		sendToMachine:       func(_ string, msg ws.WSMessage) error { dispatched = msg; return nil },
+		awaitTaskResult:     func(string) chan *ws.TaskResult { return resultCh },
+	}
+	msgRepo := &fakeMsgRepo{}
+	convRepo := &fakeOrchConvRepo{conv: &model.Conversation{ID: "c-stream"}}
+	svc := NewOrchestratorServiceWithDeps(OrchestratorDeps{
+		ConvRepo: convRepo, AgentRepo: &fakeOrchAgentRepo{agent: agent, task: &model.DaemonTask{ID: taskID}},
+		MsgRepo: msgRepo, DaemonHub: hub,
+	})
+	svc.dispatcher.SetStreamingDeps(StreamingPipelineDeps{
+		MsgRepo: msgRepo, DaemonHub: hub, StreamingBuffer: NewStreamingBuffer(),
+		Notifier: &fakeStreamingNotifier{}, ConvRepo: convRepo,
+	}, nil, nil)
+	messages, err := svc.handleOrchestratedDispatch(context.Background(), "c-stream", "u1", agent, "@Orch 回答", []model.ConversationAgent{
+		{AgentID: "worker-stream", Name: "Worker", Role: "worker"},
+	}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	messageID, _ := dispatched.Data.(map[string]interface{})["message_id"].(string)
+	if messageID == "" {
+		t.Fatal("orchestrator dispatch must include message_id for live deltas")
+	}
+	if len(msgRepo.messages) != 1 || len(messages) != 1 || messages[0].ID != messageID {
+		t.Fatalf("orchestrator must finalize its streaming placeholder, got stored=%d returned=%+v", len(msgRepo.messages), messages)
+	}
+	if messages[0].Status != model.MessageStatusComplete || messages[0].Content != "逐段完成的回答" {
+		t.Fatalf("unexpected finalized orchestrator message: %+v", messages[0])
+	}
+}
+
+func TestOrchestratorWithNoWorkerDoesNotStartItsOwnTask(t *testing.T) {
+	orch := &model.Agent{ID: "orch-only", Name: "Codex_cli", CLITool: "codex", MachineID: stringPtr("machine-1")}
+	msgRepo := &fakeMsgRepo{}
+	svc := NewOrchestratorServiceWithDeps(OrchestratorDeps{
+		ConvRepo:  &fakeOrchConvRepo{conv: &model.Conversation{ID: "c-only"}},
+		AgentRepo: &fakeOrchAgentRepo{agent: orch}, MsgRepo: msgRepo,
+	})
+	msgs, err := svc.handleOrchestratedDispatch(context.Background(), "c-only", "u1", orch, "@Codex_cli 生成番茄钟", []model.ConversationAgent{
+		{AgentID: orch.ID, Name: orch.Name, Role: "orchestrator"},
+	}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Content, "Worker") {
+		t.Fatalf("no-worker group must ask for a worker rather than self-execute: %+v", msgs)
+	}
+}
+
+func TestOrchestratorRejectsSelfDispatchEvenWhenOtherWorkerExists(t *testing.T) {
+	orch := &model.Agent{ID: "orch-self", Name: "Codex_cli", CLITool: "codex", MachineID: stringPtr("machine-1")}
+	resultCh := make(chan *ws.TaskResult, 1)
+	resultCh <- &ws.TaskResult{TaskID: "orch-self-task", Result: "@Codex_cli 实现番茄钟"}
+	hub := &fakeDaemonDispatcher{
+		isConnected:         func(string) bool { return true },
+		registerTaskPromise: func(string) chan *ws.TaskResult { return resultCh },
+		sendToMachine:       func(string, ws.WSMessage) error { return nil },
+		awaitTaskResult:     func(string) chan *ws.TaskResult { return resultCh },
+	}
+	svc := NewOrchestratorServiceWithDeps(OrchestratorDeps{
+		ConvRepo:  &fakeOrchConvRepo{conv: &model.Conversation{ID: "c-self"}},
+		AgentRepo: &fakeOrchAgentRepo{agent: orch, task: &model.DaemonTask{ID: "orch-self-task"}},
+		MsgRepo:   &fakeMsgRepo{}, DaemonHub: hub,
+	})
+	msgs, err := svc.handleOrchestratedDispatch(context.Background(), "c-self", "u1", orch, "@Codex_cli 生成番茄钟", []model.ConversationAgent{
+		{AgentID: orch.ID, Name: orch.Name, Role: "orchestrator"},
+		{AgentID: "worker", Name: "Codex", Role: "worker"},
+	}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Content, "Worker") || strings.Contains(msgs[0].Content, "@Codex_cli") {
+		t.Fatalf("invalid self-dispatch must become an actionable coordination reply: %+v", msgs)
+	}
+}
+
 func TestRouteMention_NoMentions_ReturnsNil(t *testing.T) {
 	svc := NewOrchestratorService(
 		&fakeOrchConvRepo{conv: &model.Conversation{ID: "c1"}},

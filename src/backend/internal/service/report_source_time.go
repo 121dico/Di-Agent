@@ -117,10 +117,32 @@ func (s *ReportService) SourceTimeCoverage(ctx context.Context, userID, sourceID
 }
 
 func sourceTimeFingerprint(source *model.ReportDataSource, contract *model.ReportDataSourceContract) string {
+	// 文件夹和更新时间只影响管理端归类，不影响调用契约，因此不参与可用时间指纹。
+	sourceCopy := *source
+	sourceCopy.Folder = ""
+	sourceCopy.CreatedBy = ""
+	sourceCopy.CreatedAt = time.Time{}
+	sourceCopy.UpdatedAt = time.Time{}
+	var contractCopy *model.ReportDataSourceContract
+	if contract != nil {
+		copy := *contract
+		copy.Folder = ""
+		copy.UpdatedAt = time.Time{}
+		fields := make([]model.ReportFieldContract, len(contract.Fields))
+		for i := range contract.Fields {
+			field := contract.Fields[i]
+			field.ID = ""
+			field.CreatedAt = time.Time{}
+			field.UpdatedAt = time.Time{}
+			fields[i] = field
+		}
+		copy.Fields = fields
+		contractCopy = &copy
+	}
 	raw, _ := json.Marshal(struct {
 		Source   *model.ReportDataSource
 		Contract *model.ReportDataSourceContract
-	}{source, contract})
+	}{&sourceCopy, contractCopy})
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
 }

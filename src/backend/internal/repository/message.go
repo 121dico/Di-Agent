@@ -113,6 +113,58 @@ func (r *MessageRepo) Create(ctx context.Context, conversationID, role, content,
 
 // SaveArtifacts 保存 assistant 消息的结构化产物（产物来源于 daemon 解析的回复）。
 // 与消息创建解耦：在 assistant 消息持久化后调用，落到独立 artifacts 表。
+// UpdateMessageDelivery 仅更新用户消息的投递状态，保留其他元数据。
+func (r *MessageRepo) UpdateMessageDelivery(ctx context.Context, messageID, deliveryJSON string) error {
+	var raw string
+	if err := r.db.GetContext(ctx, &raw, `SELECT COALESCE(artifacts_json,'') FROM messages WHERE id=$1 AND role='user'`, messageID); err != nil {
+		return fmt.Errorf("read message delivery metadata: %w", err)
+	}
+	metadata := map[string]json.RawMessage{}
+	if json.Unmarshal([]byte(raw), &metadata) != nil || metadata == nil {
+		metadata = map[string]json.RawMessage{}
+	}
+	metadata["delivery"] = json.RawMessage(deliveryJSON)
+	encoded, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("encode message delivery: %w", err)
+	}
+	_, err = r.db.ExecContext(ctx, `UPDATE messages SET artifacts_json=$2 WHERE id=$1 AND role='user'`, messageID, string(encoded))
+	if err != nil {
+		return fmt.Errorf("update message delivery: %w", err)
+	}
+	return nil
+}
+
+// RecoverInterruptedMessageDeliveries 将重启前未确认/排队的内存任务标为未知，不伪称会续跑。
+func (r *MessageRepo) RecoverInterruptedMessageDeliveries(ctx context.Context) error {
+	var rows []struct {
+		ID       string `db:"id"`
+		Metadata string `db:"artifacts_json"`
+	}
+	if err := r.db.SelectContext(ctx, &rows, `SELECT id, artifacts_json FROM messages WHERE role='user' AND artifacts_json LIKE '%"delivery"%'`); err != nil {
+		return fmt.Errorf("list interrupted delivery: %w", err)
+	}
+	for _, row := range rows {
+		var metadata struct {
+			Delivery map[string]interface{} `json:"delivery"`
+		}
+		if json.Unmarshal([]byte(row.Metadata), &metadata) != nil {
+			continue
+		}
+		status, _ := metadata.Delivery["status"].(string)
+		if status != "queued" && status != "sending" {
+			continue
+		}
+		metadata.Delivery["status"] = "unconfirmed"
+		metadata.Delivery["updated_at"] = time.Now().UnixMilli()
+		raw, _ := json.Marshal(metadata.Delivery)
+		if err := r.UpdateMessageDelivery(ctx, row.ID, string(raw)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *MessageRepo) SaveArtifacts(ctx context.Context, messageID string, artifacts []model.Artifact) error {
 	if r.artifactRepo == nil || len(artifacts) == 0 {
 		return nil

@@ -12,6 +12,7 @@ interface PersonalReportState {
   loadReports: () => Promise<void>;
   selectReport: (report: PersonalReport | null) => void;
   openWorkspace: (reportId?: string, conversationId?: string) => Promise<void>;
+  openLibraryReport: (reportId: string) => Promise<void>;
   closeWorkspace: () => void;
   updateStyle: (stylePreset: string) => Promise<void>;
   upsertLocal: (report: PersonalReport) => void;
@@ -94,6 +95,20 @@ export const usePersonalReportStore = create<PersonalReportState>((set, get) => 
         loading: false,
         error: error instanceof Error ? error.message : '个人报表加载失败',
       });
+    }
+  },
+
+  openLibraryReport: async (reportId) => {
+    set({ loading: true, error: null });
+    try {
+      const report = await getPersonalReport(reportId);
+      set((state) => ({
+        activeReport: report,
+        reports: byUpdatedAt([report, ...state.reports.filter((item) => item.id !== report.id)]),
+        loading: false,
+      }));
+    } catch (error) {
+      set({ loading: false, error: error instanceof Error ? error.message : '个人报表加载失败' });
     }
   },
 

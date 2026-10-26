@@ -5,6 +5,14 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
+// 持久 slot 测试会保存 session map，必须在加载 daemon 配置前隔离用户目录。
+const originalHomedir = os.homedir;
+const testHome = fs.mkdtempSync(path.join(os.tmpdir(), 'di-agent-daemon-tests-'));
+os.homedir = () => testHome;
+test.after(() => {
+  os.homedir = originalHomedir;
+  fs.rmSync(testHome, { recursive: true, force: true });
+});
 const {
   DEFAULT_AGENT_TIMEOUT_MS,
   commandForTask,
@@ -12,6 +20,7 @@ const {
   detectCapabilities,
   daemonConn,
   dispatchToPersistentSlot,
+  dispatchWsMessage,
   ensureDiAgentCodexMcpConfig,
   updateDiAgentCodexTaskContext,
   ensureGitRepoForTask,
@@ -24,6 +33,7 @@ const {
   readMcpRuntimeContext,
   resolveAllowedTools,
   resolveAgentTimeoutMs,
+  runProcess,
   runtimeAgentKey,
   runningAgents,
   scanAgents,
@@ -100,9 +110,11 @@ test('commandForTask asks an adapter for the selected exact runtime variant', ()
 
 test('governed report hooks are built in for existing agents', async () => {
   const names = MCP_TOOLS.map((tool) => tool.name);
-  for (const name of ['discover_report_data', 'query_report_data', 'save_personal_report']) {
+  for (const name of ['discover_report_data', 'get_report_template', 'query_report_data', 'save_personal_report']) {
     assert.equal(names.includes(name), true, `${name} should be registered`);
   }
+  assert.deepEqual(MCP_TOOLS.find((tool) => tool.name === 'query_report_data').inputSchema.properties.prepared_view.enum, ['v12_dashboard']);
+  assert.equal(MCP_TOOLS.find((tool) => tool.name === 'save_personal_report').inputSchema.properties.document.properties.sections.items.properties.type.enum.includes('v12_dashboard'), true);
   const allowed = await resolveAllowedTools({
     agentId: 'agent-1',
     allowedTools: null,
@@ -110,7 +122,7 @@ test('governed report hooks are built in for existing agents', async () => {
   });
   assert.deepEqual(
     allowed.filter((name) => name.includes('report')),
-    ['discover_report_data', 'query_report_data', 'save_personal_report'],
+    ['discover_report_data', 'get_report_template', 'query_report_data', 'save_personal_report'],
   );
 });
 
@@ -139,17 +151,24 @@ test('personal report save requires a real query proof and emits a report card',
     /必须先在本轮调用 query_report_data/,
   );
   await queryTool.run({ source_id: 'source-1', fields: [{ name: 'duid', aggregation: 'COUNT DISTINCT' }] }, ctx);
+  await assert.rejects(
+    () => saveTool.run({ title: '报表', data_source_id: 'source-1', query_id: 'query-1', document: { sections: [{ id: 'trend', type: 'chart', query_id: 'other-query' }] } }, ctx),
+    /缺少本轮同数据源的真实查询凭证/,
+  );
   const saved = await saveTool.run({
     title: '价敏用户概览',
     description: '真实查询生成',
     data_source_id: 'source-1',
     query_id: 'query-1',
-    document: { sections: [{ id: 'users', type: 'metric', data: { value: 10 } }] },
+    document: { template_id: 'template-1', sections: [{ id: 'users', type: 'metrics', title: '用户概览', metrics: [{ field: 'users', label: '用户数' }] }] },
   }, ctx);
 
   assert.equal(saved.id, 'report-1');
-  assert.equal(calls.at(-1).body.provenance.query_id, 'query-1');
+  assert.equal(calls.at(-1).body.query_id, 'query-1');
   assert.equal(calls.at(-1).body.conversation_id, 'conv-1');
+  assert.equal(calls.at(-1).body.document.sections[0].metrics[0].field, 'users');
+  assert.equal('provenance' in calls.at(-1).body, false);
+  assert.equal('query' in calls.at(-1).body, false);
   assert.deepEqual(cards, [{
     type: 'personal_report',
     id: 'personal-report-report-1',
@@ -194,12 +213,22 @@ test('Skill deployment validates manifest, is atomic, and never overwrites', () 
   }
 });
 
-test('Agent task timeout defaults to 30 minutes and accepts a positive env override', () => {
+test('Agent task timeout preserves 30 minute production default and positive override', () => {
   assert.equal(DEFAULT_AGENT_TIMEOUT_MS, 1800000);
   assert.equal(resolveAgentTimeoutMs(undefined), 1800000);
   assert.equal(resolveAgentTimeoutMs('2400000'), 2400000);
-  assert.equal(resolveAgentTimeoutMs('0'), 1800000);
+  assert.equal(resolveAgentTimeoutMs('0'), 0);
   assert.equal(resolveAgentTimeoutMs('invalid'), 1800000);
+});
+
+test('one-shot Agent process can finish after the zero-timeout tick', async () => {
+  const result = await runProcess(process.execPath, ['-e', "setTimeout(() => process.stdout.write('late'), 35)"], null);
+  assert.equal(result.stdout, 'late');
+});
+
+test('one-shot Agent process can finish after the zero-timeout tick', async () => {
+  const result = await runProcess(process.execPath, ['-e', "setTimeout(() => process.stdout.write('late'), 35)"], null);
+  assert.equal(result.stdout, 'late');
 });
 
 test('persistent runtime slots are isolated by conversation', () => {
@@ -289,6 +318,47 @@ test('persistent slot is rebuilt when the runtime config fingerprint changes', a
   }
 });
 
+test('retired native runtime is evicted before a queued task resumes its saved session', async () => {
+  const originals = cliTools.allCliTools();
+  const key = runtimeAgentKey('recovery-agent', 'recovery-conv');
+  const session = '55555555-5555-4555-8555-555555555555';
+  const spawns = [];
+  const children = [];
+  let closed = 0;
+  try {
+    cliTools.registerCliTool({ cliTool: 'recovery-test', name: 'Recovery', defaultCapabilities: [],
+      spawnPersistent(context) {
+        spawns.push(context);
+        const child = new EventEmitter();
+        child.pid = 999999; child.exitCode = null; children.push(child);
+        const first = spawns.length === 1;
+        return { child, sessionId: session, ready: Promise.resolve(), close: () => { closed++; },
+          sendPrompt: async () => first
+            ? { error: 'browser stalled', runtimeRetired: true }
+            : { result: 'recovered' },
+        };
+      },
+    });
+    const dispatch = () => dispatchToPersistentSlot(null, 'recovery-agent', 'recovery-conv', 'u', 'test', '',
+      { taskId: 'recovery-task' }, 'recovery-test');
+    const first = dispatch();
+    const retry = dispatch();
+    await assert.rejects(first, /browser stalled/);
+    assert.equal(await retry, 'recovered');
+    assert.equal(closed, 1);
+    assert.equal(spawns.length, 2);
+    assert.equal(spawns[1].resume, true);
+    assert.equal(spawns[1].sessionId, session);
+    children[0].emit('close', 0);
+    assert.equal(runningAgents.get(key).process, children[1]);
+  } finally {
+    runningAgents.delete(key);
+    conversationSessions.delete('recovery-agent:recovery-conv');
+    cliTools.clearCliTools();
+    for (const spec of originals) cliTools.registerCliTool(spec);
+  }
+});
+
 test('persistent slot serializes concurrent turns and keeps stream callbacks task-local', async () => {
   const originalSpecs = cliTools.allCliTools();
   runningAgents.clear();
@@ -343,6 +413,56 @@ test('persistent slot serializes concurrent turns and keeps stream callbacks tas
     conversationSessions.delete('agent-serialized:conv-serialized');
     cliTools.clearCliTools();
     for (const spec of originalSpecs) cliTools.registerCliTool(spec);
+  }
+});
+
+test('steering WebSocket keeps the active task stream while another task is queued', async () => {
+  const originals = cliTools.allCliTools();
+  const key = runtimeAgentKey('steer-agent', 'steer-conv');
+  const pending = [];
+  const observed = [];
+  const makeContext = taskId => ({ taskId, agentId: 'steer-agent', conversationId: 'steer-conv', userId: 'steer-user' });
+  const request = (taskId, prompt) => new Promise(resolve => {
+    const ws = { readyState: 1, send: raw => resolve(JSON.parse(raw)) };
+    dispatchWsMessage(ws, { type: 'task.steer', data: {
+      request_id: `${taskId}-${prompt}`, task_id: taskId, agent_id: 'steer-agent',
+      conversation_id: 'steer-conv', user_id: 'steer-user', prompt,
+    } });
+  });
+  try {
+    cliTools.registerCliTool({ cliTool: 'steer-slot-test', name: 'Steer Test', defaultCapabilities: [],
+      spawnPersistent: ({ eventRef }) => {
+        const child = new EventEmitter();
+        child.pid = 15; child.exitCode = null;
+        return { child, sessionId: '66666666-6666-4666-8666-666666666666', ready: Promise.resolve(),
+          sendPrompt: prompt => new Promise(resolve => { pending.push(() => resolve({ result: prompt })); }),
+          steerPrompt: async prompt => { eventRef.current?.({ text: prompt }); return { status: 'accepted' }; },
+        };
+      },
+    });
+    const first = dispatchToPersistentSlot(null, 'steer-agent', 'steer-conv', 'steer-user', 'first', '',
+      makeContext('steer-first'), 'steer-slot-test', event => observed.push(`first:${event.text}`));
+    const second = dispatchToPersistentSlot(null, 'steer-agent', 'steer-conv', 'steer-user', 'second', '',
+      makeContext('steer-second'), 'steer-slot-test', event => observed.push(`second:${event.text}`));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal((await request('steer-second', 'too-early')).data.status, 'unavailable');
+    assert.deepEqual(await request('steer-first', 'supplement'), {
+      type: 'task.steer.result', data: { request_id: 'steer-first-supplement', task_id: 'steer-first', status: 'accepted' },
+    });
+    pending.shift()();
+    assert.equal(await first, 'first');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal((await request('steer-first', 'too-late')).data.status, 'unavailable');
+    assert.equal((await request('steer-second', 'supplement')).data.status, 'accepted');
+    pending.shift()();
+    assert.equal(await second, 'second');
+    assert.equal((await request('steer-second', 'finished')).data.status, 'unavailable');
+    assert.deepEqual(observed, ['first:supplement', 'second:supplement']);
+  } finally {
+    runningAgents.delete(key);
+    conversationSessions.delete(key);
+    cliTools.clearCliTools();
+    for (const spec of originals) cliTools.registerCliTool(spec);
   }
 });
 

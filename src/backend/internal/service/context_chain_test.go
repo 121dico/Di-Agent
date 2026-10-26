@@ -402,3 +402,13 @@ func TestBuildAgentConfigTextKeepsFullReportManualOutOfUnrelatedTasks(t *testing
 		t.Fatalf("unrelated task should retain the compact report capability reminder")
 	}
 }
+
+func TestBuildAgentConfigTextRoutesExplicitHiveReadabilityToPersonalProbe(t *testing.T) {
+	got := BuildAgentConfigText(&model.Agent{ID: "agent-1", Name: "助手", CLITool: "codex"}, "", "看看我能否读取 Hive 表的真实数据")
+	if !strings.Contains(got, "probe_hive_data") || !strings.Contains(got, "get_internal_source_guide") {
+		t.Fatal("explicit Hive permission check should get the separate personal Hive probe flow")
+	}
+	if strings.Contains(got, "第一步必须立即调用 discover_report_data") {
+		t.Fatal("Hive readability check must not be redirected to governed report sources")
+	}
+}

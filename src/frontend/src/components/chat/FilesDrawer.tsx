@@ -47,6 +47,8 @@ interface FilesDrawerProps {
   agentId: string;
   /** 浏览根目录（来自 project 卡片的 workDir，路径生产与文件浏览的唯一契约）。 */
   workDir: string;
+  /** 从消息文件引用打开时直接选择此文件，不要求再点目录树。 */
+  initialPath?: string;
   open: boolean;
   onClose: () => void;
 }
@@ -83,7 +85,7 @@ type PanelMode = 'view' | 'history';
  *   - history：git 历史对比（选两个 commit，用 DiffView MergeView 渲染）
  * 数据流：browseTree → listDir（逐层展开）→ readFile（查看）/ fileHistory+fileShow（历史）。
  */
-export const FilesDrawer: React.FC<FilesDrawerProps> = ({ agentId, workDir, open, onClose }) => {
+export const FilesDrawer: React.FC<FilesDrawerProps> = ({ agentId, workDir, initialPath, open, onClose }) => {
   const [tree, setTree] = useState<TreeResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [treeData, setTreeData] = useState<TreeDataNode[]>([]);
@@ -91,6 +93,8 @@ export const FilesDrawer: React.FC<FilesDrawerProps> = ({ agentId, workDir, open
   const [selectedAbsPath, setSelectedAbsPath] = useState<string>('');
   const [fileContent, setFileContent] = useState<ReadResult | null>(null);
   const [fileLoading, setFileLoading] = useState(false);
+  const [fileError, setFileError] = useState('');
+  const fileRequestId = useRef(0);
   const [changedCollapsed, setChangedCollapsed] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
@@ -145,10 +149,11 @@ export const FilesDrawer: React.FC<FilesDrawerProps> = ({ agentId, workDir, open
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+    return () => { cancelled = true; };
   }, [open, agentId, workDir]);
 
   useEffect(() => {
-    loadTree();
+    return loadTree();
   }, [loadTree]);
 
   // 从 FileEntry[] 构造 antd Tree 节点
@@ -210,20 +215,33 @@ export const FilesDrawer: React.FC<FilesDrawerProps> = ({ agentId, workDir, open
   const onSelectFile = useCallback(
     (absPath: string) => {
       if (!absPath) return;
+      const requestId = ++fileRequestId.current;
       setSelectedAbsPath(absPath);
       setPanelMode('view');
       setFileViewMode(defaultFileViewMode(absPath));
       setFileContent(null);
+      setFileError('');
       setFileLoading(true);
       readFile(agentId, workDir, absPath)
-        .then((result) => setFileContent(result))
-        .catch((err) => {
-          antMessage.error(err instanceof ApiError ? err.message : '读取文件失败');
+        .then((result) => {
+          if (requestId === fileRequestId.current) setFileContent(result);
         })
-        .finally(() => setFileLoading(false));
+        .catch((err) => {
+          if (requestId === fileRequestId.current) {
+            setFileError(err instanceof ApiError ? err.message : '读取文件失败，请确认生成文件的电脑在线且文件仍存在');
+          }
+        })
+        .finally(() => {
+          if (requestId === fileRequestId.current) setFileLoading(false);
+        });
     },
     [agentId, workDir],
   );
+
+  useEffect(() => {
+    if (open && initialPath) onSelectFile(initialPath);
+    return () => { fileRequestId.current += 1; };
+  }, [open, initialPath, onSelectFile]);
 
   const handleTreeSelect = useCallback(
     (_keys: React.Key[], info: { node: TreeDataNode }) => {
@@ -329,7 +347,8 @@ export const FilesDrawer: React.FC<FilesDrawerProps> = ({ agentId, workDir, open
   }, [agentId, workDir, tree]);
 
   const selectedRelPath = useMemo(() => {
-    if (!tree || !selectedAbsPath) return '';
+    if (!selectedAbsPath) return '';
+    if (!tree) return selectedAbsPath;
     const rel = selectedAbsPath.replace(`${tree.repoRoot}/`, '');
     return rel || selectedAbsPath;
   }, [tree, selectedAbsPath]);
@@ -342,6 +361,9 @@ export const FilesDrawer: React.FC<FilesDrawerProps> = ({ agentId, workDir, open
   const renderFileContent = () => {
     if (fileLoading) {
       return <div className={styles.hintArea}><Spin /> 读取中…</div>;
+    }
+    if (fileError) {
+      return <div className={styles.hintArea} role="alert">{fileError}<Button onClick={() => onSelectFile(selectedAbsPath)}>重试</Button></div>;
     }
     if (!fileContent) {
       return <div className={styles.hintArea}><FileOutlined /> 选择左侧文件查看内容</div>;

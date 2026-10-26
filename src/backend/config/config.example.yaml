@@ -10,6 +10,17 @@
   tls_port: 8443
   tls_cert: certs/server.crt
   tls_key: certs/server.key
+# Di Agent 自己的 Boss 网关未申请完成前保持关闭。
+# 密钥只通过 DI_AGENT_BOSS_ORIGIN_SECRET 注入（至少 32 字符）。
+boss:
+  enabled: false
+  allow_local_login: true    # 试点保留本地账号登录/注册；false 为公司独占模式
+  login_url: ""
+  identity_header: "Username"
+  trusted_proxy_cidrs: []
+  allowed_usernames: []
+  session_ttl_minutes: 60
+
 database:
   host: localhost
   port: 5432

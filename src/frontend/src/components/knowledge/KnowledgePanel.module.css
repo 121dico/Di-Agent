@@ -574,3 +574,30 @@
   border-color: rgba(255, 255, 255, 0.15);
   color: var(--color-text);
 }
+
+/* 数据源入口（从报表模块迁移） */
+.dataSourceEntry {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dataSourceEntry:hover {
+  background: rgba(15, 118, 110, 0.08);
+  color: var(--color-primary);
+}
+
+.dataSourceEntry svg {
+  width: 14px;
+  height: 14px;
+}

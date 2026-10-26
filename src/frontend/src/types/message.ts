@@ -67,6 +67,13 @@ export interface MessageBlock extends ToolTraceMetadata {
 /** 消息生命周期状态——空值视为 complete（向后兼容旧消息）。 */
 export type MessageStatus = 'streaming' | 'complete' | 'error' | 'canceled';
 
+export interface MessageDelivery {
+  status: 'sending' | 'steered' | 'queued' | 'running' | 'unconfirmed';
+  agent_id: string;
+  task_id?: string;
+  updated_at: number;
+}
+
 export interface Message {
   id: string;
   conversation_id: string;
@@ -134,6 +141,7 @@ export interface SendMessageResult {
 }
 
 export interface MessageArtifacts {
+  delivery?: MessageDelivery;
   agent_id?: string;
   agent_name?: string;
   cli_tool?: string;
@@ -142,7 +150,7 @@ export interface MessageArtifacts {
 }
 
 export interface StreamMessage {
-  type: 'message.streaming' | 'message.complete' | 'agent.status' | 'user.typing_start' | 'user.typing_stop' | 'agent.typing_start' | 'agent.typing_stop' | 'message.recall' | 'task.changed' | 'conversation.role_changed' | 'agent.approval_required' | 'agent.approval_resolved' | 'agent.approval_snapshot' | 'error';
+  type: 'message.streaming' | 'message.complete' | 'message.delivery' | 'agent.status' | 'user.typing_start' | 'user.typing_stop' | 'agent.typing_start' | 'agent.typing_stop' | 'message.recall' | 'task.changed' | 'conversation.role_changed' | 'agent.approval_required' | 'agent.approval_resolved' | 'agent.approval_snapshot' | 'error';
   data: {
     conversationId?: string;
     conversation_id?: string;
@@ -152,6 +160,7 @@ export interface StreamMessage {
     content?: string;
     role?: MessageRole;
     artifacts_json?: string | null;
+    delivery?: MessageDelivery;
     created_at?: string;
     sender_id?: string;
     username?: string;
@@ -175,6 +184,7 @@ export interface StreamMessage {
     /** PR3：message.streaming 携带的 agent_name——后端 daemonHub.taskAgents 反查后透传，
      *  让前端 placeholder 在流式期间就能显示真实 agent name（非"助手"fallback）。 */
     agent_name?: string;
+    cli_tool?: string;
     /** 交互式卡片——message.complete 推送时携带，免去刷新页面即可渲染 */
     cards_json?: string;
     cards?: import('./card').InteractiveCard[];

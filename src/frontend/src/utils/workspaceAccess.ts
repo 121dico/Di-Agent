@@ -1,4 +1,4 @@
-const ADMIN_ONLY_WORKSPACE_ROOTS = ['/tasks', '/knowledge', '/skills'] as const;
+const ADMIN_ONLY_WORKSPACE_ROOTS = ['/tasks', '/skills'] as const;
 
 export function canAccessWorkspacePath(pathname: string, isAdmin: boolean): boolean {
   if (isAdmin) return true;

@@ -1,14 +1,25 @@
 import React from 'react';
 import { BarChart3, ChevronRight } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type { CardProps, PersonalReportCard as PersonalReportCardData } from '@/types/card';
 import { usePersonalReportStore } from '@/store/personalReportStore';
 import styles from './PersonalReportCard.module.css';
 
 export const PersonalReportCard: React.FC<CardProps<PersonalReportCardData>> = ({ card }) => {
   const openWorkspace = usePersonalReportStore((state) => state.openWorkspace);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const openReport = () => {
+    if (location.pathname === '/reports') {
+      navigate(`/reports?personalReport=${encodeURIComponent(card.report_id)}`);
+      return;
+    }
+    void openWorkspace(card.report_id);
+  };
 
   return (
-    <button className={styles.card} type="button" onClick={() => void openWorkspace(card.report_id)}>
+    <button className={styles.card} type="button" onClick={openReport}>
       <span className={styles.icon}><BarChart3 size={18} /></span>
       <span className={styles.content}>
         <strong>{card.title || '个人报表已生成'}</strong>

@@ -1,7 +1,39 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import { splitByCardPlaceholder } from './MessageBubble';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { MessageBubble, splitByCardPlaceholder } from './MessageBubble';
 import type { InteractiveCard } from '@/types/card';
+import type { Message } from '@/types/message';
+
+it('renders the persisted generated-image reference using its uploaded same-message artifact', () => {
+  const message: Message = {
+    id: 'duck-reply', conversation_id: 'duck-chat', role: 'assistant',
+    content: '给你一只小鸭子 🐤\n[图片：池塘边的小鸭子]', artifacts_json: null,
+    created_at: '2026-10-13T00:00:00Z', status: 'complete',
+    blocks_json: JSON.stringify([{ index: 0, kind: 'text', text: '给你一只小鸭子 🐤\n![池塘边的小鸭子](</var/folders/example/image-outputs/little-duck.png>)' }]),
+    artifacts: [{ type: 'image', version: 1, filename: 'little-duck.png', title: '池塘边的小鸭子', url: '/api/uploads/originals/duck.png' }],
+  };
+  const container = document.createElement('div');
+  container.innerHTML = renderToStaticMarkup(React.createElement(MessageBubble, { message }));
+  const inlineImage = Array.from(container.querySelectorAll('img')).find(image => image.alt === '池塘边的小鸭子')!;
+  expect(inlineImage?.getAttribute('src')).toContain('/api/uploads/originals/duck.png');
+  expect(inlineImage?.closest('button')?.getAttribute('aria-label')).toBe('预览图片 池塘边的小鸭子');
+  expect(container.innerHTML).not.toContain('/var/folders/');
+});
+
+it('renders a visible waiting state before a worker emits its first token', () => {
+  const message: Message = {
+    id: 'worker-message', conversation_id: 'group', role: 'assistant',
+    content: '', artifacts_json: '{"agent_name":"Codex","cli_tool":"codex"}',
+    created_at: '2026-09-23T10:00:00Z', status: 'streaming', blocks: [],
+    username: 'Codex', task_id: 'worker-task',
+  };
+  const html = renderToStaticMarkup(React.createElement(MessageBubble, { message }));
+  expect(html).toContain('Codex');
+  expect(html).toContain('已接单，等待模型输出');
+  expect(html).toContain('role="status"');
+});
 
 describe('splitByCardPlaceholder', () => {
   it('case 1: 无占位符 + 有卡片 → unmatchedCards 是全部卡片，segments 只有一段 markdown', () => {

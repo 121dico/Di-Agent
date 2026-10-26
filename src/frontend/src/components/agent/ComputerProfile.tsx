@@ -23,6 +23,8 @@ import { ResourceChart } from './ResourceChart';
 import { AgentBaseCard } from './AgentBaseCard';
 import { AddedAgentCard } from './AddedAgentCard';
 import { copyText } from '@/utils/clipboard';
+import { computerDisplayName } from '@/utils/computerNames';
+import { useBrowserMachine } from '@/hooks/useBrowserMachine';
 import styles from './ComputerProfile.module.css';
 
 interface ComputerProfileProps {
@@ -76,6 +78,7 @@ export const ComputerProfile: React.FC<ComputerProfileProps> = ({
   const agents = useAgentStore((s) => s.agents);
   const candidates = useAgentStore((s) => s.candidates);
   const machineLoading = useAgentStore((s) => s.machineLoading);
+  const browserMachine = useBrowserMachine(machines, !machineLoading);
   const deleteDaemonMachine = useAgentStore((s) => s.deleteDaemonMachine);
   const refreshMachines = useAgentStore((s) => s.fetchDaemonMachines);
   const refreshCandidates = useAgentStore((s) => s.fetchAgentCandidates);
@@ -216,15 +219,15 @@ export const ComputerProfile: React.FC<ComputerProfileProps> = ({
           <Avatar size={44} className={styles.machineAvatar} icon={<DesktopOutlined />} />
           <div>
             <div className={styles.titleRow}>
-              <span className={styles.title}>{machine.name}</span>
+              <span className={styles.title}>{computerDisplayName(machine)}</span>
               <StatusBadge
                 status={machineStatusBadge(machine.status)}
                 label={machineStatusLabel(machine.status)}
                 size="md"
               />
-              <Tag color={machine.is_local ? 'blue' : undefined}>
-                {machine.is_local ? '本地' : '远程'}
-              </Tag>
+              {browserMachine.verified && browserMachine.label(machine) !== '待识别' && <Tag color={browserMachine.label(machine) === '本机' ? 'blue' : undefined}>
+                {browserMachine.label(machine)}
+              </Tag>}
             </div>
             <div className={styles.subtitle}>
               {inferOS(machine)} · {machine.machine_id || '未上报主机名'}
@@ -282,7 +285,6 @@ export const ComputerProfile: React.FC<ComputerProfileProps> = ({
         <SectionHeader
           icon={<DesktopOutlined />}
           title="电脑信息"
-          description="运行环境与连接状态"
         />
         <div className={styles.infoGrid}>
           <div className={styles.infoItem}>
@@ -411,7 +413,7 @@ export const ComputerProfile: React.FC<ComputerProfileProps> = ({
 
       <AgentCreateModal
         open={createOpen}
-        machineName={machine.name}
+        machineName={computerDisplayName(machine)}
         candidates={machineCandidates}
         onClose={() => setCreateOpen(false)}
         onCreate={handleCreateAgent}

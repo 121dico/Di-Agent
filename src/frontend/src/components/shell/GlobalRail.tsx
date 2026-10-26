@@ -3,10 +3,9 @@ import { Avatar, Tooltip } from 'antd';
 import {
   BarChart3,
   Bot,
-  Code2,
   Database,
-  LayoutGrid,
   LogOut,
+  Megaphone,
   MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
@@ -37,10 +36,9 @@ const navItems = [
   { key: 'chat', label: '消息', path: '/', icon: <MessageSquare /> },
   { key: 'contacts', label: '联系人', path: '/contacts', icon: <Users /> },
   { key: 'agents', label: '智能体', path: '/agents', icon: <Bot /> },
-  { key: 'tasks', label: '任务', path: '/tasks', icon: <LayoutGrid /> },
   { key: 'reports', label: '报表', path: '/reports', icon: <BarChart3 /> },
-  { key: 'knowledge', label: '知识', path: '/knowledge', icon: <Database /> },
-  { key: 'skills', label: '技能', path: '/skills', icon: <Code2 /> },
+  { key: 'delivery-analysis', label: '投放分析', path: '/delivery-analysis', icon: <Megaphone /> },
+  { key: 'knowledge', label: '数据', path: '/knowledge', icon: <Database /> },
 ] as const;
 
 const statusLabel: Record<WsStatus, string> = {
@@ -54,8 +52,10 @@ const RAIL_TRANSITION_FALLBACK_MS = 260;
 
 function readRailCollapsed(): boolean {
   try {
-    return typeof window !== 'undefined'
-      && window.localStorage.getItem(RAIL_COLLAPSED_STORAGE_KEY) === '1';
+    if (typeof window === 'undefined') return false;
+    const saved = window.localStorage.getItem(RAIL_COLLAPSED_STORAGE_KEY);
+    if (saved !== null) return saved === '1';
+    return window.matchMedia('(max-width: 760px)').matches;
   } catch {
     return false;
   }
@@ -204,11 +204,6 @@ export const GlobalRail: React.FC<GlobalRailProps> = ({
                 >
                   <span className={styles.navIcon}>{item.icon}</span>
                   <span className={styles.navLabel} aria-hidden={railCollapsed}>{item.label}</span>
-                  {item.key === 'chat' && unreadCount > 0 && (
-                    <span className={styles.badge} aria-hidden={railCollapsed}>
-                      {unreadCount > 99 ? '99+' : unreadCount}
-                    </span>
-                  )}
                 </button>
               </Tooltip>
             );

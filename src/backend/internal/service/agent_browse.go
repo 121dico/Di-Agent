@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/121dico/Di-Agent/src/backend/pkg/ws"
-	"github.com/google/uuid"
 )
 
 // daemonBrowseFilesTool 是 daemon 端 executeTask 的内置 cli_tool 分支，
@@ -101,7 +100,13 @@ func (s *AgentService) BrowseAgentFiles(ctx context.Context, userID, agentID str
 		return nil, fmt.Errorf("marshal browse payload: %w", err)
 	}
 
-	taskID := uuid.NewString()
+	// Completion is accepted only for a persisted task owned by this machine.
+	// A promise alone cannot establish that ownership.
+	task, err := s.repo.CreateDaemonTask(ctx, userID, "", agentID, *agent.MachineID, daemonBrowseFilesTool, agent.RuntimeVariant, string(payload), "")
+	if err != nil {
+		return nil, fmt.Errorf("create browse task: %w", err)
+	}
+	taskID := task.ID
 	ch := s.daemonHub.RegisterTaskPromise(taskID)
 	defer s.daemonHub.RemoveTaskPromise(taskID)
 
@@ -114,6 +119,7 @@ func (s *AgentService) BrowseAgentFiles(ctx context.Context, userID, agentID str
 			"prompt":          string(payload),
 			"agent_id":        agentID,
 			"conversation_id": "",
+			"user_id":         userID,
 		},
 	}); err != nil {
 		return nil, fmt.Errorf("send browse task: %w", err)

@@ -23,6 +23,7 @@ export interface ReportDataSource {
   id: string;
   name: string;
   description: string;
+  folder?: string;
   endpoint: string;
   api_name: string;
   app_key_env: string;
@@ -51,6 +52,7 @@ export interface ReportDataSourceContract {
   source_id: string;
   name: string;
   description: string;
+  folder?: string;
   endpoint: string;
   api_name: string;
   app_key_env: string;

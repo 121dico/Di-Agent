@@ -13,6 +13,7 @@ import {
   DeleteOutlined,
   FileOutlined,
   UploadOutlined,
+  CloudServerOutlined,
   DatabaseOutlined,
   LockOutlined,
   GlobalOutlined,
@@ -67,6 +68,7 @@ interface KnowledgePanelProps {
   selectedFileId?: string | null;
   selectedKbId?: string | null;
   onRAGSelect?: (knowledgeBase: KnowledgeBase) => void;
+  onOpenDataSources?: () => void;
 }
 
 const KnowledgePanel: React.FC<KnowledgePanelProps> = ({
@@ -74,6 +76,7 @@ const KnowledgePanel: React.FC<KnowledgePanelProps> = ({
   selectedFileId,
   selectedKbId,
   onRAGSelect,
+  onOpenDataSources,
 }) => {
   const knowledgeBases = useKnowledgeStore((s) => s.knowledgeBases);
   const loading = useKnowledgeStore((s) => s.loading);
@@ -194,8 +197,14 @@ const KnowledgePanel: React.FC<KnowledgePanelProps> = ({
     return (
       <>
         <div className={styles.header}>
-          <span className={styles.headerTitle}>知识库</span>
+          <span className={styles.headerTitle}>数据</span>
           <div className={styles.headerTools}>
+            {onOpenDataSources && (
+              <button type="button" className={styles.dataSourceEntry} onClick={onOpenDataSources} aria-label="数据源">
+                <CloudServerOutlined />
+                <span>数据源</span>
+              </button>
+            )}
             <Button type="text" icon={<ReloadOutlined />} aria-label="刷新" onClick={() => fetchKnowledgeBases(true)} />
             <Button type="text" icon={<PlusOutlined />} aria-label="新建" onClick={openCreateModal} />
           </div>
@@ -218,8 +227,14 @@ const KnowledgePanel: React.FC<KnowledgePanelProps> = ({
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <span className={styles.headerTitle}>知识库</span>
+        <span className={styles.headerTitle}>数据</span>
         <div className={styles.headerTools}>
+          {onOpenDataSources && (
+            <button type="button" className={styles.dataSourceEntry} onClick={onOpenDataSources} aria-label="数据源">
+              <CloudServerOutlined />
+              <span>数据源</span>
+            </button>
+          )}
           <Button type="text" icon={<ReloadOutlined />} aria-label="刷新" onClick={() => fetchKnowledgeBases(true)} />
           <Button type="text" icon={<PlusOutlined />} aria-label="新建" onClick={openCreateModal} />
         </div>

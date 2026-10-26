@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeftOutlined } from '@ant-design/icons';
 import { Alert, Button, Empty, Select, Spin } from 'antd';
 import { AgentSkillsPanel } from '@/components/agent/AgentSkillsPanel';
 import { getAgentRuntimeIdentity } from '@/components/agent/agentPresentation';
@@ -7,6 +9,7 @@ import { useAgentStore } from '@/store/agentStore';
 import styles from './SkillsView.module.css';
 
 const SkillsView: React.FC = () => {
+  const navigate = useNavigate();
   const selectedAgentId = useUIStore((s) => s.selectedAgentId);
   const setSelectedAgent = useUIStore((s) => s.setSelectedAgent);
   const agents = useAgentStore((s) => s.agents);
@@ -24,6 +27,7 @@ const SkillsView: React.FC = () => {
     <main className={styles.container}>
       <header className={styles.header}>
         <h1>Skills</h1>
+        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/agents')}>返回智能体</Button>
         <Select
           aria-label="选择 Agent"
           className={styles.selector}

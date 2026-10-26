@@ -130,6 +130,10 @@ test_normal_install_uses_isolated_paths() {
   assert_file "$install_dir/node_modules/di-agent-daemon/bin/di-agent-daemon.js"
   assert_file "$plist"
   assert_file "$install_dir/start-daemon.sh"
+  grep -q '100%.*连接完成' "$case_root/output.log" || fail_test 'confirmed connection should reach 100%'
+  if grep -q '下载 daemon 离线包\|Node 就绪\|sk_test_placeholder' "$case_root/output.log"; then
+    fail_test 'normal progress should not expose package details or credentials'
+  fi
 }
 
 test_existing_daemon_symlink_is_preserved_and_replaced() {
@@ -292,6 +296,9 @@ test_stale_ready_log_cannot_commit_a_failed_migration() {
   grep -q 'stage=daemon.ready' "$legacy_dir/daemon.log" || fail_test 'rollback must restore the previous log'
   [ ! -e "$install_dir" ] || fail_test 'failed health check must restore the retired home'
   assert_file "$legacy_plist"
+  if grep -q '100%' "$case_root/output.log"; then
+    fail_test 'failed connection must never report 100%'
+  fi
 }
 
 test_failed_retired_migration_rolls_back_the_original_home() {

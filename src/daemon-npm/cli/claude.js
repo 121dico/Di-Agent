@@ -531,7 +531,7 @@ function createClaudeCliSpec(ctx) {
         });
         child.stdin.write(msg + '\n');
         clearResultTimer();
-        resultTimer = setTimeout(() => {
+        resultTimer = daemonCtx.EXEC_TIMEOUT_MS > 0 ? setTimeout(() => {
           if (resultResolver === resolve) {
             resultResolver = null;
             resultTimer = null;
@@ -543,8 +543,8 @@ function createClaudeCliSpec(ctx) {
             });
             reject(new Error(`Agent task timed out (${Math.round(daemonCtx.EXEC_TIMEOUT_MS / 1000)}s)`));
           }
-        }, daemonCtx.EXEC_TIMEOUT_MS);
-        resultTimer.unref();
+        }, daemonCtx.EXEC_TIMEOUT_MS) : null;
+        if (resultTimer) resultTimer.unref();
       });
 
       const modelControls = createClaudeModelControls(child, message => {

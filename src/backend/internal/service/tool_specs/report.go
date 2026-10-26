@@ -15,6 +15,17 @@ func DiscoverReportData() port.MCPToolSpec {
 	)
 }
 
+func GetReportTemplate() port.MCPToolSpec {
+	return newRouteSpec(
+		"get_report_template",
+		"查看默认报表模板",
+		"report",
+		"生成报表前读取默认 template-1 的 V1.2 图表样式契约。模型可选择真实数据、图表类型和字段，曲线/柱状/饼环图的视觉样式由平台固定。",
+		noParams(),
+		&port.RouteInfo{Method: "GET", Path: "/mcp/report-templates/default"},
+	)
+}
+
 func QueryReportData() port.MCPToolSpec {
 	fieldItem := map[string]interface{}{
 		"type": "object",
@@ -37,7 +48,8 @@ func QueryReportData() port.MCPToolSpec {
 		"additionalProperties": false,
 	}
 	inputSchema := schema(map[string]map[string]interface{}{
-		"source_id": strProp("discover_report_data 返回的数据源 ID"),
+		"source_id":     strProp("discover_report_data 返回的数据源 ID"),
+		"prepared_view": enumProp("V1.2 亿级源使用已核验的预计算报表快照；fields 传 dt 占位", "v12_dashboard"),
 		"fields": {
 			"type": "array", "items": fieldItem, "minItems": 1, "maxItems": 30,
 			"description": "选择与聚合字段",
@@ -57,33 +69,65 @@ func QueryReportData() port.MCPToolSpec {
 		"query_report_data",
 		"查询报表数据",
 		"report",
-		"按 discover_report_data 返回的字段契约执行真实数据查询。禁止猜测字段或编造结果；每页最多返回 100 行。",
+		"按字段契约执行真实查询；V1.2 亿级源生成同版报表时设置 prepared_view=v12_dashboard，读取公共报表已核验的预计算快照，避免即时全表去重。返回的 query_id 是当前用户查询凭证。",
 		inputSchema,
-		&port.RouteInfo{Method: "POST", Path: "/mcp/report-data/query", Required: []string{"source_id", "fields"}, Optional: []string{"filters", "group_by", "order_by", "page", "page_size"}},
+		&port.RouteInfo{Method: "POST", Path: "/mcp/report-data/query", Required: []string{"source_id", "fields"}, Optional: []string{"prepared_view", "filters", "group_by", "order_by", "page", "page_size"}},
 	)
 }
 
 func SavePersonalReport() port.MCPToolSpec {
+	fieldBinding := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"field":  strProp("query_report_data 返回的结果列名或别名"),
+			"label":  strProp("图表中的中文名称"),
+			"suffix": strProp("指标单位，可选"),
+		},
+		"required":             []string{"field", "label"},
+		"additionalProperties": false,
+	}
+	section := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"id":          strProp("板块稳定 ID，同一报表内唯一"),
+			"type":        enumProp("板块类型；v12_dashboard 必须单独引用预计算快照", "metrics", "chart", "table", "v12_dashboard"),
+			"title":       strProp("板块标题"),
+			"query_id":    strProp("可选；此板块使用的 query_report_data 查询凭证，不填使用顶层 query_id"),
+			"chart_type":  enumProp("chart 板块图形", "line", "bar", "donut"),
+			"x_field":     strProp("折线或柱图 X 轴结果列"),
+			"label_field": strProp("环图类别结果列"),
+			"value_field": strProp("环图数值结果列"),
+			"metrics":     map[string]interface{}{"type": "array", "items": fieldBinding},
+			"series":      map[string]interface{}{"type": "array", "items": fieldBinding},
+			"columns":     map[string]interface{}{"type": "array", "items": fieldBinding},
+		},
+		"required":             []string{"id", "type", "title"},
+		"additionalProperties": false,
+	}
 	documentProp := map[string]interface{}{
 		"type":        "object",
-		"description": "结构化报表文档；sections 可包含 metric、chart、table、insight、text，数据必须来自真实查询结果",
+		"description": "先调用 get_report_template。只提交图表绑定，不提交数值/HTML/CSS/颜色。平台按查询凭证装配真实行并用 V1.2 固定图表组件渲染。metrics 需 metrics；line/bar 需 x_field、series；donut 需 label_field、value_field；table 需 columns。",
+		"properties": map[string]interface{}{
+			"template_id": enumProp("默认 V1.2 展示模板", "template-1"),
+			"sections":    map[string]interface{}{"type": "array", "minItems": 1, "maxItems": 16, "items": section},
+		},
+		"required":             []string{"sections"},
+		"additionalProperties": false,
 	}
 	inputSchema := schema(map[string]map[string]interface{}{
 		"title":          strProp("报表标题"),
 		"description":    strProp("一句话摘要"),
 		"data_source_id": strProp("真实查询使用的数据源 ID"),
-		"query_id":       strProp("本轮 query_report_data 返回的 query_id"),
+		"query_id":       strProp("本轮 query_report_data 返回的当前用户查询凭证；必须被至少一个板块引用"),
 		"document":       documentProp,
-		"style_preset":   enumProp("报表风格", "business", "journal", "soft", "glass", "balanced"),
-		"style_prompt":   strProp("补充风格说明"),
 	}, "title", "data_source_id", "query_id", "document")
 	inputSchema["additionalProperties"] = false
 	return newRouteSpec(
 		"save_personal_report",
 		"保存个人报表",
 		"report",
-		"仅在 query_report_data 成功后调用，把真实查询生成的指标、图表、表格和 provenance 保存为当前用户个人报表，并在对话中显示可点击卡片。",
+		"仅在 query_report_data 成功后调用。Agent 选择 template-1 的指标、曲线/柱状/饼环图和表格绑定；视觉样式固定复用 V1.2。服务端从当前用户的查询凭证读取真实行并保存个人报表。不要传 data/rows、颜色或编造数字。",
 		inputSchema,
-		&port.RouteInfo{Method: "POST", Path: "/mcp/personal-reports", Required: []string{"title", "data_source_id", "query_id", "document"}, Optional: []string{"description", "style_preset", "style_prompt"}},
+		&port.RouteInfo{Method: "POST", Path: "/mcp/personal-reports", Required: []string{"title", "data_source_id", "query_id", "document"}, Optional: []string{"description"}},
 	)
 }

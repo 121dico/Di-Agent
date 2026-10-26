@@ -69,6 +69,10 @@ func Auth(cfg JWTConfig) gin.HandlerFunc {
 		c.Set("user_id", userID)
 		username, _ := claims["username"].(string)
 		c.Set("username", username)
+		provider, _ := claims["auth_provider"].(string)
+		subject, _ := claims["sub"].(string)
+		c.Set("auth_provider", provider)
+		c.Set("auth_subject", subject)
 
 		// scope 校验：若配置了 RequiredScope 则检查 token scope
 		scope, _ := claims["scope"].(string)

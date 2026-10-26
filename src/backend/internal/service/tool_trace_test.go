@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -25,6 +26,30 @@ func TestLocalSkillTraceRedactsBodyAcrossBatchesButKeepsPlatformOutput(t *testin
 	}
 	if safe[2].Output != "opted-in platform instructions" || safe[2].ToolKind == "skill" {
 		t.Fatal(safe[2])
+	}
+}
+
+func TestErrorTraceSanitizesLiveDiagnosticsWithoutChangingNormalEvents(t *testing.T) {
+	secret := "api_key=stream-secret"
+	normal := model.AgentEvent{Type: model.AgentEventTextDelta, Content: "正常正文保持不变"}
+	events := []model.AgentEvent{normal, {
+		Type: model.AgentEventError, Seq: 42, Message: "workspace routing discovery timed out\nAuthorization: Bearer stream-secret",
+		Content: secret, Text: secret, Reason: secret, Output: secret, Delta: secret, Input: json.RawMessage(`{"password":"stream-secret"}`), Result: map[string]string{"secret": "stream-secret"},
+		Adapter: secret, Tool: secret, ToolUseID: secret, ToolUseIDAlt: secret, ToolKind: secret, SkillName: secret, ServerName: secret, SourcePath: secret,
+	}}
+	safe := SanitizeToolTraceEvents(events, nil)
+	wire, _ := json.Marshal(safe)
+	if strings.Contains(string(wire), "stream-secret") {
+		t.Fatalf("live diagnostic credential escaped: %s", wire)
+	}
+	if !reflect.DeepEqual(safe[0], normal) {
+		t.Fatalf("normal text changed: %+v", safe[0])
+	}
+	if safe[1].Type != model.AgentEventError || safe[1].Seq != 42 || !strings.Contains(safe[1].Message, "workspace routing discovery timed out") {
+		t.Fatalf("error identity/reason lost: %+v", safe[1])
+	}
+	if !strings.Contains(events[1].Message, "stream-secret") {
+		t.Fatal("input events unexpectedly mutated")
 	}
 }
 

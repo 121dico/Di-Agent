@@ -231,8 +231,7 @@ type DispatchPlan struct {
 	//   - true：调用方走 streaming 管线（预创建 placeholder + FinalizeStreaming 切终态）。
 	//     Dispatch() 薄壳默认置 true（worker / 群聊 @mention 走这条，与单聊 createAgentReply
 	//     行为对齐）。
-	//   - false（零值）：跳过 streaming。runDaemonEdit（不落 message）/ handleOrchestratedDispatch
-	//     （自己落 dispatch message）走这条——这些调用方明确处理产物，创建 placeholder 反而会孤立。
+	//   - false（零值）：跳过 streaming。runDaemonEdit 不落 message，不能创建 placeholder。
 	//
 	// 仍要求 DispatcherDeps.Streaming.MsgRepo 非 nil（main.go SetStreamingDeps 注入）。
 	// 若 StreamingDeps 未注入，本字段被忽略（兼容旧测试装配）。
@@ -537,10 +536,9 @@ func (d *Dispatcher) dispatchPlanCore(
 	// 群聊流式接入（本任务）：预创建 streaming placeholder + 注册 task 映射。
 	// 流式仅在「调用方显式声明走 streaming 路径」时启用：
 	//   - Dispatch() 薄壳把 StreamingRequested 置 true → 启用流式（worker / 群聊 @mention 走这条）
-	//   - DispatchPlan() 注入自定义 ResultHandler 的调用方（runDaemonEdit /
-	//     handleOrchestratedDispatch）默认 StreamingRequested=false → 不启用流式，
-	//     避免创建孤立的 streaming placeholder（无人 FinalizeStreaming → 仅 watchdog 兜底），
-	//     且与调用方自己的产物落库形成双消息。
+	//   - runDaemonEdit 不落 message，保持 StreamingRequested=false。
+	//   - handleOrchestratedDispatch 在 ResultHandler 中复用 defaultMessageHandler
+	//     finalize 占位消息，开启 StreamingRequested=true。
 	//
 	// 同时要求 StreamingDeps.MsgRepo 非 nil（main.go 通过 SetStreamingDeps 注入）。
 	// 测试若直接构造 DispatcherDeps{} 不注入 Streaming，也保持向后兼容（无流式）。
@@ -569,19 +567,24 @@ func (d *Dispatcher) dispatchPlanCore(
 		}
 	}
 
-	finalizeErr := func(status string) {
+	finalizeErr := func(status, reason, content string) {
 		if !streamingEnabled || handle == nil {
 			return
 		}
-		if _, ferr := FinalizeStreamingPipeline(ctx, pipelineDeps, handle, FinalizeStreamingPipelineOptions{Status: status}); ferr != nil {
-			slog.Warn("dispatcher: finalize streaming on error failed", "message_id", handle.MessageID, "error", ferr)
+		if ctx.Err() == context.Canceled {
+			status = model.MessageStatusCanceled
 		}
-		BroadcastStreamingTerminal(pipelineDeps, handle, status)
+		msg, ferr := FinalizeStreamingPipeline(ctx, pipelineDeps, handle, FinalizeStreamingPipelineOptions{Status: status, ErrorReason: reason, Content: content})
+		if ferr != nil {
+			slog.Warn("dispatcher: finalize streaming on error failed", "message_id", handle.MessageID, "error", ferr)
+			return
+		}
+		BroadcastStreamingTerminal(pipelineDeps, handle, status, msg)
 	}
 
 	if d.deps.DaemonHub == nil || !d.deps.DaemonHub.IsConnected(*agent.MachineID) {
 		slog.Warn(orchFlowLog, "stage", "agent.daemon_not_connected", "conversation_id", convID, "agent_id", agent.ID, "agent_name", agent.Name, "daemon_task_id", task.ID, "machine_id", *agent.MachineID)
-		finalizeErr(model.MessageStatusError)
+		finalizeErr(model.MessageStatusError, ErrDaemonNotConnected.Error(), "")
 		return task, nil, fmt.Errorf("agent %q 的 daemon 未通过 WS 连接: %w", agent.Name, ErrDaemonNotConnected)
 	}
 	d.deps.DaemonHub.RegisterTaskPromise(task.ID)
@@ -626,7 +629,7 @@ func (d *Dispatcher) dispatchPlanCore(
 		sendErr = d.deps.DaemonHub.SendToMachine(*agent.MachineID, dispatchMessage)
 	}
 	if sendErr != nil {
-		finalizeErr(model.MessageStatusError)
+		finalizeErr(model.MessageStatusError, sendErr.Error(), "")
 		return task, nil, fmt.Errorf("dispatch to daemon: %w", sendErr)
 	}
 	slog.Info(orchFlowLog, "stage", "agent.dispatch_sent", "conversation_id", convID, "agent_id", agent.ID, "agent_name", agent.Name, "daemon_task_id", task.ID)
@@ -636,7 +639,7 @@ func (d *Dispatcher) dispatchPlanCore(
 	if err != nil {
 		d.recordContextUsage(ctx, in, prompt, contextMessages, "")
 		slog.Warn(orchFlowLog, "stage", "agent.dispatch_wait_failed", "conversation_id", convID, "agent_id", agent.ID, "agent_name", agent.Name, "daemon_task_id", preWaitTask.ID, "error", err)
-		finalizeErr(model.MessageStatusError)
+		finalizeErr(model.MessageStatusError, err.Error(), "")
 		// 注意：waitDaemonTask 出错时返回的 task 可能为 nil（IsConnected 返回 false
 		// / channel nil 等场景）。这里取原 task（preWaitTask，预 CreateDaemonTask 的实例）
 		// 避免 nil 解引用；调用方读 task 时容忍无 Result/Artifacts 字段（与重构前行为一致）。
@@ -649,8 +652,8 @@ func (d *Dispatcher) dispatchPlanCore(
 	d.recordCLISessionID(ctx, in, task.CLISessionID)
 	slog.Info(orchFlowLog, "stage", "agent.dispatch_completed", "conversation_id", convID, "agent_id", agent.ID, "agent_name", agent.Name, "daemon_task_id", task.ID, "status", task.Status, "result_len", len(task.Result), "artifact_count", len(task.Artifacts), "result_preview", orchPreview(task.Result))
 	if task.Status == "failed" {
-		finalizeErr(model.MessageStatusError)
-		return task, nil, fmt.Errorf("daemon task failed: %s", task.Error)
+		finalizeErr(model.MessageStatusError, task.Error, task.Result)
+		return task, nil, fmt.Errorf("daemon task failed: %s", safeAgentFailureReason(task.Error))
 	}
 
 	// ResultHandler 注入点：调用方可自定义如何处理 task。
@@ -665,6 +668,7 @@ func (d *Dispatcher) dispatchPlanCore(
 
 	msg, err := resultHandler(ctx, task)
 	if err != nil {
+		finalizeErr(model.MessageStatusError, err.Error(), task.Result)
 		return task, nil, err
 	}
 	return task, msg, nil
@@ -702,7 +706,7 @@ func (d *Dispatcher) recordCLISessionID(ctx context.Context, in DispatchInput, c
 // 迁移自 OrchestratorService.waitDaemonTask（零行为变更）：
 //   - DaemonHub 为 nil → fmt.Errorf("daemon hub not available")
 //   - AwaitTaskResult 返回 nil → fmt.Errorf("daemon not connected for task %s", taskID)
-//   - 达到 DefaultAgentTaskTimeout → ErrMsgAgentTimeout
+//   - 上游 ctx 取消或达到线上 30 分钟默认任务时限时结束
 func (d *Dispatcher) waitDaemonTask(ctx context.Context, taskID string) (*model.DaemonTask, error) {
 	if d.deps.DaemonHub == nil {
 		return nil, fmt.Errorf("daemon hub not available")
@@ -714,7 +718,7 @@ func (d *Dispatcher) waitDaemonTask(ctx context.Context, taskID string) (*model.
 	}
 	defer d.deps.DaemonHub.RemoveTaskPromise(taskID)
 
-	ctx, cancel := context.WithTimeout(ctx, DefaultAgentTaskTimeout)
+	ctx, cancel := agentTaskContext(ctx)
 	defer cancel()
 
 	select {
@@ -732,7 +736,7 @@ func (d *Dispatcher) waitDaemonTask(ctx context.Context, taskID string) (*model.
 		}
 		return task, nil
 	case <-ctx.Done():
-		return nil, ErrMsgAgentTimeout
+		return nil, agentTaskWaitError(ctx)
 	}
 }
 

@@ -56,3 +56,13 @@ from the Agent's locally available Skills and is not required to use them.
 The ordered evidence of tool invocations associated with an Agent reply,
 including MCP calls and observed Skill loads. Missing result evidence means an
 invocation is unconfirmed, rather than successfully completed.
+
+## Hive Asset Metadata
+
+The catalog description of a Hive database, table, column, or partition as seen through Data Map. Its presence confirms a registered asset or partition, not that the asking user may read business rows or that a metric has a nonzero value.
+_Avoid_: Hive data, query result
+
+## Hive Business Data
+
+The actual rows or aggregates returned by an authorized Hive query. Reading it is a separate permission boundary from viewing Hive Asset Metadata.
+_Avoid_: Data Map metadata

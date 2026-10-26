@@ -3,6 +3,7 @@ import { Spin } from 'antd';
 import {
   createBrowserRouter,
   Navigate,
+  useLocation,
   type RouteObject,
 } from 'react-router-dom';
 import AppLayout from '@/layout/AppLayout';
@@ -41,7 +42,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 /** 已登录用户访问登录/注册页时重定向到首页 */
 function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  if (isAuthenticated) {
+  const location = useLocation();
+  const companyCallback = location.pathname === '/login' && new URLSearchParams(location.search).get('company') === '1';
+  if (isAuthenticated && !companyCallback) {
     return <Navigate to="/" replace />;
   }
   return <>{children}</>;
@@ -77,7 +80,7 @@ const routes: RouteObject[] = [
       { path: 'contacts', element: withSuspense(<ContactsView />) },
       { path: 'agents', element: withSuspense(<AgentsView />) },
       { path: 'skills', element: <AdminWorkspaceRoute path="/skills">{withSuspense(<SkillsView />)}</AdminWorkspaceRoute> },
-      { path: 'knowledge', element: <AdminWorkspaceRoute path="/knowledge">{withSuspense(<KnowledgeView />)}</AdminWorkspaceRoute> },
+      { path: 'knowledge', element: withSuspense(<KnowledgeView />) },
       { path: 'tasks', element: <AdminWorkspaceRoute path="/tasks">{withSuspense(<TaskBoardView />)}</AdminWorkspaceRoute> },
       { path: 'reports', element: withSuspense(<ReportsView />) },
       { path: 'delivery-analysis', element: withSuspense(<DeliveryAnalysisView />) },

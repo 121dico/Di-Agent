@@ -418,13 +418,21 @@ function createCodexCliSpec(ctx) {
       let pendingRuntimeVerification = null;
       let firstTurn = !resume;
       let processSettled = false;
+      let retired = false;
+      const surfaceCalls = new Map();
+      const clearSurfaceCalls = () => {
+        for (const timer of surfaceCalls.values()) clearTimeout(timer);
+        surfaceCalls.clear();
+      };
 
       const rpcCall = (method, params) => new Promise((resolve) => {
         const id = nextRpcId++;
         const configuredTimeout = Number.isFinite(daemonCtx.PROTOCOL_TIMEOUT_MS)
           ? daemonCtx.PROTOCOL_TIMEOUT_MS
           : 15000;
-        const timeoutMs = Math.min(daemonCtx.EXEC_TIMEOUT_MS, configuredTimeout);
+        const timeoutMs = daemonCtx.EXEC_TIMEOUT_MS > 0
+          ? Math.min(daemonCtx.EXEC_TIMEOUT_MS, configuredTimeout)
+          : configuredTimeout;
         const timer = setTimeout(() => {
           pendingCalls.delete(id);
           resolve({ error: { message: `Codex 协议 ${method} 超时，桌面运行时可能不兼容。` } });
@@ -450,6 +458,7 @@ function createCodexCliSpec(ctx) {
         if (!turn) return null;
         currentTurn = null;
         if (turn.timer) clearTimeout(turn.timer);
+        clearSurfaceCalls();
         daemonCtx.agentTurnStates.set(agentId, 'idle');
         return turn.resolve(outcome);
       };
@@ -533,6 +542,23 @@ function createCodexCliSpec(ctx) {
         else if (pendingRuntimeVerification) pendingRuntimeVerification.hadActivity = true;
       };
       const dispatchEvent = (ev) => {
+        // 只约束浏览器/应用入口获取；不把长时间构建、推理或用户审批误判为卡死。
+        if (ev.type === 'tool_use' && ev.toolUseID && /(?:^|[._])js$/.test(ev.tool || '') && !retired) {
+          const input = typeof ev.input === 'string' ? ev.input : JSON.stringify(ev.input || {});
+          const operation = /\bcua\.(getApp|getState|getBrowser|getTab|createBrowserTab)\s*\(/.exec(input)?.[1];
+          if (operation && !surfaceCalls.has(ev.toolUseID)) {
+            const timeoutMs = daemonCtx.CUA_SURFACE_TIMEOUT_MS ?? 120000;
+            const timer = setTimeout(() => {
+              surfaceCalls.delete(ev.toolUseID);
+              void retireTurn(`浏览器工具 cua.${operation} 等待超时；运行文件已保留在 ${cwd}。旧执行已停止，请重试；浏览器不可用时应交付已有文件并说明未完成验收。`);
+            }, timeoutMs);
+            timer.unref();
+            surfaceCalls.set(ev.toolUseID, timer);
+          }
+        } else if (ev.type === 'tool_result' && ev.toolUseID) {
+          clearTimeout(surfaceCalls.get(ev.toolUseID));
+          surfaceCalls.delete(ev.toolUseID);
+        }
         if (['text', 'thinking', 'tool_use', 'tool_result'].includes(ev.type)) markRuntimeActivity();
         const onEvent = eventRef && eventRef.current;
         if (typeof onEvent === 'function') {
@@ -555,6 +581,7 @@ function createCodexCliSpec(ctx) {
 
       const nativeToolStarts = new Set();
       const handleNotification = (msg) => {
+        if (retired) return;
         const method = msg.method;
         const p = msg.params || {};
         if (method === 'thread/tokenUsage/updated' && currentTurn && (!p.threadId || p.threadId === threadId)) {
@@ -603,6 +630,7 @@ function createCodexCliSpec(ctx) {
             || (turnObj.id && turnObj.id !== currentTurn.turnId)) return;
           const turn = currentTurn;
           turn.terminalReceived = true;
+          clearSurfaceCalls();
           if (turn.timer) {
             clearTimeout(turn.timer);
             turn.timer = null;
@@ -764,7 +792,7 @@ function createCodexCliSpec(ctx) {
         if (currentTurn) {
           logRuntimeUnverified(currentTurn.runtimeVerification);
           dispatchEvent(turnEndEvent({ error: exitMessage }));
-          finishTurn({ error: exitMessage });
+          finishTurn({ error: exitMessage, runtimeRetired: retired });
         }
         daemonCtx.agentTurnStates.delete(agentId);
         daemonCtx.logFlow(error ? 'error' : (code === 0 ? 'info' : 'warn'), error ? 'agent.process_error' : 'agent.process_close', {
@@ -776,6 +804,28 @@ function createCodexCliSpec(ctx) {
         });
         queue.push(sessionEndEvent({ code }));
         queue.done();
+      };
+
+      const retireTurn = async (message) => {
+        if (retired || !currentTurn || currentTurn.terminalReceived) return;
+        retired = true;
+        const turn = currentTurn;
+        turn.terminalReceived = true;
+        clearTimeout(turn.timer);
+        clearSurfaceCalls();
+        daemonCtx.logFlow('error', 'agent.turn_retired', {
+          agent_id: agentId, conversation_id: conversationId,
+          thread_id: threadId, turn_id: turn.turnId,
+        });
+        // 中断 RPC 自带有界超时。即便运行器没有确认，也必须废弃旧进程后才能释放队列。
+        await rpcCall('turn/interrupt', { threadId, turnId: turn.turnId });
+        try { child.kill('SIGTERM'); } catch { /* 已退出 */ }
+        const killTimer = setTimeout(() => {
+          if (child.exitCode === null) { try { child.kill('SIGKILL'); } catch { /* 已退出 */ } }
+        }, 1000);
+        killTimer.unref();
+        child.once('close', () => clearTimeout(killTimer));
+        settleProcess(message, { error: message });
       };
 
       child.on('error', (error) => {
@@ -819,17 +869,20 @@ function createCodexCliSpec(ctx) {
       // --- sendPrompt：串行化 + turn/start + 等 turn 终态 ---
       let queueTail = Promise.resolve();
       const sendPromptRaw = (prompt, runtimeConfig, approvalContext, recovery) => new Promise((resolve) => {
-        if (child.exitCode !== null) {
+        if (retired || processSettled || child.exitCode !== null) {
           resolve({ error: 'Agent process not running' });
           return;
         }
         boot.then(async () => {
           let text = prompt;
+          // 预览能力失效不应吞掉已经完成的产物；提示不能替代真实验收结果。
+          const browserFallback = '[执行恢复约定] 浏览器连接工具明确返回不可用时，不要为预览反复尝试同一路径或强行改用桌面控制。若已有文件，请交付已有产物并注明浏览器验收未完成；若任务必须操作浏览器，则明确报告阻塞。先复用保留的文件，不要重复执行已有副作用。\n\n';
+          text = browserFallback + text;
           if (firstTurn) {
             // 首轮注入平台适配说明与系统指令（后续轮次走 thread 原生上下文）
             text = systemPrompt
-              ? `${CODEX_MCP_FALLBACK}[系统指令]\n${systemPrompt}\n\n${prompt}`
-              : `${CODEX_MCP_FALLBACK}${prompt}`;
+              ? `${CODEX_MCP_FALLBACK}[系统指令]\n${systemPrompt}\n\n${text}`
+              : `${CODEX_MCP_FALLBACK}${text}`;
 
           }
           observedModel = undefined;
@@ -900,7 +953,7 @@ function createCodexCliSpec(ctx) {
           };
           pendingTurnApprovalContext = null;
           pendingRuntimeVerification = null;
-          currentTurn.timer = setTimeout(() => {
+          currentTurn.timer = daemonCtx.EXEC_TIMEOUT_MS > 0 ? setTimeout(() => {
             if (currentTurn && currentTurn.turnId === turnId) {
               daemonCtx.logFlow('error', 'agent.turn_timeout', {
                 agent_id: agentId,
@@ -909,13 +962,10 @@ function createCodexCliSpec(ctx) {
                 turn_id: turnId,
                 timeout_ms: daemonCtx.EXEC_TIMEOUT_MS,
               });
-              const turn = currentTurn;
-              currentTurn = null;
-              logRuntimeUnverified(turn.runtimeVerification);
-              turn.resolve({ error: `Agent task timed out (${Math.round(daemonCtx.EXEC_TIMEOUT_MS / 1000)}s)` });
+              void retireTurn(`Agent task timed out (${Math.round(daemonCtx.EXEC_TIMEOUT_MS / 1000)}s); 运行文件已保留在 ${cwd}，旧执行已停止，可重试。`);
             }
-          }, daemonCtx.EXEC_TIMEOUT_MS);
-          if (currentTurn) currentTurn.timer.unref();
+          }, daemonCtx.EXEC_TIMEOUT_MS) : null;
+          if (currentTurn?.timer) currentTurn.timer.unref();
         }).catch((err) => {
           pendingTurnApprovalContext = null;
           logRuntimeUnverified(pendingRuntimeVerification);
@@ -945,11 +995,36 @@ function createCodexCliSpec(ctx) {
         return queueTail;
       };
 
+      // 补充输入不经过下一轮队列，不替换当前任务的事件归属或执行权限。
+      const steerPrompt = async (prompt, approvalContext = {}) => {
+        const turn = currentTurn;
+        if (retired || processSettled || child.exitCode !== null || !turn || turn.terminalReceived) {
+          return { status: 'unavailable', reason: '当前没有可引导的执行' };
+        }
+        const identityFields = ['task_id', 'agent_id', 'conversation_id', 'user_id'];
+        if (identityFields.some(field => !approvalContext[field] || turn.approvalContext?.[field] !== approvalContext[field])) {
+          return { status: 'unavailable', reason: '执行归属已改变' };
+        }
+        let input;
+        try { input = require('./image-input').codexImageInput(prompt, approvalContext.images); }
+        catch { return { status: 'unavailable', reason: '补充输入格式无效' }; }
+        const response = await rpcCall('turn/steer', { threadId, expectedTurnId: turn.turnId, input });
+        if (response?.result?.turnId === turn.turnId) return { status: 'accepted' };
+        const error = response?.error;
+        // 仅明确的协议拒绝允许上层排队；超时、断链或异常回包均不能重放。
+        if (error?.code === -32601 || (Number.isInteger(error?.code)
+          && /no active turn|active turn.*not found|expected turn.*(?:mismatch|does not match)|turn id mismatch/i.test(error?.message || ''))) {
+          return { status: 'unavailable', reason: '运行时不支持引导或当前执行已结束' };
+        }
+        return { status: 'unknown', reason: '运行时未确认补充指令，请勿重复发送' };
+      };
+
       return {
         child,
         get sessionId() { return threadId; },
         ready: boot,
         sendPrompt,
+        steerPrompt,
         events: queue.iter,
       };
     },

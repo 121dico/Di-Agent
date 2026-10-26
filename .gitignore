@@ -124,6 +124,7 @@ src/backend/data/
 
 # === 本地临时运行文件 ===
 .tmp/
+.scratch/
 
 # === Python 运行缓存 ===
 __pycache__/

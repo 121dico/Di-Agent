@@ -141,6 +141,7 @@ func TestRouteMention_ConcurrentOrchestration_BothSucceed(t *testing.T) {
 
 	convAgents := []model.ConversationAgent{
 		{AgentID: agentID, Name: "Orch", Role: "orchestrator"},
+		{AgentID: "worker-1", Name: "Worker", Role: "worker"},
 	}
 
 	completedTask := &model.DaemonTask{

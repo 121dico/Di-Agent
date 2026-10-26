@@ -15,8 +15,22 @@ type daemonTaskGetter interface {
 	GetDaemonTask(ctx context.Context, id string) (*model.DaemonTask, error)
 }
 
-// DefaultAgentTaskTimeout 是 daemon Agent 单次执行与后端等待链路的统一上限。
-const DefaultAgentTaskTimeout = 30 * time.Minute
+// DefaultAgentTaskTimeout 保留线上单次执行与后端等待链路的 30 分钟上限。
+const DefaultAgentTaskTimeout time.Duration = 30 * time.Minute
+
+func agentTaskContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if DefaultAgentTaskTimeout > 0 {
+		return context.WithTimeout(parent, DefaultAgentTaskTimeout)
+	}
+	return context.WithCancel(parent)
+}
+
+func agentTaskWaitError(ctx context.Context) error {
+	if ctx.Err() == context.DeadlineExceeded {
+		return ErrMsgAgentTimeout
+	}
+	return ctx.Err()
+}
 
 // truncateString 截断字符串到 maxRunes 个 rune，超出追加 "..."
 func truncateString(s string, maxRunes int) string {
@@ -47,10 +61,10 @@ func optionalStringPtr(value string) *string {
 	return &value
 }
 
-// waitDaemonTask 轮询等待 daemon 任务完成（600ms 间隔，30 分钟超时）
+// waitDaemonTask 轮询等待 daemon 任务完成（600ms 间隔，30 分钟上限）
 // 供 OrchestratorService 和 MessageService 共享使用
 func waitDaemonTask(ctx context.Context, repo daemonTaskGetter, taskID string) (*model.DaemonTask, error) {
-	ctx, cancel := context.WithTimeout(ctx, DefaultAgentTaskTimeout)
+	ctx, cancel := agentTaskContext(ctx)
 	defer cancel()
 
 	ticker := time.NewTicker(600 * time.Millisecond)
@@ -67,7 +81,7 @@ func waitDaemonTask(ctx context.Context, repo daemonTaskGetter, taskID string) (
 
 		select {
 		case <-ctx.Done():
-			return nil, ErrMsgAgentTimeout
+			return nil, agentTaskWaitError(ctx)
 		case <-ticker.C:
 		}
 	}

@@ -20,7 +20,7 @@ export const ExecutionTraceEventRow: React.FC<ExecutionTraceEventRowProps> = ({ 
   const durationLabel = event.durationMs !== undefined ? `耗时 ${traceDuration(event.durationMs)}`
     : event.phase === 'input' ? '输入事件' : event.phase === 'result' ? '结果返回' : event.phase === 'error' ? '错误事件' : '耗时未采集';
   const kind = event.lane === 'input' ? '输入' : event.lane === 'model' ? '输出' : call?.tool_kind === 'skill' ? 'Skill' : call?.tool_kind === 'mcp' ? 'MCP' : '工具';
-  return <details ref={details} className={`${styles.eventRow} ${selected ? styles.eventSelected : ''}`} data-lane={event.lane}>
+  return <details ref={details} className={`${styles.eventRow} ${selected ? styles.eventSelected : ''}`} data-lane={event.lane} data-mcp={call?.tool_kind === 'mcp' ? 'true' : undefined}>
     <summary onClick={() => { if (!selected) onSelect(event.id); }}>
       <span className={styles.eventOrder}>{String(event.order + 1).padStart(2, '0')}</span>
       <span className={styles.eventKind}>{kind}</span>

@@ -13,6 +13,7 @@ import (
 )
 
 const daemonSendBuf = 64
+const daemonTaskDisconnectGrace = time.Minute
 
 // TaskResult daemon 任务执行结果
 type TaskResult struct {
@@ -84,6 +85,17 @@ func (dc *DaemonClient) close(status websocket.StatusCode, reason string) {
 		close(dc.done)
 		if dc.Conn != nil {
 			_ = dc.Conn.Close(status, reason)
+		}
+	})
+}
+
+// closeNow 用于被替换/撤销的连接，避免关闭握手阻塞 Hub 消息总线。
+func (dc *DaemonClient) closeNow() {
+	dc.closed.Store(true)
+	dc.closeOnce.Do(func() {
+		close(dc.done)
+		if dc.Conn != nil {
+			_ = dc.Conn.CloseNow()
 		}
 	})
 }
@@ -167,18 +179,25 @@ type daemonBusMsg struct {
 // DaemonHub 管理所有 daemon WebSocket 连接，基于消息总线模式。
 // 与用户 Hub 相同设计：单 goroutine 事件循环 + sync.Map + buffered bus channel。
 type DaemonHub struct {
-	clients           sync.Map // machineID -> *DaemonClient
-	resultChans       sync.Map // taskID -> chan *TaskResult
-	taskMessages      sync.Map // taskID -> messageID（daemon 丢字段时的兜底映射）
-	taskAgents        sync.Map // taskID -> agentName（PR3：message.streaming 广播时携带 agent_name）
-	agentApprovals    sync.Map // approvalID -> AgentApprovalContext
-	approvalMu        sync.Mutex
-	approvalRevisions map[string]uint64 // authenticated user/conversation -> monotonic state revision
-	bus               chan daemonBusMsg
-	logger            *slog.Logger
-	wg                sync.WaitGroup
-	draining          atomic.Bool
-	shutdownOnce      sync.Once
+	steerPending       sync.Map // requestID -> 同一连接的引导回执
+	managedMCPPending  sync.Map // requestID -> 同一条连接的本机配置响应
+	managedMCPMachines sync.Map // 每台电脑最多一个进行中的配置操作
+	lifecycleMu        sync.Mutex
+	revokedMachines    sync.Map // 本进程内阻止已经排队的旧连接重新注册
+	taskMachines       sync.Map // taskID -> machineID; fail pending work after a sustained disconnect
+	taskCancelData     sync.Map // taskID -> 最小取消上下文，不保留 prompt
+	clients            sync.Map // machineID -> *DaemonClient
+	resultChans        sync.Map // taskID -> chan *TaskResult
+	taskMessages       sync.Map // taskID -> messageID（daemon 丢字段时的兜底映射）
+	taskAgents         sync.Map // taskID -> agentName（PR3：message.streaming 广播时携带 agent_name）
+	agentApprovals     sync.Map // approvalID -> AgentApprovalContext
+	approvalMu         sync.Mutex
+	approvalRevisions  map[string]uint64 // authenticated user/conversation -> monotonic state revision
+	bus                chan daemonBusMsg
+	logger             *slog.Logger
+	wg                 sync.WaitGroup
+	draining           atomic.Bool
+	shutdownOnce       sync.Once
 }
 
 // AgentApprovalContext binds a daemon approval request to the authenticated task owner.
@@ -440,15 +459,53 @@ func (dh *DaemonHub) dispatch(msg daemonBusMsg) {
 }
 
 func (dh *DaemonHub) handleRegister(msg daemonBusMsg) {
+	dh.lifecycleMu.Lock()
 	client := msg.payload.(*DaemonClient)
+	if _, revoked := dh.revokedMachines.Load(client.MachineID); revoked {
+		dh.lifecycleMu.Unlock()
+		client.closeNow()
+		return
+	}
 	// 若同一 machineID 已有旧连接，先关闭
-	if old, loaded := dh.clients.LoadAndDelete(client.MachineID); loaded {
+	old, loaded := dh.clients.LoadAndDelete(client.MachineID)
+	dh.clients.Store(client.MachineID, client)
+	dh.lifecycleMu.Unlock()
+	if loaded {
 		oldClient := old.(*DaemonClient)
-		oldClient.close(websocket.StatusNormalClosure, "replaced by new connection")
+		// close 握手可等待数秒，不能阻塞 Hub 总线处理后续注销事件。
+		oldClient.closeNow()
 		dh.logger.Info("replaced old daemon connection", "machine_id", client.MachineID)
 	}
-	dh.clients.Store(client.MachineID, client)
 	dh.logger.Info("daemon connected", "machine_id", client.MachineID)
+}
+
+// RevokeMachine 移除电脑后撤销旧连接，不等待在线状态或普通重连宽限期。
+// 本机 CLI 停止属于尽力通知：网络已断开的进程无法由服务器保证终止。
+func (dh *DaemonHub) RevokeMachine(machineID string) {
+	dh.lifecycleMu.Lock()
+	dh.revokedMachines.Store(machineID, true)
+	connection, connected := dh.clients.LoadAndDelete(machineID)
+	dh.lifecycleMu.Unlock()
+	cancelCtx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	dh.taskMachines.Range(func(key, value interface{}) bool {
+		if value == machineID {
+			taskID := key.(string)
+			if connected {
+				client := connection.(*DaemonClient)
+				if client.Conn != nil {
+					cancelData, _ := dh.taskCancelData.Load(taskID)
+					data, _ := json.Marshal(WSMessage{Type: "task.cancel", Data: cancelData})
+					_ = client.Conn.Write(cancelCtx, websocket.MessageText, data)
+				}
+			}
+			dh.ResolveTask(taskID, &TaskResult{TaskID: taskID, Error: "电脑连接已被移除"})
+		}
+		return true
+	})
+	if connected {
+		connection.(*DaemonClient).close(websocket.StatusPolicyViolation, "machine removed")
+	}
 }
 
 func (dh *DaemonHub) handleUnregister(msg daemonBusMsg) {
@@ -456,6 +513,8 @@ func (dh *DaemonHub) handleUnregister(msg daemonBusMsg) {
 	// 仅当 map 中的 client 与当前 client 一致时才删除（避免删除替代者）
 	if loaded, ok := dh.clients.Load(client.MachineID); ok && loaded == client {
 		dh.clients.Delete(client.MachineID)
+		// 慢任务没有时长上限；只在连接持续丢失时结束等待。
+		time.AfterFunc(daemonTaskDisconnectGrace, func() { dh.failDisconnectedTasks(client.MachineID) })
 	}
 	client.close(websocket.StatusNormalClosure, "disconnect")
 	if !dh.draining.Load() {
@@ -529,23 +588,68 @@ func (dh *DaemonHub) Unregister(client *DaemonClient) {
 
 // SendToMachine 向指定 daemon 发送消息（同步查询 + 异步写入）
 func (dh *DaemonHub) SendToMachine(machineID string, msg WSMessage) error {
+	dh.lifecycleMu.Lock()
+	defer dh.lifecycleMu.Unlock()
 	val, ok := dh.clients.Load(machineID)
 	if !ok {
 		return errors.New("daemon not connected: " + machineID)
 	}
 	client := val.(*DaemonClient)
-	return client.Send(msg)
+	taskID := dh.trackTaskDispatch(machineID, msg)
+	if err := client.Send(msg); err != nil {
+		dh.taskMachines.Delete(taskID)
+		dh.taskCancelData.Delete(taskID)
+		return err
+	}
+	return nil
 }
 
 // SendToMachineRequiringCapability performs capability validation and enqueue
 // against the exact same live connection, closing the replacement race between
 // a preflight capability check and task dispatch.
 func (dh *DaemonHub) SendToMachineRequiringCapability(machineID, capability string, msg WSMessage) error {
+	dh.lifecycleMu.Lock()
+	defer dh.lifecycleMu.Unlock()
 	val, ok := dh.clients.Load(machineID)
 	if !ok {
 		return errors.New("daemon not connected: " + machineID)
 	}
-	return val.(*DaemonClient).sendRequiringCapability(capability, msg)
+	taskID := dh.trackTaskDispatch(machineID, msg)
+	if err := val.(*DaemonClient).sendRequiringCapability(capability, msg); err != nil {
+		dh.taskMachines.Delete(taskID)
+		dh.taskCancelData.Delete(taskID)
+		return err
+	}
+	return nil
+}
+
+func (dh *DaemonHub) trackTaskDispatch(machineID string, msg WSMessage) string {
+	if msg.Type != "task.dispatch" {
+		return ""
+	}
+	data, ok := msg.Data.(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	taskID, _ := data["task_id"].(string)
+	if taskID != "" {
+		dh.taskMachines.Store(taskID, machineID)
+		dh.taskCancelData.Store(taskID, map[string]interface{}{"task_id": taskID, "agent_id": data["agent_id"], "conversation_id": data["conversation_id"], "user_id": data["user_id"]})
+	}
+	return taskID
+}
+
+func (dh *DaemonHub) failDisconnectedTasks(machineID string) {
+	if dh.IsConnected(machineID) || dh.draining.Load() {
+		return
+	}
+	dh.taskMachines.Range(func(key, value interface{}) bool {
+		if value == machineID {
+			taskID := key.(string)
+			dh.ResolveTask(taskID, &TaskResult{TaskID: taskID, Error: "Agent 所在电脑已断开连接，请重新连接后重试"})
+		}
+		return true
+	})
 }
 
 // IsConnected 检查 daemon 是否 WS 连接中
@@ -598,6 +702,8 @@ func (dh *DaemonHub) ResolveTask(taskID string, result *TaskResult) {
 // RemoveTaskPromise 清理 promise channel（超时场景）
 func (dh *DaemonHub) RemoveTaskPromise(taskID string) {
 	dh.resultChans.Delete(taskID)
+	dh.taskMachines.Delete(taskID)
+	dh.taskCancelData.Delete(taskID)
 }
 
 // RegisterTestClient inserts a client directly into the clients map.

@@ -9,6 +9,15 @@
   font-feature-settings: 'tnum' 1;
 }
 
+.templatePreview { --report-blue: #2f6fdb; --report-blue-soft: rgba(47, 111, 219, .08); --report-teal: #15857a; --report-violet: #765bc4; --report-amber: #d18a24; --report-coral: #d05c50; --report-donut-muted: #d8dadd; --panel: var(--wb-surface); --border: var(--wb-border-subtle); --text-1: var(--wb-text-primary); --text-2: var(--wb-text-secondary); --text-3: var(--wb-text-tertiary); width: min(100%, 1320px); padding: 0; }
+.templateDescription { margin: 0 0 18px; color: var(--wb-text-secondary); font-size: 13px; line-height: 1.65; }
+.templateChartGrid { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.templateChartGrid > section { min-width: 0; grid-column: auto; }
+
+@container (max-width: 860px) {
+  .templateChartGrid { grid-template-columns: minmax(0, 1fr); }
+}
+
 .preview[data-style='journal'] { --report-style-accent: var(--wb-text-primary); }
 .preview[data-style='soft'] { --report-style-accent: var(--pr-data-coral); }
 .preview[data-style='glass'] { --report-style-accent: var(--pr-data-blue); }

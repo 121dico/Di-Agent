@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/121dico/Di-Agent/src/backend/internal/middleware"
@@ -78,6 +79,29 @@ func (h *DaemonHandler) WithMachine(fn func(*gin.Context, *model.DaemonMachine))
 		token := c.Query("token")
 		machine, err := h.authenticateMachine(c.Request.Context(), token)
 		if err != nil || machine == nil {
+			middleware.ErrorResponse(c, http.StatusUnauthorized, 40100, "认证失败")
+			return
+		}
+		fn(c, machine)
+	}
+}
+
+// WithMachineBearer 仅接受请求头中的单机 API key；敏感来源路由不得从 URL
+// 读取机器密钥，也不得接受没有用户归属的全局 daemon token。
+func (h *DaemonHandler) WithMachineBearer(fn func(*gin.Context, *model.DaemonMachine)) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		values := c.Request.Header.Values("Authorization")
+		if len(values) != 1 {
+			middleware.ErrorResponse(c, http.StatusUnauthorized, 40100, "认证失败")
+			return
+		}
+		parts := strings.SplitN(values[0], " ", 2)
+		if len(parts) != 2 || parts[0] != "Bearer" || parts[1] == "" {
+			middleware.ErrorResponse(c, http.StatusUnauthorized, 40100, "认证失败")
+			return
+		}
+		machine, err := h.authenticateMachine(c.Request.Context(), parts[1])
+		if err != nil || machine == nil || machine.UserID == "" {
 			middleware.ErrorResponse(c, http.StatusUnauthorized, 40100, "认证失败")
 			return
 		}
@@ -312,6 +336,15 @@ func (h *DaemonHandler) readLoop(ctx context.Context, client *ws.DaemonClient, m
 			h.logger.Debug("daemon websocket read end", "error", err)
 			return
 		}
+		// 连接建立后仍需确认凭据有效，避免删除/换 key 后旧 socket 继续上报。
+		if machine != nil {
+			authCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			current, authErr := h.agentSvc.GetDaemonMachineByID(authCtx, machine.ID)
+			cancel()
+			if authErr != nil || current == nil || current.APIKeyHash != machine.APIKeyHash {
+				return
+			}
+		}
 
 		var envelope struct {
 			Type string          `json:"type"`
@@ -323,6 +356,10 @@ func (h *DaemonHandler) readLoop(ctx context.Context, client *ws.DaemonClient, m
 		}
 
 		switch envelope.Type {
+		case "task.steer.result":
+			h.daemonHub.ResolveTaskSteer(client, envelope.Data)
+		case "managed_mcp.result":
+			h.daemonHub.ResolveManagedMCP(client, envelope.Data)
 		case "daemon.register":
 			h.handleRegister(ctx, client, envelope.Data, machine)
 		case "task.complete":
@@ -552,7 +589,7 @@ func (h *DaemonHandler) handleTaskComplete(data json.RawMessage, machine *model.
 // syncTaskToBoard 统一 WebSocket 与 HTTP polling 两条 daemon 完成路径。
 // 任务结果落内存成功后才创建/修复看板卡片，最后再发送 conversation-scoped 事件。
 func (h *DaemonHandler) syncTaskToBoard(ctx context.Context, task *model.DaemonTask, result, taskErr string) {
-	if h.taskSync == nil || task == nil || task.CLITool == "__di_agent_list_models__" {
+	if h.taskSync == nil || task == nil || task.CLITool == "__di_agent_list_models__" || task.CLITool == "__di_agent_browse_files__" {
 		return
 	}
 	if err := h.taskSync.CreateFromDaemonTask(ctx, task, result, taskErr); err != nil {

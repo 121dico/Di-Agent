@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Button,
   Dropdown,
@@ -12,6 +13,7 @@ import {
 } from 'antd';
 import { message as antMessage } from '@/utils/message';
 import {
+  ArrowLeftOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
   DeleteOutlined,
@@ -160,6 +162,7 @@ const TaskDetailModal: React.FC<{
 };
 
 const TaskBoardView: React.FC = () => {
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<WorkspaceTask[]>([]);
   const [orchCards, setOrchCards] = useState<OrchTaskCard[]>([]);
   const [loading, setLoading] = useState(false);
@@ -533,6 +536,7 @@ const TaskBoardView: React.FC = () => {
               <div className={styles.workspaceSub}>会话任务看板</div>
             </div>
             <Space className={styles.headerActions}>
+              <Button size="small" icon={<ArrowLeftOutlined />} onClick={() => navigate('/')}>返回消息</Button>
               <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={fetchTasks}>
                 刷新
               </Button>

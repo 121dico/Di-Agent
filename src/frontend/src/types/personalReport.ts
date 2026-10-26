@@ -4,10 +4,27 @@ export interface PersonalReportSection {
   id: string;
   type: string;
   title?: string;
-  data?: unknown;
+  query_id?: string;
+  chart_type?: 'line' | 'bar' | 'donut';
+  x_field?: string;
+  label_field?: string;
+  value_field?: string;
+  metrics?: PersonalReportField[];
+  series?: PersonalReportField[];
+  columns?: PersonalReportField[];
+  data?: { rows: Array<Record<string, unknown>>; pagination?: { total: number; page: number; page_size: number; page_count: number } };
+}
+
+export interface PersonalReportField {
+  field: string;
+  label: string;
+  suffix?: string;
+  color?: string;
 }
 
 export interface PersonalReportDocument {
+  template_id?: string;
+  template_version?: string;
   sections?: PersonalReportSection[];
   [key: string]: unknown;
 }

@@ -17,4 +17,13 @@ describe('data source search', () => {
   it('returns the complete catalog for an empty query', () => {
     expect(filterReportSources(sources, '  ')).toEqual(sources);
   });
+
+  it('matches the folder name so each business need can be located directly', () => {
+    const withFolder = [
+      { ...sources[0], folder: '价敏标签' },
+      { ...sources[1], folder: '充电场站' },
+    ] as ReportDataSource[];
+    expect(filterReportSources(withFolder, '价敏标签').map((source) => source.id)).toEqual(['1']);
+    expect(filterReportSources(withFolder, '充电场站').map((source) => source.id)).toEqual(['2']);
+  });
 });

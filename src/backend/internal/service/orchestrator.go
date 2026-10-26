@@ -500,8 +500,22 @@ func (s *OrchestratorService) handleOrchestratedDispatch(ctx context.Context, co
 	}
 
 	blackboardCtx := BuildBlackboardText(ctx, s.msgRepo, convID)
-	agentDetails := buildOrchestratorAgentDetails(convAgents)
-	availableAgentNames := agentNames(agentDetails)
+	workerAgents := eligibleWorkerAgents(convAgents, orchAgent.ID)
+	agentDetails := buildOrchestratorAgentDetails(workerAgents)
+	if len(agentDetails) == 0 {
+		msg, err := s.msgRepo.Create(ctx, convID, "assistant", "当前群聊没有可执行的 Worker Agent。请先在群聊设置中加入一位 Worker（例如 Codex），再 @我派工；Orchestrator 不会把任务派给自己。", agentMetadata(orchAgent), nil, sourceMessageID, nil, nil)
+		if err != nil {
+			return nil, fmt.Errorf("create orchestrator no-worker reply: %w", err)
+		}
+		return []*model.Message{msg}, nil
+	}
+	// 提示词只列 Worker；解析时仍识别群里所有名字，才能拦截模型误发的 @自己。
+	allAgentNames := make([]string, 0, len(convAgents))
+	for _, ca := range convAgents {
+		if ca.Name != "" {
+			allAgentNames = append(allAgentNames, ca.Name)
+		}
+	}
 	fullPrompt := BuildOrchestratorPromptWithAgents(convTitle, agentDetails, blackboardCtx, recentSummary, content)
 
 	// 通过 orch chain 构建 contextMessages：[KB, OrchestratorPrompt, AgentConfig]
@@ -519,28 +533,45 @@ func (s *OrchestratorService) handleOrchestratedDispatch(ctx context.Context, co
 
 	// 通过闭包捕获解析结果与落库消息，供 ResultHandler 后续处理。
 	var (
-		parsedDispatch    *OrchDispatch
-		messages          []*model.Message
-		orchTaskArtifacts []model.Artifact
+		parsedDispatch *OrchDispatch
+		messages       []*model.Message
 	)
 
+	orchInput := DispatchInput{
+		ConvID: convID, UserID: userID, Agent: orchAgent, Prompt: fullPrompt,
+		ContextMessages: orchCtx, ReplyTo: sourceMessageID,
+	}
 	plan := DispatchPlan{
-		Input: DispatchInput{
-			ConvID:          convID,
-			UserID:          userID,
-			Agent:           orchAgent,
-			Prompt:          fullPrompt, // 通过 defaultPromptBuilder 注入到 daemon task / WS payload
-			ContextMessages: orchCtx,
-			ReplyTo:         sourceMessageID,
-		},
+		Input:              orchInput,
+		StreamingRequested: true,
 		// PromptBuilder 留 nil → defaultPromptBuilder 直接用 input.Prompt（= fullPrompt）。
-		ResultHandler: func(_ context.Context, orchTask *model.DaemonTask) (*model.Message, error) {
+		ResultHandler: func(hctx context.Context, orchTask *model.DaemonTask) (*model.Message, error) {
 			slog.Info(orchFlowLog, "stage", "orch.dispatch_completed", "conversation_id", convID, "orch_agent_id", orchAgent.ID, "daemon_task_id", orchTask.ID, "status", orchTask.Status, "result_len", len(orchTask.Result), "artifact_count", len(orchTask.Artifacts), "result_preview", orchPreview(orchTask.Result))
 
-			// task.Artifacts 在两条路径都需要，先存到 closure 变量供后续 persistArtifacts 使用。
-			orchTaskArtifacts = orchTask.Artifacts
-
-			parsedDispatch = ParseOrchestratorOutputForAgents(orchTask.Result, availableAgentNames)
+			parsedDispatch = ParseOrchestratorOutputForAgents(orchTask.Result, allAgentNames)
+			if parsedDispatch != nil && len(parsedDispatch.Tasks) > 0 {
+				validated := BuildWorkerDispatchPlan(parsedDispatch.Tasks, workerAgents)
+				if len(validated.UnknownTasks) > 0 {
+					slog.Warn(orchFlowLog, "stage", "orch.invalid_worker_targets", "conversation_id", convID, "rejected_count", len(validated.UnknownTasks))
+					if len(validated.Tasks) == 0 {
+						orchTask.Result = "Orchestrator 不能把任务派给自己，也不能派给未加入群聊的 Agent。请在群聊设置中加入或指定一个 Worker Agent 后重试。"
+						parsedDispatch = nil
+					} else {
+						validTasks := make([]DispatchTask, 0, len(validated.Tasks))
+						lines := make([]string, 0, len(validated.Tasks))
+						for _, resolved := range validated.Tasks {
+							validTasks = append(validTasks, resolved.DispatchTask)
+							lines = append(lines, "@"+resolved.AgentName+" "+resolved.Task)
+						}
+						parsedDispatch.Tasks = validTasks
+						orchTask.Result = strings.Join(lines, "\n\n")
+					}
+					// 模型已流出的原始 @文本不再代表最终合法派工，清除其块快照。
+					if buffer := s.dispatcher.streamingDeps().StreamingBuffer; buffer != nil {
+						buffer.Delete(orchTask.ID)
+					}
+				}
+			}
 			if parsedDispatch == nil {
 				slog.Info(orchFlowLog, "stage", "orch.output_parsed", "conversation_id", convID, "task_count", 0, "has_dispatch", false)
 			} else {
@@ -549,27 +580,23 @@ func (s *OrchestratorService) handleOrchestratedDispatch(ctx context.Context, co
 
 			// 直答路径：无 @mention 派发任务，落 message(replyTo=sourceMessageID)。
 			if parsedDispatch == nil || len(parsedDispatch.Tasks) == 0 {
-				artifacts := agentMetadata(orchAgent)
-				msg, cerr := s.msgRepo.Create(ctx, convID, "assistant", orchTask.Result, artifacts, nil, sourceMessageID, nil, nil)
+				msg, cerr := s.dispatcher.defaultMessageHandler(hctx, orchInput, orchTask)
 				if cerr != nil {
 					return nil, fmt.Errorf("create orchestrator reply: %w", cerr)
 				}
 				slog.Info(orchFlowLog, "stage", "orch.direct_message_created", "conversation_id", convID, "message_id", msg.ID, "reply_to", stringValue(sourceMessageID), "content_len", len(msg.Content))
-				s.persistArtifacts(ctx, msg, orchTaskArtifacts)
 				messages = []*model.Message{msg}
 				// 返回 msg 让 DispatchPlan 触发 OnMessagePersisted（这里 hooks 为零值，无副作用）。
 				return msg, nil
 			}
 
 			// fanout 路径：先落 dispatch message（replyTo=sourceMessageID），作为 workerReplyTo。
-			artifacts := agentMetadata(orchAgent)
-			dispatchMsg, cerr := s.msgRepo.Create(ctx, convID, "assistant", orchTask.Result, artifacts, nil, sourceMessageID, nil, nil)
+			dispatchMsg, cerr := s.dispatcher.defaultMessageHandler(hctx, orchInput, orchTask)
 			if cerr != nil {
 				slog.Warn(orchFlowLog, "stage", "orch.dispatch_message_create_failed", "conversation_id", convID, "reply_to", stringValue(sourceMessageID), "error", cerr)
 				// 创建失败时返回 nil msg（与原行为一致：不 append，workerReplyTo 退回 sourceMessageID），
 				// 但仍继续 fanout（原代码也继续，只是没 message 落库）。
 			} else {
-				s.persistArtifacts(ctx, dispatchMsg, orchTaskArtifacts)
 				messages = append(messages, dispatchMsg)
 				slog.Info(orchFlowLog, "stage", "orch.dispatch_message_created", "conversation_id", convID, "message_id", dispatchMsg.ID, "reply_to", stringValue(sourceMessageID), "content_len", len(dispatchMsg.Content))
 			}
@@ -610,7 +637,7 @@ func (s *OrchestratorService) handleOrchestratedDispatch(ctx context.Context, co
 		workerReplyTo = &res.Message.ID
 	}
 
-	wplan := BuildWorkerDispatchPlan(parsedDispatch.Tasks, convAgents)
+	wplan := BuildWorkerDispatchPlan(parsedDispatch.Tasks, workerAgents)
 	slog.Info(orchFlowLog, "stage", "orch.worker_plan_built", "conversation_id", convID, "parsed_count", len(parsedDispatch.Tasks), "worker_count", len(wplan.Tasks), "unknown_count", len(wplan.UnknownTasks), "workers", resolvedDispatchLogNames(wplan.Tasks), "unknown_agents", dispatchTaskLogNames(wplan.UnknownTasks))
 	for _, unknown := range wplan.UnknownTasks {
 		slog.Warn(orchFlowLog, "stage", "orch.worker_plan_unknown_agent", "conversation_id", convID, "agent", unknown.AgentName)
@@ -714,6 +741,9 @@ func (s *OrchestratorService) buildRecentSummary(ctx context.Context, convID str
 func buildOrchestratorAgentDetails(convAgents []model.ConversationAgent) []OrchestratorAgentDetail {
 	details := make([]OrchestratorAgentDetail, 0, len(convAgents))
 	for _, ca := range convAgents {
+		if ca.Role == "orchestrator" {
+			continue
+		}
 		details = append(details, OrchestratorAgentDetail{
 			Name:        ca.Name,
 			Role:        ca.Role,

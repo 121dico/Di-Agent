@@ -31,13 +31,25 @@ func (h *ReportHandler) ListAgentContracts(c *gin.Context) {
 	rows, err := h.svc.ListAgentContracts(c.Request.Context())
 	h.respond(c, rows, err)
 }
+func (h *ReportHandler) GetDefaultTemplate(c *gin.Context) {
+	middleware.SuccessResponse(c, service.DefaultReportTemplateManifest())
+}
 func (h *ReportHandler) QueryAgentData(c *gin.Context) {
 	var input model.ReportAgentQueryRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
 		middleware.ErrorResponse(c, http.StatusBadRequest, 40064, "Agent 报表查询参数错误")
 		return
 	}
-	result, err := h.svc.QueryAgentData(c.Request.Context(), input)
+	// MCP service tokens have no user identity. Their approved, read-only queries
+	// still need to work; only user-scoped queries create reusable receipts.
+	userID := middleware.GetUserID(c)
+	var result *model.ReportAgentQueryResult
+	var err error
+	if userID == "" {
+		result, err = h.svc.QueryAgentData(c.Request.Context(), input)
+	} else {
+		result, err = h.svc.QueryAgentDataForUser(c.Request.Context(), userID, input)
+	}
 	h.respond(c, result, err)
 }
 func (h *ReportHandler) ListRuns(c *gin.Context) {

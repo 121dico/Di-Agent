@@ -1,6 +1,6 @@
 {
   "name": "di-agent-daemon",
-  "version": "0.4.4",
+  "version": "0.4.14",
   "description": "Di Agent daemon — connects to a Di Agent backend over HTTP/WebSocket and spawns local agent CLIs (Claude Code, Codex, OpenCode, OpenClaw).",
   "bin": {
     "di-agent-daemon": "./bin/di-agent-daemon.js"
@@ -8,6 +8,8 @@
   "files": [
     "bin/di-agent-daemon.js",
     "cli/*.js",
+    "cli/managed-mcp-setup.html",
+    "cli/managed-mcp-setup.css",
     "README.md"
   ],
   "engines": {
@@ -17,6 +19,7 @@
     "test": "node --test test bin/*.test.js cli/__tests__/*.test.js"
   },
   "dependencies": {
+    "tweetnacl": "1.0.3",
     "ws": "^8.21.0"
   }
 }

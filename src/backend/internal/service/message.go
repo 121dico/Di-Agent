@@ -307,6 +307,7 @@ var (
 
 // MessageService 消息业务逻辑
 type MessageService struct {
+	dispatchQueue   ConversationDispatchQueue
 	msgRepo         MsgRepo
 	convRepo        ConvRepoForMsg
 	agentRepo       AgentRepoForMsg
@@ -450,6 +451,13 @@ func (s *MessageService) SendMessageWithRuntime(ctx context.Context, convID, use
 
 	// 强制角色约束：客户端只允许发送 user 角色消息，防止伪造 assistant 消息
 	role = "user"
+	// delivery 是服务端真实回执，客户端不得伪造“已引导”。
+	var clientMetadata map[string]json.RawMessage
+	if json.Unmarshal([]byte(artifactsJSON), &clientMetadata) == nil && clientMetadata != nil {
+		delete(clientMetadata, "delivery")
+		cleaned, _ := json.Marshal(clientMetadata)
+		artifactsJSON = string(cleaned)
+	}
 
 	// 校验 reply_to 引用的消息
 	if replyTo != nil {
@@ -487,7 +495,9 @@ func (s *MessageService) SendMessageWithRuntime(ctx context.Context, convID, use
 		}
 		slog.Info("agent chat dispatch resolved", "conversation_id", convID, "agent_id", resolvedAgentID, "provided_agent_id", strings.TrimSpace(agentID) != "")
 		if resolvedAgentID != "" {
-			go s.asyncAgentReply(convID, userID, resolvedAgentID, content, msg.Attachments, &msg.ID, normalizedRuntime)
+			s.queueAgentMessage(msg, userID, resolvedAgentID, func() {
+				s.asyncAgentReply(convID, userID, resolvedAgentID, content, msg.Attachments, &msg.ID, normalizedRuntime)
+			})
 		}
 	case "group":
 		// Group chat — mention routing via Orchestrator
@@ -495,7 +505,12 @@ func (s *MessageService) SendMessageWithRuntime(ctx context.Context, convID, use
 			parsedMentions := ParseMentions(content)
 			if len(mentions) > 0 || len(parsedMentions) > 0 {
 				slog.Info(orchFlowLog, "stage", "message.async_mention_enqueued", "conversation_id", convID, "user_id", userID, "source_message_id", msg.ID, "mention_count", len(parsedMentions))
-				go s.asyncMentionDispatch(convID, userID, msg.ID, content, msg.Attachments)
+				resolved := s.mentionTargets(ctx, convID, userID, content)
+				if len(resolved) > 0 {
+					s.queueAgentMessages(msg, userID, resolved, func() { s.asyncMentionDispatch(convID, userID, msg.ID, content, msg.Attachments) })
+				} else {
+					go s.asyncMentionDispatch(convID, userID, msg.ID, content, msg.Attachments)
+				}
 			}
 		}
 	default:
@@ -1297,14 +1312,26 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 	}
 
 	// Push via WS and wait for channel-based result
+	var failedMessage *model.Message
+	finalizeFailure := func(reason, content string) {
+		status := model.MessageStatusError
+		if ctx.Err() == context.Canceled {
+			status = model.MessageStatusCanceled
+		}
+		msg, ferr := FinalizeStreamingPipeline(ctx, pipelineDeps, handle, FinalizeStreamingPipelineOptions{
+			Status: status, ErrorReason: reason, Content: content,
+		})
+		if ferr != nil {
+			slog.Warn("finalize streaming failure failed", "message_id", handle.MessageID, "error", ferr)
+			return
+		}
+		failedMessage = msg
+		BroadcastStreamingTerminal(pipelineDeps, handle, status, msg)
+	}
 	if s.daemonHub == nil || !s.daemonHub.IsConnected(*agent.MachineID) {
 		// daemon 未连接：直接把预创建 message 标 error，避免悬挂。
-		if _, ferr := FinalizeStreamingPipeline(ctx, pipelineDeps, handle, FinalizeStreamingPipelineOptions{
-			Status: model.MessageStatusError,
-		}); ferr != nil {
-			slog.Warn("finalize streaming on daemon-disconnect failed", "message_id", handle.MessageID, "error", ferr)
-		}
-		return nil, fmt.Errorf("agent %q 的 daemon 未通过 WS 连接", agent.Name)
+		finalizeFailure(ErrDaemonNotConnected.Error(), "")
+		return failedMessage, fmt.Errorf("agent %q 的 daemon 未通过 WS 连接", agent.Name)
 	}
 	slog.Info("createAgentReply: BEFORE SendToMachine", "conversation_id", convID, "agent_id", agent.ID, "daemon_task_id", task.ID, "message_id", handle.MessageID, "reply_to", stringValue(replyTo))
 	dispatchMessage := ws.WSMessage{
@@ -1345,24 +1372,16 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 	}
 	if dispatchErr != nil {
 		// dispatch 失败也标 error
-		if _, ferr := FinalizeStreamingPipeline(ctx, pipelineDeps, handle, FinalizeStreamingPipelineOptions{
-			Status: model.MessageStatusError,
-		}); ferr != nil {
-			slog.Warn("finalize streaming on dispatch-failure failed", "message_id", handle.MessageID, "error", ferr)
-		}
-		return nil, fmt.Errorf("dispatch to daemon: %w", dispatchErr)
+		finalizeFailure(dispatchErr.Error(), "")
+		return failedMessage, fmt.Errorf("dispatch to daemon: %w", dispatchErr)
 	}
 	slog.Info("createAgentReply: AFTER SendToMachine", "conversation_id", convID, "agent_id", agent.ID, "daemon_task_id", task.ID, "message_id", handle.MessageID)
 
 	ch := s.daemonHub.AwaitTaskResult(task.ID)
 	if ch == nil {
 		s.recordContextUsage(ctx, convID, agent, userContent, contextMessages, "")
-		if _, ferr := FinalizeStreamingPipeline(ctx, pipelineDeps, handle, FinalizeStreamingPipelineOptions{
-			Status: model.MessageStatusError,
-		}); ferr != nil {
-			slog.Warn("finalize streaming on no-channel failed", "message_id", handle.MessageID, "error", ferr)
-		}
-		return nil, fmt.Errorf("daemon not connected for task %s", task.ID)
+		finalizeFailure("daemon result channel unavailable", "")
+		return failedMessage, fmt.Errorf("daemon not connected for task %s", task.ID)
 	}
 	defer s.daemonHub.RemoveTaskPromise(task.ID)
 	if taskAgentIndex != nil {
@@ -1373,7 +1392,7 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 		defer s.streamingBuffer.Delete(task.ID)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, DefaultAgentTaskTimeout)
+	ctx, cancel := agentTaskContext(ctx)
 	defer cancel()
 
 	var result *ws.TaskResult
@@ -1383,13 +1402,8 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 		s.recordContextUsage(ctx, convID, agent, userContent, contextMessages, "")
 		// 超时：标记 error（保留已输出的流式 block）。
 		// 同步广播终态，让前端停止显示 streaming cursor / StopButton。
-		if _, ferr := FinalizeStreamingPipeline(ctx, pipelineDeps, handle, FinalizeStreamingPipelineOptions{
-			Status: model.MessageStatusError,
-		}); ferr != nil {
-			slog.Warn("finalize streaming on timeout failed", "message_id", handle.MessageID, "error", ferr)
-		}
-		BroadcastStreamingTerminal(pipelineDeps, handle, model.MessageStatusError)
-		return nil, ErrMsgAgentTimeout
+		finalizeFailure(agentTaskWaitError(ctx).Error(), "")
+		return failedMessage, agentTaskWaitError(ctx)
 	}
 	s.recordContextUsage(ctx, convID, agent, userContent, contextMessages, result.Result)
 	if s.contextMeter != nil && result.CLISessionID != "" {
@@ -1399,15 +1413,9 @@ func (s *MessageService) createAgentReply(ctx context.Context, convID, userID, a
 	}
 
 	if result.Error != "" {
-		// daemon task 失败：标记 error，content 留空（前端可显示 error block + 错误原因）。
-		// 同步广播终态，让前端 addMessage 把 status 切到 error 并清理 streamingTaskIds。
-		if _, ferr := FinalizeStreamingPipeline(ctx, pipelineDeps, handle, FinalizeStreamingPipelineOptions{
-			Status: model.MessageStatusError,
-		}); ferr != nil {
-			slog.Warn("finalize streaming on task-error failed", "message_id", handle.MessageID, "error", ferr)
-		}
-		BroadcastStreamingTerminal(pipelineDeps, handle, model.MessageStatusError)
-		return nil, fmt.Errorf("daemon task failed: %s", result.Error)
+		// 保留原输出，先保存实际失败原因，再广播终态。
+		finalizeFailure(result.Error, result.Result)
+		return failedMessage, fmt.Errorf("daemon task failed: %s", safeAgentFailureReason(result.Error))
 	}
 
 	// 提取 agent 在正文 ```di_agent {"cards":[...]}``` block 里写的卡片，同时把 block 从
@@ -1479,7 +1487,7 @@ func (s *MessageService) asyncMentionDispatch(convID, userID, sourceMessageID, c
 	s.broadcastAgentTyping(convID, true)
 	defer s.broadcastAgentTyping(convID, false)
 
-	ctx, cancel := context.WithTimeout(context.Background(), DefaultAgentTaskTimeout)
+	ctx, cancel := agentTaskContext(context.Background())
 	defer cancel()
 
 	orchResult, err := s.orchSvc.RouteMention(ctx, convID, userID, content, attachments, &sourceMessageID)
@@ -1514,7 +1522,7 @@ func (s *MessageService) asyncAgentReply(convID, userID, agentID, content string
 	s.broadcastAgentTyping(convID, true)
 	defer s.broadcastAgentTyping(convID, false)
 
-	ctx, cancel := context.WithTimeout(context.Background(), DefaultAgentTaskTimeout)
+	ctx, cancel := agentTaskContext(context.Background())
 	defer cancel()
 
 	// 单聊 Agent 不需要群聊风格的 handoff 上下文：
@@ -1544,7 +1552,11 @@ func (s *MessageService) asyncAgentReply(convID, userID, agentID, content string
 
 	agentMsg, err := s.createAgentReply(ctx, convID, userID, agentID, content, contextMessages, replyTo, runtimeConfig)
 	if err != nil {
-		slog.Warn("agent reply failed", "convID", convID, "agentID", agentID, "error", err)
+		slog.Warn("agent reply failed", "convID", convID, "agentID", agentID, "error", safeAgentFailureReason(err.Error()))
+		// 原流式消息已经保存失败并广播，不再追加一条重复的通用错误回复。
+		if agentMsg != nil {
+			return
+		}
 		s.postAgentFailure(ctx, convID, userID, "Agent 调用失败："+shortAgentError(err), replyTo)
 		return
 	}
@@ -1568,7 +1580,7 @@ func shortAgentError(err error) string {
 	if err == nil {
 		return "未知错误"
 	}
-	text := err.Error()
+	text := safeAgentFailureReason(err.Error())
 	if strings.Contains(text, "You've hit your usage limit") {
 		return "Codex CLI 当前额度已用尽，请到 Codex 设置查看 usage，或等待额度恢复。"
 	}

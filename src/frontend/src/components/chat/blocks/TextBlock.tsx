@@ -6,6 +6,8 @@ import type { BlockRenderContext } from './BlockRegistry';
 import styles from './Blocks.module.css';
 import { registerBlock } from './BlockRegistry';
 import { CodeBlock } from '../CodeBlock';
+import { markdownImageComponents, markdownImageUrlTransform } from '../markdownImages';
+import { HtmlFileLink } from '../HtmlFileLink';
 
 const REMARK_PLUGINS = [remarkGfm];
 
@@ -13,7 +15,7 @@ interface TextBlockProps {
   block: MessageBlock;
   /** streaming 状态时显示末尾闪烁光标 */
   streaming?: boolean;
-  /** registry 签名要求；TextBlock 不依赖上下文，忽略 */
+  /** 同消息上传图片，用于将 Agent 本地路径解析为可预览的附件。 */
   ctx?: BlockRenderContext;
 }
 
@@ -21,6 +23,8 @@ interface TextBlockProps {
 // 与 MessageBubble 的 MarkdownRenderer 视觉对齐——流式期间也能看到完整格式，
 // 而不是裸 <pre><code> 的白色纯文本。
 const streamMarkdownComponents: Components = {
+  ...markdownImageComponents,
+  a({ href, children }) { return <HtmlFileLink reference={href}>{children}</HtmlFileLink>; },
   code({ className, children }) {
     const text = String(children ?? '');
     const isBlock = className?.startsWith('language-') || text.includes('\n');
@@ -31,7 +35,7 @@ const streamMarkdownComponents: Components = {
         </CodeBlock>
       );
     }
-    return <code className={styles.inlineCode}>{children}</code>;
+    return <HtmlFileLink reference={text} inline><code className={styles.inlineCode}>{children}</code></HtmlFileLink>;
   },
   // 外层 <pre> 由 code 组件内的 CodeBlock 接管，剥掉默认包裹
   pre({ children }) {
@@ -39,11 +43,12 @@ const streamMarkdownComponents: Components = {
   },
 };
 
-function TextBlockInner({ block, streaming = false }: TextBlockProps) {
+function TextBlockInner({ block, streaming = false, ctx }: TextBlockProps) {
   const content = useMemo(() => block.text ?? '', [block.text]);
+  const urlTransform = useMemo(() => markdownImageUrlTransform(ctx?.artifacts), [ctx?.artifacts]);
   return (
     <div className={styles.textBlock}>
-      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={streamMarkdownComponents}>
+      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={streamMarkdownComponents} urlTransform={urlTransform}>
         {content}
       </ReactMarkdown>
       {streaming && <span className={styles.streamingCursor} aria-hidden />}

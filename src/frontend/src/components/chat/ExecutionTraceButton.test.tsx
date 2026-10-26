@@ -17,6 +17,8 @@ it('keeps event details out of the reply until the execution drawer is opened', 
   expect(container.querySelector('[role="dialog"]')).toBeNull();
   act(() => container.querySelector('button')?.click());
   expect(container.querySelector('[role="dialog"]')?.textContent).toContain('docs');
+  expect(container.querySelector('details[data-mcp="true"] [class*="eventKind"]')?.textContent).toBe('MCP');
+  expect(container.querySelectorAll('[aria-label="执行轨迹泳道"] rect[data-mcp="true"]')).toHaveLength(1);
   expect(container.textContent).toContain('未收到结果');
   expect(container.textContent).toContain('query');
   act(() => root.unmount());

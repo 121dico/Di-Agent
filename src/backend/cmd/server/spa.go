@@ -33,7 +33,7 @@ func spaFallbackHandler(distDir, indexPath string) gin.HandlerFunc {
 		if cleaned != "." {
 			assetPath := filepath.Join(distDir, cleaned)
 			if isRegularFile(assetPath) {
-				if filepath.Clean(assetPath) == filepath.Clean(indexPath) {
+				if filepath.Clean(assetPath) == filepath.Clean(indexPath) || strings.HasPrefix(requestPath, "/avatars/") {
 					c.Header("Cache-Control", "no-cache")
 				} else if strings.HasPrefix(requestPath, "/assets/") {
 					c.Header("Cache-Control", "public, max-age=31536000, immutable")
@@ -43,10 +43,8 @@ func spaFallbackHandler(distDir, indexPath string) gin.HandlerFunc {
 				return
 			}
 		}
-		// A missing hashed bundle is not a browser-history route. Returning the
-		// SPA document here produces 200 text/html for a JavaScript import and
-		// turns a recoverable version skew into a confusing module error.
-		if strings.HasPrefix(requestPath, "/assets/") {
+		// 构建资源和头像不是页面路由；缺失时返回 404，避免用 HTML 200 掩盖发布漏文件。
+		if strings.HasPrefix(requestPath, "/assets/") || strings.HasPrefix(requestPath, "/avatars/") {
 			c.Header("Cache-Control", "no-store")
 			c.Status(http.StatusNotFound)
 			return

@@ -113,6 +113,18 @@ relevant HTTP family and document it here.
 
 ---
 
+## Boss gateway boundary codes
+
+| Code | HTTP | Trigger |
+|------|------|---------|
+| 40170 | 401 | Missing/untrusted gateway identity or invalid/mismatched Boss session |
+| 50371 | 503 | Boss login is not configured; route is deployed but provider disabled |
+| 50099 | 500 | Boss session signing failed |
+| 50370 | 503 | External identity storage unavailable; no database details returned |
+
+These codes are owned by `internal/bossauth`. Gateway secrets must never be
+logged or copied into downstream proxy headers, including in disabled mode.
+
 ## Common Mistakes
 
 - Wrapping errors with `%v` instead of `%w` — breaks `errors.As` /
@@ -124,3 +136,30 @@ relevant HTTP family and document it here.
   distinguish "transient server error" from "another tab beat me to it".
 - Centralizing all error sentinels in a single `errors.go` — encourages
   cross-service coupling; prefer colocated sentinels near the producer.
+
+## Agent failure visibility contract (2026-10-19)
+
+### 1. Scope / Trigger
+单聊和群聊的流式 Agent 失败必须在原回复显示原因，不得只保存空正文和 `status=error`。
+
+### 2. Signatures
+`FinalizeStreamingPipelineOptions.ErrorReason` 接收原始诊断；`FinalizeStreamingPipeline` 返回已保存消息；`BroadcastStreamingTerminal(..., saved ...*model.Message)` 优先广播该快照。`SanitizeToolTraceEvents` 在实时 WS 和缓冲区之前清洗 `AgentEventError`。
+
+### 3. Contracts
+沿用 `message.complete` 和消息的 `blocks_json`，追加 `{kind:"error",text:<安全诊断>}`，不改数据库结构。正文、已有 blocks、回复关联保留；实时与历史展示一致。诊断先脱敏再限制为 2000 字符，前端纯文本渲染；不推测账号/权限原因。
+
+### 4. Validation & Error Matrix
+- 原等待 context 超时：使用独立且有界的 context 保存终态。
+- 成功提交后关联重读失败：使用已保存字段及原关联回退，不能阻止终态通知。
+- canceled：保持取消，不追加失败标签。
+- 旧 error 消息没有原因：显示“未保存具体失败原因”，不编造或回填原因。
+
+### 5. Good/Base/Bad Cases
+Good：部分正文 + 安全错误，刷新后相同。Base：无正文的失败也明确可见。Bad：先向 WS 发送含凭据错误，再在最终保存时脱敏；或额外读取失败后不再发送终态。
+
+### 6. Tests Required
+`agent_failure_display_test.go` 覆盖真实派发/单聊入口、WS 终态、历史读取、部分正文、取消、context 超时和提交后读失败；`daemon_error_display_test.go` 通过真实 task.progress → 用户 WS → replay 检查凭据不泄露；`MessageBubble.errors.test.tsx` 覆盖 live/history、旧消息、纯文本与终态优先。
+
+### 7. Wrong vs Correct
+Wrong：`FinalizeStreaming(..., "error", "", "", "")` 后留下空白。
+Correct：统一清洗诊断，合并已输出内容，保存错误块，再用已保存快照广播；终态优先于残留 streaming 标志。

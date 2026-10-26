@@ -74,13 +74,22 @@ func TestStreamingWatchdog_Defaults(t *testing.T) {
 		t.Errorf("default maxAge should be %v, got %v", DefaultStreamingWatchdogMaxAge, wd.maxAge)
 	}
 	if DefaultAgentTaskTimeout != 30*time.Minute {
-		t.Errorf("default Agent task timeout should be 30m, got %v", DefaultAgentTaskTimeout)
+		t.Errorf("default Agent task timeout must preserve 30 minutes, got %v", DefaultAgentTaskTimeout)
 	}
-	if wd.maxAge != DefaultAgentTaskTimeout+time.Minute {
-		t.Errorf("default maxAge should be one minute later than the Agent task timeout, got %v", wd.maxAge)
+	if wd.maxAge <= DefaultAgentTaskTimeout {
+		t.Errorf("watchdog must run after the Agent execution deadline, got %v", wd.maxAge)
 	}
 	if wd.interval != 10*time.Second {
 		t.Errorf("default interval should be 10s, got %v", wd.interval)
+	}
+}
+
+func TestAgentTaskContextPreservesProductionDeadline(t *testing.T) {
+	before := time.Now()
+	ctx, cancel := agentTaskContext(context.Background())
+	defer cancel()
+	if deadline, ok := ctx.Deadline(); !ok || deadline.Before(before.Add(30*time.Minute)) || deadline.After(time.Now().Add(30*time.Minute)) {
+		t.Fatalf("Agent task must retain the 30 minute deadline, got %v", deadline)
 	}
 }
 

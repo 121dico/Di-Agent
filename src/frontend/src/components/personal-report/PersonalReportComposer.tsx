@@ -138,7 +138,7 @@ export const PersonalReportComposer: React.FC<Props> = ({ conversationId }) => {
         </nav>
       )}
 
-      {activeReport && (
+      {activeReport && activeReport.document?.template_id !== 'template-1' && (
         <section className={styles.styleStrip} aria-label="报表风格">
           <header><div><strong>报表风格</strong><span>只改变表达，不改变真实数据</span></div></header>
           <div className={styles.styleOptions}>

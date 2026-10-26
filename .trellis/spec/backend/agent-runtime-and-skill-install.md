@@ -411,6 +411,54 @@ fragments must not reset start time. Terminal task events must not invent tool
 completion. Missing legacy timestamps stay absent. The visual trajectory must
 fall back to order-only bars and never derive duration from token/text length.
 
+## Scenario: Codex 超时后的执行槽退役
+
+### 1. Scope / Trigger
+
+Codex task deadline 或 CUA surface acquisition 卡住时，只释放 Promise 会让下一轮复用仍在执行的 native turn。必须同时终止该 runtime；不能用无限延长超时掩盖问题。
+
+### 2. Signatures
+
+- Adapter terminal result: `{error: string, runtimeRetired: true}`。
+- Native RPC: `turn/interrupt({threadId, turnId})`，等待必须有界。
+- Adapter context: `CUA_SURFACE_TIMEOUT_MS`（测试覆盖入口）；默认 120000ms。
+
+### 3. Contracts
+
+- 仅监控 js 工具内 `cua.getApp/getState/getBrowser/getTab/createBrowserTab` 获取 surface 的调用；不是所有工具统一两分钟超时。
+- 以 invocation ID 配对 tool_use/tool_result；成功结果或轮次结束清除定时器。
+- 退役先阻止新 prompt 和迟到事件，再尝试 interrupt，发送 SIGTERM，必要时 SIGKILL；error 标识 pending operation 和保留的工作目录。
+- daemon 的三条 persistent dispatch 路径在释放队列前清除退役 slot；旧 child 的迟到 close 不得移除新 slot。
+- 保留原 thread/session 映射及文件。恢复只创建新进程，不自动重放有副作用步骤，不扩大权限，不声称文件已上传或浏览器验收成功。
+- 本次正式发布仍保留线上 1800s task deadline；不要混入其他未验证的默认超时策略。
+
+### 4. Validation & Error Matrix
+
+| Condition | Result |
+|---|---|
+| Surface tool 正常返回 | 清除对应 guard，正常继续 |
+| Surface tool 无响应 | 有界中断并退役，报出具体操作 |
+| interrupt 本身不返回 | 仍有界终止进程并结束任务 |
+| 排队 prompt 遇到退役 runtime | 拒绝复用；上层可用原 session 建新 slot |
+| 旧进程迟到完成/close | 不改变新 slot 或新轮次结果 |
+
+### 5. Good / Base / Bad Cases
+
+- Good: 保留已生成 HTML，报告浏览器获取失败；新一轮从原会话恢复。
+- Base: 普通两轮对话保持正常流式输出。
+- Bad: 只报告“超时”却保持原进程活跃，连续重试仍命中同一个 turn。
+
+### 6. Tests Required
+
+`bash scripts/test-codex-recovery.sh` 覆盖卡住、正常完成、迟到事件、排队重试和无响应 interrupt；进程槽测试覆盖旧 child close 后新 slot 仍存在。真实 runtime 验收需要确认旧进程退出、同 thread 新 turn 成功返回。daemon 测试必须隔离 HOME/session 文件，禁止写开发者真实恢复映射。
+
+### 7. Wrong vs Correct
+
+```text
+Wrong: deadline -> resolve(error) -> reuse same child / active turn.
+Correct: deadline -> retire + bounded interrupt + terminate -> evict slot -> new child resumes original thread.
+```
+
 ## Scenario: Progressive internal-source disclosure
 
 ### 1. Scope / Trigger

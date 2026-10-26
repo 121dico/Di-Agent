@@ -1,1 +1,1 @@
-export const DAEMON_VERSION = '0.4.4';
+export const DAEMON_VERSION = '0.4.11';

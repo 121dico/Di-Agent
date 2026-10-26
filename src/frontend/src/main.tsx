@@ -10,6 +10,7 @@ import { installChunkRecovery } from './utils/chunkRecovery';
 import { AppErrorFallback } from './components/shell/AppErrorFallback';
 import { installDisplayScale } from './utils/displayScale';
 import { resolveDesktopBridge } from './config/desktopBridge';
+import { useAuthStore } from './store/authStore';
 import './styles/globals.css';
 import './styles/workbench-tokens.css';
 
@@ -40,6 +41,11 @@ class ErrorBoundary extends React.Component<
 }
 
 installChunkRecovery();
+
+// Restore the persisted session before the router evaluates protected deep
+// links (including /reports?personalReport=...), otherwise it redirects to
+// login and loses the requested report.
+useAuthStore.getState().loadFromStorage();
 
 const rootEl = document.getElementById('root');
 if (!rootEl) {

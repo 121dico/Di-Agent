@@ -45,6 +45,7 @@ import {
 } from './toolAssignments';
 import { StatusBadge, type StatusBadgeStatus } from '@/components/common/StatusBadge';
 import { buildRuntimeMetrics, getRuntimeStatusMeta } from './agentRuntimePresentation';
+import { computerDisplayName } from '@/utils/computerNames';
 import styles from './AgentProfile.module.css';
 
 interface AgentProfileProps {
@@ -87,6 +88,7 @@ function agentStatusBadgeLabel(status: Agent['status']): string {
 }
 
 export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, defaultTab = 'overview', onMessage }) => {
+  const machines = useAgentStore((s) => s.machines);
   const updateAgent = useAgentStore((s) => s.updateAgent);
   const updateAgentToolsConfig = useAgentStore((s) => s.updateAgentToolsConfig);
   const updateAgentTags = useAgentStore((s) => s.updateAgentTags);
@@ -228,7 +230,10 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, defaultTab = 
 
   const description = getAgentDescription(agent);
   const isOnline = agent.status === 'online';
-  const computerName = agent.machine_name || 'local-computer';
+  const computerName = agent.machine_id ? computerDisplayName(
+    machines.find((machine) => machine.id === agent.machine_id)
+      ?? { id: agent.machine_id, name: agent.machine_name || '未命名电脑' },
+  ) : '未绑定电脑';
   const editableTags = tagsValue.split(',').map((item) => item.trim()).filter(Boolean);
   const isBuiltinSystemAgent = agent.type === 'system' && !agent.user_id;
 

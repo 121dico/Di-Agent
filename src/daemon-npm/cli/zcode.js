@@ -235,7 +235,7 @@ function createZcodeCliSpec(ctx) {
       const writeMessage = (message) => child.stdin.write(`${JSON.stringify(message)}\n`);
       const rpcCall = (method, params) => new Promise((resolve) => {
         const id = nextRequestId++;
-        const timeoutMs = Math.min(daemonCtx.EXEC_TIMEOUT_MS, 15000);
+        const timeoutMs = daemonCtx.EXEC_TIMEOUT_MS > 0 ? Math.min(daemonCtx.EXEC_TIMEOUT_MS, 15000) : 15000;
         const timer = setTimeout(() => {
           pendingCalls.delete(id);
           resolve({ error: { message: `ZCode 协议 ${method} 超时，桌面运行时可能不兼容。` } });
@@ -444,13 +444,13 @@ function createZcodeCliSpec(ctx) {
             prompt_len: typeof prompt === 'string' ? prompt.length : 0,
           });
           if (!currentTurn) return;
-          currentTurn.timer = setTimeout(() => {
+          currentTurn.timer = daemonCtx.EXEC_TIMEOUT_MS > 0 ? setTimeout(() => {
             if (!currentTurn) return;
             const timeoutMessage = `ZCode Desktop 任务超时 (${Math.round(daemonCtx.EXEC_TIMEOUT_MS / 1000)}s)`;
             dispatchEvent(turnEndEvent({ error: timeoutMessage }));
             finishTurn({ error: timeoutMessage });
-          }, daemonCtx.EXEC_TIMEOUT_MS);
-          currentTurn.timer.unref();
+          }, daemonCtx.EXEC_TIMEOUT_MS) : null;
+          if (currentTurn.timer) currentTurn.timer.unref();
         }).catch((error) => resolve({ error: redactSecrets(error.message, secrets) }));
       });
       const sendPrompt = (prompt) => {

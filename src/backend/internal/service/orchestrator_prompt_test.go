@@ -3,6 +3,8 @@ package service
 import (
 	"strings"
 	"testing"
+
+	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
 
 func TestBuildOrchestratorPrompt_Normal(t *testing.T) {
@@ -131,6 +133,16 @@ func TestOrchestratorSystemPrompt_AllowsPromptAgentListFallback(t *testing.T) {
 	}
 	if !strings.Contains(OrchestratorSystemPrompt, "不要因为无法额外查询群聊成员") {
 		t.Fatal("orchestrator prompt should not refuse when extra lookup is unavailable")
+	}
+}
+
+func TestOrchestratorWorkerDetailsExcludeCoordinator(t *testing.T) {
+	details := buildOrchestratorAgentDetails([]model.ConversationAgent{
+		{AgentID: "orch", Name: "Codex_cli", Role: "orchestrator"},
+		{AgentID: "worker", Name: "Codex", Role: "worker"},
+	})
+	if len(details) != 1 || details[0].Name != "Codex" {
+		t.Fatalf("coordinator must not appear in available worker list: %+v", details)
 	}
 }
 

@@ -8,14 +8,18 @@ func TestReportAgentToolSpecsExposeDiscoveryQueryAndSave(t *testing.T) {
 		got  string
 	}{
 		{"discover", DiscoverReportData().Name()},
+		{"template", GetReportTemplate().Name()},
 		{"query", QueryReportData().Name()},
 		{"save", SavePersonalReport().Name()},
 	}
-	wants := []string{"discover_report_data", "query_report_data", "save_personal_report"}
+	wants := []string{"discover_report_data", "get_report_template", "query_report_data", "save_personal_report"}
 	for i, tt := range tests {
 		if tt.got != wants[i] {
 			t.Fatalf("%s tool name = %q, want %q", tt.name, tt.got, wants[i])
 		}
+	}
+	if route := GetReportTemplate().RouteInfo(); route == nil || route.Method != "GET" || route.Path != "/mcp/report-templates/default" {
+		t.Fatalf("unexpected report template route: %#v", route)
 	}
 	if route := QueryReportData().RouteInfo(); route == nil || route.Method != "POST" || route.Path != "/mcp/report-data/query" {
 		t.Fatalf("unexpected report query route: %#v", route)

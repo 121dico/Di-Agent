@@ -1,0 +1,112 @@
+-- 投放分析：投放前人群基线
+-- 运行前必须绑定：DITAG_MEMBERSHIP_TABLE、AB_MASTER_TABLE、CAMPAIGN_ID、BASELINE_DT
+-- 预期 Ditag 成员字段：campaign_id, resource_id, crowd_id, duid, snapshot_dt
+-- 预期 AB Master 字段：uid, exp, group_name, entry_dt；通过 dim_energy_user 映射到 duid
+
+-- 仅本次重建执行；日常调度/分区补跑必须注释 DROP，避免移除历史分区元数据。
+-- 当前仍为待绑定源表的模板，不能仅替换日期后直接运行。
+DROP TABLE IF EXISTS epower_platform.ads_delivery_campaign_audience_baseline_di;
+
+CREATE EXTERNAL TABLE IF NOT EXISTS epower_platform.ads_delivery_campaign_audience_baseline_di (
+    campaign_id                     string,
+    resource_id                     string,
+    crowd_id                        string,
+    baseline_dt                     string,
+    duid                            bigint,
+    group_type                      string,
+    group_source                    string,
+    entry_dt                        string,
+    charge_life_cycle               string,
+    charge_freq_type                string,
+    charge_duid_role_name_v2_type   string,
+    member_status                   string,
+    city_id                         bigint,
+    city_name                       string,
+    city_fenkuang                   string,
+    charge_region                   string,
+    axc_ord_cnt_30d                 bigint,
+    chg_ord_cnt_30d                 bigint,
+    first_axc_date                  string,
+    last_axc_date                   string
+)
+PARTITIONED BY (dt string)
+STORED AS ORC;
+
+WITH ditag_member AS (
+    SELECT DISTINCT
+        CAST(campaign_id AS string) AS campaign_id,
+        CAST(resource_id AS string) AS resource_id,
+        CAST(crowd_id AS string) AS crowd_id,
+        CAST(duid AS bigint) AS duid,
+        CAST(snapshot_dt AS string) AS baseline_dt
+    FROM ${DITAG_MEMBERSHIP_TABLE}
+    WHERE snapshot_dt = '${BASELINE_DT}'
+      AND crowd_id IN ('1011337400', '1011337415', '1011337424')
+      AND duid > 0
+),
+apollo_group AS (
+    SELECT
+        CAST(b.duid AS bigint) AS duid,
+        CAST(a.group_name AS string) AS group_type,
+        CAST(a.ymd AS string) AS entry_dt
+    FROM ${AB_MASTER_TABLE} a
+    JOIN epub_dw.dim_energy_user b
+      ON a.apollo_key = b.uid
+     AND b.dt = a.ymd
+    WHERE a.exp = '${EXPERIMENT_NAME}'
+      AND a.group_name IN ('control_group', 'treatment_group')
+      AND a.ymd BETWEEN '${CAMPAIGN_START_DT}' AND '${CAMPAIGN_END_DT}'
+      AND b.duid > 0
+),
+tag AS (
+    SELECT
+        duid,
+        max(charge_life_cycle) AS charge_life_cycle,
+        max(charge_freq_type) AS charge_freq_type,
+        max(charge_duid_role_name_v2_type) AS charge_duid_role_name_v2_type,
+        max(CASE WHEN charge_is_member_active = 1 THEN '会员'
+                 WHEN charge_is_member_active = 0 THEN '非会员'
+                 ELSE '状态未知' END) AS member_status,
+        max(charge_most_order_city_id) AS city_id
+    FROM charge_dw.app_charge_tag_duid_df
+    WHERE dt = '${BASELINE_DT}'
+      AND duid > 0
+    GROUP BY duid
+),
+axc AS (
+    SELECT
+        duid,
+        max(CASE WHEN a_type = 1 THEN ds_ord_cnt_30d END) AS axc_ord_cnt_30d,
+        max(CASE WHEN a_type = 1 THEN chg_ord_cnt_30d END) AS chg_ord_cnt_30d,
+        max(CASE WHEN a_type = 1 THEN first_create_date END) AS first_axc_date,
+        max(CASE WHEN a_type = 1 THEN last_create_date END) AS last_axc_date
+    FROM charge_dw.app_charge_axc_dashou_duid_df
+    WHERE dt = '${BASELINE_DT}'
+      AND a_type = 1
+      AND duid > 0
+    GROUP BY duid
+),
+city AS (
+    SELECT city_id, max(city_name) AS city_name,
+           max(city_fenkuang) AS city_fenkuang,
+           max(charge_region) AS charge_region
+    FROM charge_dw.dim_charge_city
+    WHERE dt = '${BASELINE_DT}'
+    GROUP BY city_id
+)
+INSERT OVERWRITE TABLE epower_platform.ads_delivery_campaign_audience_baseline_di
+PARTITION (dt = '${BIZ_DATE_LINE}')
+SELECT
+    m.campaign_id, m.resource_id, m.crowd_id, m.baseline_dt, m.duid,
+    g.group_type, 'AB_MASTER' AS group_source, g.entry_dt,
+    t.charge_life_cycle, t.charge_freq_type,
+    t.charge_duid_role_name_v2_type, t.member_status,
+    t.city_id, c.city_name, c.city_fenkuang, c.charge_region,
+    coalesce(x.axc_ord_cnt_30d, 0), coalesce(x.chg_ord_cnt_30d, 0),
+    x.first_axc_date, x.last_axc_date
+FROM ditag_member m
+LEFT JOIN apollo_group g ON m.duid = g.duid
+LEFT JOIN tag t ON m.duid = t.duid
+LEFT JOIN axc x ON m.duid = x.duid
+LEFT JOIN city c ON t.city_id = c.city_id
+WHERE g.group_type IS NOT NULL;

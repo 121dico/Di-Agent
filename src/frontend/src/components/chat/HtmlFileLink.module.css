@@ -1,0 +1,18 @@
+.fileLink {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-primary, #1677ff);
+  font: inherit;
+  text-align: inherit;
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.fileLink:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}

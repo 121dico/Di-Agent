@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/121dico/Di-Agent/src/backend/internal/model"
 )
@@ -46,19 +47,39 @@ func (r *AgentRepo) ListDaemonMachines(ctx context.Context, userID string) ([]mo
 
 // DeleteDaemonMachine 删除当前用户创建的电脑连接。
 func (r *AgentRepo) DeleteDaemonMachine(ctx context.Context, id, userID string) (bool, error) {
+	// 与任务创建串行，防止删除事务完成后仍把新任务放入该电脑的队列。
+	r.taskMu.Lock()
+	defer r.taskMu.Unlock()
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return false, fmt.Errorf("begin delete daemon machine: %w", err)
 	}
 	defer tx.Rollback()
+	var ownedID string
+	err = tx.QueryRowContext(ctx, `SELECT id FROM daemon_machines WHERE id = $1 AND user_id = $2 FOR UPDATE`, id, userID).Scan(&ownedID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("lock daemon machine: %w", err)
+	}
 
+	// 释放当前协调者席位，但保留历史成员行，避免新协调者撞唯一索引。
+	if _, err := tx.ExecContext(ctx, `UPDATE conversation_agents ca SET role = 'worker'
+		 FROM agents a WHERE ca.agent_id = a.id AND a.machine_id = $1 AND (a.user_id = $2 OR a.user_id IS NULL) AND ca.role = 'orchestrator'`, id, userID); err != nil {
+		return false, fmt.Errorf("retire machine orchestrator roles: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM agents WHERE machine_id = $1 AND user_id = $2`,
+		`UPDATE agents SET retired_at = NOW(), status = 'stopped', machine_id = NULL, updated_at = NOW()
+		 WHERE machine_id = $1 AND (user_id = $2 OR user_id IS NULL)`,
 		id, userID,
 	); err != nil {
 		return false, fmt.Errorf("delete machine agents: %w", err)
 	}
 
+	if _, err := tx.ExecContext(ctx, `UPDATE daemon_tasks SET status = 'failed', error = '电脑连接已被移除', completed_at = NOW(), updated_at = NOW() WHERE machine_id = $1 AND status IN ('pending', 'running', 'claimed')`, id); err != nil {
+		return false, fmt.Errorf("retire persistent machine tasks: %w", err)
+	}
 	res, err := tx.ExecContext(ctx,
 		`DELETE FROM daemon_machines WHERE id = $1 AND user_id = $2`,
 		id, userID,
@@ -77,6 +98,14 @@ func (r *AgentRepo) DeleteDaemonMachine(ctx context.Context, id, userID string) 
 	if err := tx.Commit(); err != nil {
 		return false, fmt.Errorf("commit delete daemon machine: %w", err)
 	}
+	now := time.Now()
+	for _, task := range r.tasks {
+		if task.MachineID == id && (task.Status == "pending" || task.Status == "running" || task.Status == "claimed") {
+			task.Status, task.Error = "failed", "电脑连接已被移除"
+			task.CompletedAt, task.UpdatedAt = &now, now
+		}
+	}
+	delete(r.taskQueue, id)
 	return count > 0, nil
 }
 
@@ -187,7 +216,7 @@ func (r *AgentRepo) SetMachineAndAgentsOnline(ctx context.Context, machineID str
 		return fmt.Errorf("set machine online: %w", err)
 	}
 	if _, err := r.db.ExecContext(ctx,
-		`UPDATE agents SET status = 'online', last_seen_at = NOW(), updated_at = NOW() WHERE machine_id = $1`,
+		`UPDATE agents SET status = 'online', last_seen_at = NOW(), updated_at = NOW() WHERE machine_id = $1 AND retired_at IS NULL`,
 		machineID,
 	); err != nil {
 		return fmt.Errorf("set agents online: %w", err)
@@ -269,7 +298,7 @@ func (r *AgentRepo) UpsertMachineAgentCandidate(ctx context.Context, machineID, 
 		     status = 'online',
 		     last_seen_at = NOW(),
 		     updated_at = NOW()
-		 WHERE machine_id = $1 AND cli_tool = $2 AND runtime_variant = $5 AND source = 'daemon'`,
+		 WHERE machine_id = $1 AND cli_tool = $2 AND runtime_variant = $5 AND source = 'daemon' AND retired_at IS NULL`,
 		machineID, cliTool, capabilitiesJSON, version, variant,
 	); err != nil {
 		return fmt.Errorf("sync machine agent capabilities: %w", err)

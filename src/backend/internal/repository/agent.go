@@ -49,10 +49,10 @@ func (r *AgentRepo) ListAvailable(ctx context.Context, userID string) ([]model.A
 	query := `SELECT id, user_id, name, type, cli_tool, runtime_variant, system_prompt, tools_config, avatar,
 		        capabilities_json, custom_skills, tags, source, status, version, machine_id, machine_name, enable_management_tools,
 		        last_seen_at, created_at, updated_at
-		 FROM agents`
+		 FROM agents WHERE retired_at IS NULL`
 	var args []interface{}
 	if userID != "" {
-		query += ` WHERE user_id IS NULL OR user_id = $1`
+		query += ` AND (user_id IS NULL OR user_id = $1)`
 		args = append(args, userID)
 	}
 	query += ` ORDER BY type ASC, updated_at DESC`
@@ -67,15 +67,16 @@ func (r *AgentRepo) ListAvailable(ctx context.Context, userID string) ([]model.A
 func (r *AgentRepo) UpsertSystemAgent(ctx context.Context, name, cliTool, version, capabilitiesJSON, machineID string) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO agents (name, type, cli_tool, capabilities_json, source, status, version, machine_id, last_seen_at)
-		 VALUES ($1, 'system', $2, $3, 'daemon', 'online', $4, NULLIF($5,''), NOW())
-		 ON CONFLICT (cli_tool) WHERE user_id IS NULL DO UPDATE
+		 VALUES ($1, 'system', $2, $3, 'daemon', 'online', $4, NULLIF($5,'')::uuid, NOW())
+		 ON CONFLICT (cli_tool) WHERE user_id IS NULL AND retired_at IS NULL DO UPDATE
 		 SET name = EXCLUDED.name,
 		     source = 'daemon',
 		     status = 'online',
 		     version = EXCLUDED.version,
 		     machine_id = EXCLUDED.machine_id,
 		     last_seen_at = NOW(),
-		     updated_at = NOW()`,
+		     updated_at = NOW()
+		 WHERE agents.retired_at IS NULL`,
 		name, cliTool, capabilitiesJSON, version, machineID,
 	)
 	if err != nil {
@@ -95,6 +96,7 @@ func (r *AgentRepo) IsAgentInConversation(ctx context.Context, conversationID, a
 		   JOIN agents a ON a.id = ca.agent_id
 		   WHERE ca.conversation_id = $1
 		     AND ca.agent_id = $2
+		     AND a.retired_at IS NULL
 		     AND (c.user_id = $3 OR EXISTS (
 		       SELECT 1 FROM conversation_members cm
 		       WHERE cm.conversation_id = c.id AND cm.user_id = $3
@@ -116,7 +118,7 @@ func (r *AgentRepo) GetByID(ctx context.Context, id string) (*model.Agent, error
 		`SELECT id, user_id, name, type, cli_tool, runtime_variant, system_prompt, tools_config, avatar,
 		        capabilities_json, custom_skills, tags, source, status, version, machine_id, machine_name, enable_management_tools,
 		        last_seen_at, created_at, updated_at
-		 FROM agents WHERE id = $1`,
+		 FROM agents WHERE id = $1 AND retired_at IS NULL`,
 		id,
 	).StructScan(&a)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -138,7 +140,7 @@ func (r *AgentRepo) CreateDaemonTask(ctx context.Context, userID, conversationID
 }
 
 // CreateDaemonTaskWithRuntime creates a task whose execution policy is immutable for this dispatch.
-func (r *AgentRepo) CreateDaemonTaskWithRuntime(_ context.Context, userID, conversationID, agentID, machineID, cliTool, runtimeVariant, prompt, contextMessages string, runtimeConfig model.AgentRuntimeConfig) (*model.DaemonTask, error) {
+func (r *AgentRepo) CreateDaemonTaskWithRuntime(ctx context.Context, userID, conversationID, agentID, machineID, cliTool, runtimeVariant, prompt, contextMessages string, runtimeConfig model.AgentRuntimeConfig) (*model.DaemonTask, error) {
 	if runtimeVariant == "" {
 		// Agents created before runtime_variant existed always targeted the CLI.
 		runtimeVariant = "cli"
@@ -163,6 +165,21 @@ func (r *AgentRepo) CreateDaemonTaskWithRuntime(_ context.Context, userID, conve
 		UpdatedAt:       now,
 	}
 	r.taskMu.Lock()
+	if r.db != nil {
+		var available bool
+		// 私有电脑保持用户隔离；全局 daemon 的系统 Agent 沿用旧路径，
+		// 无需个人电脑连接记录，不能把所有系统 Agent 强制变为用户私有。
+		err := r.db.GetContext(ctx, &available, `SELECT EXISTS(SELECT 1 FROM agents a WHERE a.id = $1 AND a.retired_at IS NULL AND
+		 ((a.user_id = $3 AND a.machine_id::text = $2 AND EXISTS(SELECT 1 FROM daemon_machines m WHERE m.id = a.machine_id AND m.user_id = $3))
+		 OR (a.user_id IS NULL AND a.type = 'system' AND a.source = 'daemon')))`, agentID, machineID, userID)
+		if err != nil || !available {
+			r.taskMu.Unlock()
+			if err != nil {
+				return nil, fmt.Errorf("check task machine: %w", err)
+			}
+			return nil, errors.New("电脑连接已移除或 Agent 不可用")
+		}
+	}
 	r.sweepDaemonTasksLocked(now)
 	r.tasks[task.ID] = task
 	r.taskQueue[machineID] = append(r.taskQueue[machineID], task.ID)
@@ -342,7 +359,7 @@ func (r *AgentRepo) UpdateToolsConfig(ctx context.Context, id, userID, toolsConf
 // UpdateAgentStatus 更新 Agent 状态
 func (r *AgentRepo) UpdateAgentStatus(ctx context.Context, id, status string) error {
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE agents SET status = $2, updated_at = NOW() WHERE id = $1`,
+		`UPDATE agents SET status = $2, updated_at = NOW() WHERE id = $1 AND retired_at IS NULL`,
 		id, status,
 	)
 	if err != nil {
@@ -375,7 +392,7 @@ func (r *AgentRepo) UpdateAvatar(ctx context.Context, id, userID, avatar string)
 // ClearAgentMachine 清除 Agent 的 machine_id 并设为离线
 func (r *AgentRepo) ClearAgentMachine(ctx context.Context, id string) error {
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE agents SET status = 'offline', machine_id = NULL, updated_at = NOW() WHERE id = $1`,
+		`UPDATE agents SET status = 'offline', machine_id = NULL, updated_at = NOW() WHERE id = $1 AND retired_at IS NULL`,
 		id,
 	)
 	if err != nil {

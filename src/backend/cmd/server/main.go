@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/121dico/Di-Agent/src/backend/internal/bossauth"
 	"github.com/121dico/Di-Agent/src/backend/internal/catalog"
 	"github.com/121dico/Di-Agent/src/backend/internal/ghpages"
 	"github.com/121dico/Di-Agent/src/backend/internal/handler"
@@ -71,7 +72,9 @@ func main() {
 	agentRepo := repository.NewAgentRepo(db)
 	agentRuntimeRepo := repository.NewAgentRuntimeRepo(db)
 	reportRepo := repository.NewReportRepo(db)
+	hiveQueryRepo := repository.NewHiveQueryRepo(db)
 	personalReportRepo := repository.NewPersonalReportRepo(db)
+	reportAgentReceiptRepo := repository.NewReportAgentReceiptRepo(db)
 	platformSkillRepo := repository.NewPlatformSkillRepo(db)
 	agentPromptTemplateRepo := repository.NewAgentPromptTemplateRepo(db)
 	taskRepo := repository.NewTaskRepo(db)
@@ -88,12 +91,22 @@ func main() {
 	toolRegistry := service.NewToolRegistry(toolDefRepo)
 	registerAllToolSpecs(toolRegistry)
 
+	bossBoundary, err := bossauth.New(cfg.Boss, userRepo, cfg.JWT.Secret)
+	if err != nil {
+		logger.Error("invalid Boss authentication configuration", "error", err)
+		os.Exit(1)
+	}
 	authSvc := service.NewAuthService(userRepo, service.AuthConfig{
 		JWTSecret:      cfg.JWT.Secret,
 		JWTExpiryHours: cfg.JWT.ExpiryHours,
 	})
 	convSvc := service.NewConversationService(convRepo, friendRepo)
 	msgSvc := service.NewMessageService(msgRepo, convRepo, agentRepo)
+	recoveryCtx, recoveryCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := msgRepo.RecoverInterruptedMessageDeliveries(recoveryCtx); err != nil {
+		logger.Warn("recover interrupted message delivery failed", "error", err)
+	}
+	recoveryCancel()
 	contextMeterSvc := service.NewContextMeterService(agentSessionRepo)
 	msgSvc.SetContextMeter(contextMeterSvc)
 	userSvc := service.NewUserService(userRepo)
@@ -162,7 +175,16 @@ func main() {
 	reportConnector := reportinfra.NewHTTPConnector(&http.Client{Timeout: 45 * time.Second}, nil)
 	reportRunner := service.NewReportRunner(reportRepo, reportRepo, reportConnector, reportRepo)
 	reportSvc := service.NewReportService(reportRepo, userRepo, reportRunner)
+	hiveDataSvc := service.NewHiveDataService(userRepo, hiveQueryRepo)
+	defer hiveDataSvc.Close()
+	dataMapSvc := service.NewDataMapService(service.DataMapConfig{
+		BaseURL: os.Getenv("DI_AGENT_DATA_MAP_BASE_URL"), ClientID: os.Getenv("DI_AGENT_DATA_MAP_CLIENT"),
+		Token: os.Getenv("DI_AGENT_DATA_MAP_TOKEN"), OwnerUserID: os.Getenv("DI_AGENT_DATA_MAP_OWNER_USER_ID"),
+	}, &http.Client{Timeout: 6 * time.Second}, time.Now)
 	personalReportSvc := service.NewPersonalReportService(personalReportRepo)
+	reportSvc.SetAgentReceiptStore(reportAgentReceiptRepo)
+	personalReportSvc.SetReceiptStore(reportAgentReceiptRepo)
+	personalReportSvc.SetConversationStore(convRepo)
 	agentSvc.SetToolRegistry(toolRegistry)
 	agentSvc.SetToolsetStore(toolDefRepo)
 	platformSkillSvc := service.NewPlatformSkillService(platformSkillRepo)
@@ -281,6 +303,8 @@ func main() {
 	agentHandler := handler.NewAgentHandler(agentSvc, hub)
 	agentRuntimeHandler := handler.NewAgentRuntimeHandler(agentRuntimeSvc)
 	reportHandler := handler.NewReportHandler(reportSvc)
+	hiveDataHandler := handler.NewHiveDataHandler(hiveDataSvc, reportSvc)
+	dataMapHandler := handler.NewDataMapHandler(dataMapSvc)
 	deliveryAnalysisHandler, deliveryAnalysisErr := handler.NewDeliveryAnalysisHandler(firstNonEmpty(os.Getenv("DELIVERY_ANALYSIS_BASE_URL"), "http://127.0.0.1:4173"))
 	if deliveryAnalysisErr != nil {
 		logger.Warn("delivery analysis proxy disabled", "error", deliveryAnalysisErr)
@@ -324,6 +348,7 @@ func main() {
 	r.Use(gin.Recovery())
 	r.Use(middleware.CORS(cfg.CORS.AllowedOrigins))
 	r.Use(middleware.RequestLogger(logger))
+	r.Use(bossBoundary.Guard())
 
 	// Health checks (depends on concrete DB/Redis types, stay in main)
 	r.GET("/health", func(c *gin.Context) {
@@ -366,6 +391,7 @@ func main() {
 
 	// All API, daemon, MCP routes
 	router.Setup(r, router.Deps{
+		BossBoundary:               bossBoundary,
 		AuthHandler:                authHandler,
 		TLSPort:                    cfg.Server.TLSPort,
 		ConvHandler:                convHandler,
@@ -378,6 +404,8 @@ func main() {
 		AgentHandler:               agentHandler,
 		AgentRuntimeHandler:        agentRuntimeHandler,
 		ReportHandler:              reportHandler,
+		HiveDataHandler:            hiveDataHandler,
+		DataMapHandler:             dataMapHandler,
 		DeliveryAnalysisHandler:    deliveryAnalysisHandler,
 		PersonalReportHandler:      personalReportHandler,
 		PlatformSkillHandler:       platformSkillHandler,
@@ -387,6 +415,7 @@ func main() {
 		ToolCategoryHandler:        toolCategoryHandler,
 		CatalogHandler:             catalogHandler,
 		DaemonHandler:              daemonHandler,
+		ManagedMCPSetupHandler:     handler.NewManagedMCPSetupHandler(service.NewManagedMCPSetupService(agentRepo, wsinfra.NewManagedMCPControlAdapter(daemonHub))),
 		TaskHandler:                taskHandler,
 		ArtifactHandler:            artifactHandler,
 		DeploymentHandler:          deploymentHandler,
@@ -410,13 +439,13 @@ func main() {
 	go machineTracker.Run(ctx)
 	reportScheduler := service.NewReportScheduler(reportSvc, reportRunner, logger)
 	reportScheduler.Start(ctx)
-	// watchdog 晚于正式 Agent 任务超时，避免慢启动 CLI 被提前误判。
-	// 兜底处理 daemon 崩溃 / WS 断开导致 streaming message 卡住的情况（R8 / D6）。
-	// PR5：注入 hub + convRepo 让 watchdog 标记 stale 后广播 message.complete，
-	// 前端立即感知 streaming 终态（status=error），不再永远 loading。
-	streamingWatchdog := service.NewStreamingWatchdog(msgRepo, logger, service.DefaultStreamingWatchdogMaxAge, 10*time.Second)
-	streamingWatchdog.SetBroadcaster(hub, convRepo)
-	go streamingWatchdog.Run(ctx)
+	// 无固定 Agent 时限时不能按消息创建时间误杀仍在运行的慢任务。
+	// 若部署显式启用正数 watchdog 阈值，才启动按时间扫描。
+	if service.DefaultStreamingWatchdogMaxAge > 0 {
+		streamingWatchdog := service.NewStreamingWatchdog(msgRepo, logger, service.DefaultStreamingWatchdogMaxAge, 10*time.Second)
+		streamingWatchdog.SetBroadcaster(hub, convRepo)
+		go streamingWatchdog.Run(ctx)
+	}
 	// 启动 TaskCardQueue 的 TTL 清理 goroutine（每小时扫一次过期 entry，防泄漏）。
 	taskCardQueue.StartCleanup(ctx)
 
@@ -600,6 +629,9 @@ func registerAllToolSpecs(registry *service.ToolRegistry) {
 	mustRegister(ctx, registry, tool_specs.ListPlatformSkills())
 	mustRegister(ctx, registry, tool_specs.DiscoverInternalSources())
 	mustRegister(ctx, registry, tool_specs.GetInternalSourceGuide())
+	mustRegister(ctx, registry, tool_specs.SearchDataMapHiveTables())
+	mustRegister(ctx, registry, tool_specs.ProbeHiveData())
+	mustRegister(ctx, registry, tool_specs.SetManagedMCPEnabled())
 
 	// Platform infrastructure tools（所有 Agent 默认可用，不可禁用）
 	mustRegister(ctx, registry, tool_specs.RenderCard())
@@ -607,6 +639,7 @@ func registerAllToolSpecs(registry *service.ToolRegistry) {
 	// Governed report data tools. The daemon exposes these as built-in report
 	// hooks so Agents can discover fields, execute real queries and save results.
 	mustRegister(ctx, registry, tool_specs.DiscoverReportData())
+	mustRegister(ctx, registry, tool_specs.GetReportTemplate())
 	mustRegister(ctx, registry, tool_specs.QueryReportData())
 	mustRegister(ctx, registry, tool_specs.SavePersonalReport())
 }

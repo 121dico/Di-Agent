@@ -133,7 +133,9 @@
 
 ### Main Changes
 
-(Add details)
+- 将顶部品牌按钮的图标切换选择器从普通 `:focus` 收紧为 `:focus-visible`。
+- 展开态保持 D 常驻，仅在真实 hover 或键盘焦点时显示收起图标。
+- 增加选择器回归测试，防止鼠标点击焦点再次造成图标常驻。
 
 ### Git Commits
 
@@ -183,7 +185,11 @@
 
 ### Testing
 
-- [OK] (Add test results)
+- [OK] 回归测试先在旧实现上精确失败，修复后聚焦套件 6/6 通过。
+- [OK] Vite 生产构建通过，CSS diff 检查通过。
+- [OK] 实际页面验证普通态、hover、移开后仍保有普通 focus、键盘 focus-visible 与收起态。
+- [OK] 独立代码复核无待处理发现。
+- [INFO] 全量测试和 TypeScript 构建受并行工作中的 `AddedAgentCard.test.tsx` 失败阻断，本任务未改动该文件。
 
 ### Status
 
@@ -213,6 +219,39 @@
 | Hash | Message |
 |------|---------|
 | `9b6750e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 7: 原生 Token 计量与线上同步
+
+**Date**: 2026-09-09
+**Task**: 原生 Token 计量与线上同步
+**Branch**: `price_sensitive`
+
+### Summary
+
+接入 Codex/Claude 原生用量；分离当前上下文与累计，处理缓存、去重和缺失数据。真实双CLI与刷新验收通过；线上与本地服务、连接器同步并核对运行哈希。既有工作区修改保留，日志不自动提交。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1f9ba935` | (see git log) |
 
 ### Testing
 

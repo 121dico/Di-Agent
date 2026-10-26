@@ -25,12 +25,6 @@
   font-weight: 600;
 }
 
-.versionTag {
-  margin: 0;
-  font-size: 11px;
-  line-height: 18px;
-  font-weight: 400;
-}
 
 .commandList {
   display: flex;
@@ -153,9 +147,6 @@
   white-space: nowrap;
 }
 
-.connectedIcon {
-  color: #52c41a;
-}
 
 .empty {
   color: var(--color-text-secondary);
@@ -255,6 +246,7 @@
   .machineItem {
     grid-template-columns: minmax(0, 1fr) auto auto;
   }
+  .machineItem > div:first-child { grid-column: 1 / -1; }
 
   .candidateItem {
     grid-template-columns: 1fr;
@@ -270,3 +262,11 @@
   }
 
 }
+.connectionHelp {
+  order: 1;
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+.connectionHelp summary { cursor: pointer; }
+.connectionHelp summary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }

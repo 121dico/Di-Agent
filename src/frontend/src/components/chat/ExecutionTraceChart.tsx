@@ -33,12 +33,13 @@ export const ExecutionTraceChart: React.FC<ExecutionTraceChartProps> = ({ events
             {stacked.map(({ event, x, width, track }) => <rect
               key={event.id} x={x} y={track * 28 + 5} width={width} height="18" rx="3"
               className={`${styles.segment} ${selectedId === event.id ? styles.segmentSelected : ''}`}
+              data-mcp={event.call?.tool_kind === 'mcp' ? 'true' : undefined}
               role="button" tabIndex={0} aria-label={`定位事件：${event.label}`} aria-pressed={selectedId === event.id}
               onClick={() => onSelect(event.id)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(event.id); } }}
             ><title>{`#${event.order + 1} ${event.label}${event.durationMs !== undefined ? ` · 观测耗时 ${traceDuration(event.durationMs)}` : ' · 未记录耗时'}`}</title></rect>)}
           </svg>
-          {untimed.length > 0 && <div className={styles.untimed}>{untimed.map(({ event }) => <button key={event.id} type="button" onClick={() => onSelect(event.id)} aria-label={`定位事件：${event.label}`}>#{event.order + 1} {event.label} · 无时间戳</button>)}</div>}
+          {untimed.length > 0 && <div className={styles.untimed}>{untimed.map(({ event }) => <button key={event.id} type="button" data-mcp={event.call?.tool_kind === 'mcp' ? 'true' : undefined} onClick={() => onSelect(event.id)} aria-label={`定位事件：${event.label}`}>#{event.order + 1} {event.label} · 无时间戳</button>)}</div>}
         </div>
       </div>;
     })}

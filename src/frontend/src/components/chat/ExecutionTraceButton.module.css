@@ -23,6 +23,7 @@
 .laneTrack svg { width: 100%; display: block; background: color-mix(in srgb, var(--lane-color) 5%, transparent); border-radius: 4px; }
 .gridLine { stroke: var(--color-border-light); stroke-width: 1; }
 .segment { fill: var(--lane-color); cursor: pointer; opacity: .85; }
+.segment[data-mcp="true"] { fill: #1677d2; opacity: .95; }
 .segment:hover { opacity: 1; }
 .segmentSelected, .segment:focus-visible { stroke: var(--color-text); stroke-width: 2px; vector-effect: non-scaling-stroke; outline: none; opacity: 1; }
 .panel [data-lane="input"] { --lane-color: var(--trace-input); }
@@ -32,11 +33,25 @@
 .chartHint { font-size: 11px; color: var(--color-text-secondary); margin: 8px 0 0 100px; }
 .untimed { display: flex; flex-wrap: wrap; gap: 4px; padding: 5px 0; }
 .untimed button { max-width: 100%; border: 1px dashed var(--lane-color); border-radius: 4px; color: var(--color-text-secondary); background: transparent; font-size: 11px; padding: 3px 6px; cursor: pointer; overflow-wrap: anywhere; }
+.untimed button[data-mcp="true"] { border-color: #1677d2; color: #1269bc; background: color-mix(in srgb, #1677d2 8%, var(--color-bg-chat)); }
 .listHeading { display: flex; align-items: center; justify-content: space-between; margin: 24px 0 10px; font-size: 13px; }
 .listHeading span { font-size: 12px; color: var(--color-text-secondary); }
 .events { border: 1px solid var(--color-border-light); border-radius: 8px; overflow: hidden; }
 .events:empty { display: none; }
 .eventRow { border-bottom: 1px solid var(--color-border-light); min-width: 0; border-left: 3px solid var(--lane-color); }
+.eventRow[data-mcp="true"] {
+  --lane-color: #1677d2;
+  border-left-width: 4px;
+  background: color-mix(in srgb, #1677d2 6%, var(--color-bg-chat));
+}
+.eventRow[data-mcp="true"] .eventKind {
+  background: #1269bc;
+  color: #fff;
+  font-weight: 700;
+}
+.eventRow[data-mcp="true"] .eventLabel { color: #1269bc; font-weight: 700; }
+html.dark .eventRow[data-mcp="true"] .eventLabel,
+html.dark .untimed button[data-mcp="true"] { color: #73beff; }
 .eventRow:last-child { border-bottom: 0; }
 .eventRow summary { display: grid; grid-template-columns: 28px 44px minmax(0, 1fr) 76px 104px; align-items: center; gap: 10px; padding: 12px; cursor: pointer; list-style: none; }
 .eventRow summary::-webkit-details-marker { display: none; }

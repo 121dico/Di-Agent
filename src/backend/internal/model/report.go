@@ -16,6 +16,7 @@ type ReportDataSource struct {
 	ID           string    `json:"id" db:"id"`
 	Name         string    `json:"name" db:"name"`
 	Description  string    `json:"description" db:"description"`
+	Folder       string    `json:"folder" db:"folder"`
 	Endpoint     string    `json:"endpoint" db:"endpoint"`
 	APIName      string    `json:"api_name" db:"api_name"`
 	AppKeyEnv    string    `json:"app_key_env" db:"app_key_env"`
@@ -53,6 +54,7 @@ type ReportDataSourceContract struct {
 	SourceID        string                `json:"source_id" db:"source_id"`
 	Name            string                `json:"name" db:"name"`
 	Description     string                `json:"description" db:"description"`
+	Folder          string                `json:"folder" db:"folder"`
 	Endpoint        string                `json:"endpoint" db:"endpoint"`
 	APIName         string                `json:"api_name" db:"api_name"`
 	AppKeyEnv       string                `json:"app_key_env" db:"app_key_env"`
@@ -90,13 +92,14 @@ type ReportAgentContract struct {
 // The backend translates it to the upstream data-service payload after checking
 // every field against the administrator-approved contract.
 type ReportAgentQueryRequest struct {
-	SourceID string                   `json:"source_id"`
-	Fields   []ReportAgentQueryField  `json:"fields"`
-	Filters  []ReportAgentQueryFilter `json:"filters,omitempty"`
-	GroupBy  []string                 `json:"group_by,omitempty"`
-	OrderBy  string                   `json:"order_by,omitempty"`
-	Page     int                      `json:"page,omitempty"`
-	PageSize int                      `json:"page_size,omitempty"`
+	SourceID     string                   `json:"source_id"`
+	PreparedView string                   `json:"prepared_view,omitempty"`
+	Fields       []ReportAgentQueryField  `json:"fields"`
+	Filters      []ReportAgentQueryFilter `json:"filters,omitempty"`
+	GroupBy      []string                 `json:"group_by,omitempty"`
+	OrderBy      string                   `json:"order_by,omitempty"`
+	Page         int                      `json:"page,omitempty"`
+	PageSize     int                      `json:"page_size,omitempty"`
 }
 
 type ReportAgentQueryField struct {

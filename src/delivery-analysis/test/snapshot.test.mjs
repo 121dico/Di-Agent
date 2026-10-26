@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { summarize } from '../server/snapshot.mjs';
+import { summarize, selectTask } from '../server/snapshot.mjs';
 
 test('发券后复购使用领券样本，未领券复购不进入分子', () => {
   const result = summarize('coupon', [
@@ -114,6 +114,23 @@ test('当前分组画像按人群快照独立于效果选日，零组和缺桶�
  assert.equal(result.dimensions[0].values[0].groups[0].share,null);
  assert.equal(result.dimensions[0].maxShareGap,null);
  assert.equal(result.dimensions[1].status,'inconsistent');assert.deepEqual(result.dimensions[1].values,[]);
+});
+
+test('重建表可按进组日和个人 D+7 展示同一进组人群的真实时点标签，缺失保留未知',()=>{
+  const date='2026-08-24';
+  const base=[{date,group_type:'control_group',users:2,records:2,coupon:1,coupon_repurchase:1}];
+  const phase={rows:[{date,group_type:'control_group',users:2}],dimensions:{charge_life_cycle:[{date,group_type:'control_group',value:'老用户',users:1},{date,group_type:'control_group',value:'未知',users:1}]},coverage:[{date,group_type:'control_group',labelDate:'2026-08-31',users:1},{date,group_type:'control_group',labelDate:null,users:1}],sourceFields:{charge_life_cycle:'post_7d_charge_life_cycle'}};
+  phase.allGroupPortrait={dimensions:{charge_life_cycle:[{date,value:'老用户',users:1},{date,value:'未知',users:1}]}};
+  const task={id:'coupon',kind:'coupon',sourceTaskId:'184765378',sourceId:'source',sourceName:'coupon',partition:'2026-09-23',dates:[date],rows:base,dimensions:{charge_life_cycle:[{...base[0],value:'成长期用户'}]},portraitPhases:{post7d:phase},hasPrePortrait:true};
+  const actual=selectTask({tasks:[task],queries:[]},'coupon',{portraitPhase:'post7d'});
+  assert.equal(actual.portraitPhase,'post7d');
+  assert.equal(actual.portraitSource.labelCoverage,1);
+  assert.equal(actual.portraitSource.sourceFields.charge_life_cycle,'post_7d_charge_life_cycle');
+  assert.deepEqual(actual.portrait.map(r=>[r.value,r.users]),[['老用户',1],['未知',1]]);
+  assert.equal(actual.profileAnalysis.total,2);
+  assert.deepEqual(actual.profileCrossDimensions,[]);
+  assert.equal(actual.groupPortrait.basis,'pre_entry_cohort');
+  assert.throws(()=>selectTask({tasks:[task],queries:[]},'coupon',{portraitPhase:'entry'}));
 });
 
 test('PRD三个Ditag包保留当前值与投放前规则版本，不改变漏斗或串到安心充',async()=>{

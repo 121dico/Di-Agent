@@ -5,6 +5,7 @@ import {
   Code2,
   Database,
   LayoutGrid,
+  Megaphone,
   MessageSquare,
   Plus,
   Search,
@@ -38,7 +39,8 @@ const commands = [
   { label: '智能体', hint: '管理 Agent 员工', path: '/agents', icon: <Bot /> },
   { label: '任务', hint: '查看任务与进程', path: '/tasks', icon: <LayoutGrid /> },
   { label: '报表', hint: '打开数据报表', path: '/reports', icon: <BarChart3 /> },
-  { label: '知识', hint: '管理知识库', path: '/knowledge', icon: <Database /> },
+  { label: '投放分析', hint: '打开投放分析工作台', path: '/delivery-analysis', icon: <Megaphone /> },
+  { label: '数据', hint: '查看数据连接与查询记录', path: '/knowledge', icon: <Database /> },
   { label: '技能', hint: '管理技能', path: '/skills', icon: <Code2 /> },
   { label: '设置', hint: '打开系统设置', path: '/settings', icon: <Settings /> },
 ] as const;

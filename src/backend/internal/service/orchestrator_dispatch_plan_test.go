@@ -32,3 +32,30 @@ func TestBuildWorkerDispatchPlanResolvesNormalizedNames(t *testing.T) {
 		t.Fatalf("expected one unknown task for 不存在, got %#v", plan.UnknownTasks)
 	}
 }
+
+func TestBuildWorkerDispatchPlanNeverDispatchesToOrchestrator(t *testing.T) {
+	agents := []model.ConversationAgent{
+		{AgentID: "orch", Name: "Codex_cli", Role: "orchestrator"},
+		{AgentID: "worker", Name: "Codex", Role: "worker"},
+	}
+	plan := BuildWorkerDispatchPlan([]DispatchTask{
+		{AgentName: "Codex_cli", Task: "实现番茄钟"},
+		{AgentName: "Codex", Task: "实现番茄钟"},
+	}, agents)
+	if len(plan.Tasks) != 1 || plan.Tasks[0].AgentID != "worker" {
+		t.Fatalf("orchestrator must never run its own delegated task: %+v", plan.Tasks)
+	}
+	if len(plan.UnknownTasks) != 1 || plan.UnknownTasks[0].AgentName != "Codex_cli" {
+		t.Fatalf("self-dispatch must be rejected: %+v", plan.UnknownTasks)
+	}
+}
+
+func TestEligibleWorkerAgentsRejectsCoordinatorWithStaleRole(t *testing.T) {
+	workers := eligibleWorkerAgents([]model.ConversationAgent{
+		{AgentID: "orch", Name: "Codex_cli", Role: "worker"},
+		{AgentID: "worker", Name: "Codex", Role: "worker"},
+	}, "orch")
+	if len(workers) != 1 || workers[0].AgentID != "worker" {
+		t.Fatalf("coordinator identity must be excluded even if its role is stale: %+v", workers)
+	}
+}

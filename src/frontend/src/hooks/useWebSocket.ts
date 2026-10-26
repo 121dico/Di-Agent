@@ -7,6 +7,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useAgentStore } from '@/store/agentStore';
 import { message } from '@/utils/message';
 import type { StreamMessage } from '@/types/message';
+import { isMessageDelivery } from '@/utils/messageDelivery';
 
 let audioCtx: AudioContext | null = null;
 
@@ -81,16 +82,26 @@ export function useWebSocket() {
       const activeId = useConversationStore.getState().activeConversationId;
 
       switch (msg.type) {
+        case 'message.delivery': {
+          const msgId = msg.data.message_id ?? messageId;
+          if (msgId && isMessageDelivery(msg.data.delivery)) {
+            useMessageStore.getState().updateDelivery(convId, msgId, msg.data.delivery);
+          }
+          break;
+        }
         case 'message.streaming': {
           // PR3：daemon 透传 AgentEvent[]，前端 appendDeltas 累积到 messages 数组里的
           // placeholder。meta.agent_name 来自后端 daemonHub.taskAgents 反查，让
           // placeholder 在流式期间就能显示真实 agent name（消除"助手"fallback bug）。
           const msgId = msg.data.message_id ?? msg.data.messageId ?? messageId;
-          if (msgId && msg.data.deltas && msg.data.deltas.length > 0) {
+          if (msgId && Array.isArray(msg.data.deltas)) {
             appendDeltas(convId, msgId, msg.data.deltas, {
               taskId: msg.data.task_id,
               agentId: msg.data.agent_id,
               agentName: msg.data.agent_name,
+              cliTool: msg.data.cli_tool,
+              replyTo: msg.data.reply_to,
+              createdAt: msg.data.created_at,
             });
           } else if (messageId && content) {
             // 旧路径兼容（非 block 流式）——直接 addMessage 占位。

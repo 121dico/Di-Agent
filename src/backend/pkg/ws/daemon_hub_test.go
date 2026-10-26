@@ -88,3 +88,29 @@ func TestDaemonHubReconnectIgnoresOldUnregister(t *testing.T) {
 	hub.Unregister(newClient)
 	waitForDaemonConnection(t, hub, machineID, false)
 }
+
+func TestDaemonHubFailsPendingTaskOnlyAfterMachineStaysDisconnected(t *testing.T) {
+	hub := NewDaemonHub(slog.Default())
+	client := NewDaemonClient(nil, "machine-slow")
+	hub.RegisterTestClient("machine-slow", client)
+	resultCh := hub.RegisterTaskPromise("task-slow")
+	if err := hub.SendToMachine("machine-slow", WSMessage{Type: "task.dispatch", Data: map[string]any{"task_id": "task-slow"}}); err != nil {
+		t.Fatal(err)
+	}
+	hub.failDisconnectedTasks("machine-slow")
+	select {
+	case result := <-resultCh:
+		t.Fatalf("connected slow task was failed: %+v", result)
+	default:
+	}
+	hub.clients.Delete("machine-slow")
+	hub.failDisconnectedTasks("machine-slow")
+	select {
+	case result := <-resultCh:
+		if result.Error == "" {
+			t.Fatalf("disconnected task must report an error: %+v", result)
+		}
+	default:
+		t.Fatal("disconnected task still waits forever")
+	}
+}

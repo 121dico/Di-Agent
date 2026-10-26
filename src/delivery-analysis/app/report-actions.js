@@ -103,7 +103,7 @@
   function renderAudienceTree(){
     if(offline)return;
     all('.managed-audience-tree').forEach(n=>n.remove());
-    if(!offline)all('[data-task-group="recall"] .audience-branch > .audience-row').forEach(n=>n.hidden=true);
+    all('[data-task-group="recall"] .audience-branch > .audience-row').forEach(n=>n.hidden=false);
     for(const parent of catalog.filter(t=>!t.parentId)){
       const anchor=parent.builtin?document.querySelector('[data-task-group="'+({coupon:'recall',effect:'summer'}[parent.id]||'')+'"] .audience-branch'):document.querySelector('[data-analysis-task="'+parent.id+'"]');
       const container=document.createElement('div');container.className='managed-audience-tree';
@@ -189,7 +189,7 @@
       else if(button.dataset.manageDelete)deleteAnalysis(button.dataset.manageDelete);
       else if(button.hasAttribute('data-add-audience-task')){const key=button.dataset.addAudienceTask||button.closest('[data-task-group]')?.dataset.taskGroup;editAnalysis(({recall:'coupon',summer:'effect'}[key])||selected?.parentId||selected?.id);}
       else if(button.matches('[data-task-group="recall"] [data-edit-audience],[data-task-group="recall"] [data-delete-audience]')){
-        const original=button.closest('.audience-row').querySelector('[data-live-select-crowd]');const crowd=data()?.task.crowdReferences?.find(c=>c.id===original?.dataset.liveSelectCrowd);
+        const original=button.closest('.audience-row').querySelector('[data-live-crowd]');const crowd=data()?.task.crowdReferences?.find(c=>c.id===original?.dataset.liveCrowd);
         if(crowd){const item=catalog.find(t=>t.parentId==='coupon'&&t.crowdId===crowd.id);if(button.dataset.deleteAudience){if(item)deleteAnalysis(item.id);else status('这是 PRD 关联包入口，尚未创建可删除的分析配置。');}else editAnalysis('coupon',item||null,crowd);}
       }else handled=false;
       if(handled){event.preventDefault();event.stopImmediatePropagation();}
