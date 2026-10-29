@@ -10,8 +10,6 @@ import { Spin } from 'antd';
 import type { CardProps, DiffCard as DiffCardData } from '@/types/card';
 import { fileStatus, fileDiff, type DiffContent } from '@/api/files';
 import type { ChangeStatus } from '@/api/files';
-import { ApiError } from '@/api/client';
-import { message as antMessage } from '@/utils/message';
 import { asyncPool } from '@/utils/asyncPool';
 import { DiffViewer } from '@/components/chat/DiffViewer';
 import { FilesDrawer } from '@/components/chat/FilesDrawer';
@@ -39,7 +37,8 @@ const STATUS_LABEL: Record<ChangeStatus, string> = {
  */
 export const DiffCard: React.FC<CardProps<DiffCardData>> = ({ card, agentId }) => {
   const [statuses, setStatuses] = useState<{ path: string; status: ChangeStatus }[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [statusError, setStatusError] = useState('');
   const [selectedFile, setSelectedFile] = useState<string>('');
   const [viewerOpen, setViewerOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -47,63 +46,60 @@ export const DiffCard: React.FC<CardProps<DiffCardData>> = ({ card, agentId }) =
   // 用户点击文件时 handleClickFile 会 setSelectedFile 触发渲染，那时从 ref 读最新缓存。
   const diffCacheRef = useRef<Map<string, DiffContent>>(new Map());
 
-  // 打开卡片时查 git status（agent 只报了文件路径，status 由平台查），
-  // 同时预取每个文件的 fileDiff，点文件时 DiffViewer 直接用缓存秒开。
+  // 历史卡片在进入消息页时也会挂载。只有用户展开卡片才查询文件，
+  // 避免旧消息引用已删除的 Agent 时自动发出多次 404 和全局错误提示。
   //
   // Race guard：用 fetchId 标记每次 useEffect 触发的预取批次。当 card.files 快速变化
   // （比如父组件刷新消息导致 card 引用变化）时，旧的 asyncPool 完成回调 fetchId !== current
   // 直接丢弃，避免旧请求覆盖新缓存。
   const fetchIdRef = useRef(0);
+  const filePaths = card.files.join('\0');
   useEffect(() => {
-    if (!agentId || !card.workDir || card.files.length === 0) {
+    if (!expanded || !agentId || !card.workDir || !filePaths) {
       setLoading(false);
       return;
     }
+    const files = filePaths.split('\0');
     const fetchId = ++fetchIdRef.current;
     let cancelled = false;
     setLoading(true);
-    fileStatus(agentId, card.workDir, card.files)
+    setStatusError('');
+    diffCacheRef.current.clear();
+    fileStatus(agentId, card.workDir, files)
       .then((result) => {
         if (cancelled || fetchId !== fetchIdRef.current) return;
         // agent 报的文件可能 git 查不到 status（非 git 目录/未跟踪），兜底标为 modified
         const statusMap = new Map(result.map((s) => [s.path, s.status]));
         setStatuses(
-          card.files.map((f) => ({ path: f, status: statusMap.get(f) || 'modified' })),
+          files.map((f) => ({ path: f, status: statusMap.get(f) || 'modified' })),
         );
+        // 文件状态可访问时才预取 diff；失效的 Agent 不再触发每个文件各一次 404。
+        void asyncPool(
+          files.filter(f => !isHtmlPreviewFile(f)),
+          (f) => fileDiff(agentId, card.workDir, f),
+          3,
+        ).then((results) => {
+          if (cancelled || fetchId !== fetchIdRef.current) return;
+          const diffFiles = files.filter(f => !isHtmlPreviewFile(f));
+          results.forEach((r, i) => {
+            if (r.status === 'fulfilled') diffCacheRef.current.set(diffFiles[i]!, r.value);
+          });
+        });
       })
-      .catch((err) => {
+      .catch(() => {
         if (!cancelled && fetchId === fetchIdRef.current) {
-          // 查询失败时仍展示文件列表（兜底全标 modified），不阻塞用户点击查看 diff
-          setStatuses(card.files.map((f) => ({ path: f, status: 'modified' as ChangeStatus })));
-          if (err instanceof ApiError && err.status !== 503) {
-            antMessage.error(err.message);
-          }
+          // 旧文件卡片仍可阅读；失败只在卡片内提示，不干扰聊天。
+          setStatuses(files.map((f) => ({ path: f, status: 'modified' as ChangeStatus })));
+          setStatusError('文件状态暂时无法查询；来源 Agent 可能已删除或无权访问。');
         }
       })
       .finally(() => {
         if (!cancelled && fetchId === fetchIdRef.current) setLoading(false);
       });
-
-    // 预取 diff：限制 3 并发，避免大改动（20+ 文件）瞬间打爆 daemon。
-    // 失败静默——DiffViewer 打开时若缓存缺失会自行兜底再请求一次。
-    // 同样用 fetchId guard：旧批次完成后若 fetchId 已过期，不写缓存（避免覆盖新批次的最新值）。
-    void asyncPool(
-      card.files.filter(f => !isHtmlPreviewFile(f)),
-      (f) => fileDiff(agentId, card.workDir, f),
-      3,
-    ).then((results) => {
-      if (cancelled || fetchId !== fetchIdRef.current) return;
-      const diffFiles = card.files.filter(f => !isHtmlPreviewFile(f));
-      results.forEach((r, i) => {
-        if (r.status === 'fulfilled') {
-          diffCacheRef.current.set(diffFiles[i]!, r.value);
-        }
-      });
-    });
     return () => {
       cancelled = true;
     };
-  }, [agentId, card.workDir, card.files]);
+  }, [agentId, card.workDir, filePaths, expanded]);
 
   const handleClickFile = (relPath: string) => {
     if (!agentId) return;
@@ -130,7 +126,8 @@ export const DiffCard: React.FC<CardProps<DiffCardData>> = ({ card, agentId }) =
           <div className={styles.diffLoading}>
             <Spin size="small" /> 查询改动状态...
           </div>
-        ) : expanded ? (
+        ) : expanded ? (<>
+          {statusError && <div role="status" className={styles.diffLoading}>{statusError}</div>}
           <ul className={styles.diffList}>
             {statuses.map((s, idx) => (
               <li
@@ -155,7 +152,7 @@ export const DiffCard: React.FC<CardProps<DiffCardData>> = ({ card, agentId }) =
               </li>
             ))}
           </ul>
-        ) : (
+        </>) : (
           <button
             type="button"
             className={styles.diffSummary}
@@ -165,8 +162,8 @@ export const DiffCard: React.FC<CardProps<DiffCardData>> = ({ card, agentId }) =
               else setExpanded(true);
             }}
           >
-            <span>{statuses[0]?.path || '查看文件变更'}</span>
-            {statuses.length > 1 && <span>另有 {statuses.length - 1} 个文件</span>}
+            <span>{statuses[0]?.path || card.files[0] || '查看文件变更'}</span>
+            {card.files.length > 1 && <span>另有 {card.files.length - 1} 个文件</span>}
           </button>
         )}
       </div>

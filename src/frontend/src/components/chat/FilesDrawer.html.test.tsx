@@ -6,6 +6,8 @@ import { beforeEach, afterEach, it, expect, vi } from 'vitest';
 import { FilesDrawer } from './FilesDrawer';
 import { DiffCard } from './cards/DiffCard';
 import * as files from '@/api/files';
+import { ApiError } from '@/api/client';
+import { message } from '@/utils/message';
 
 vi.mock('@/api/files', () => ({
   browseTree: vi.fn(), readFile: vi.fn(), fileStatus: vi.fn(), fileDiff: vi.fn(),
@@ -25,7 +27,7 @@ beforeEach(() => {
   vi.mocked(files.fileDiff).mockResolvedValue({ oldContent: '', newContent: html });
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);
 });
-afterEach(() => { act(() => root.unmount()); container.remove(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { act(() => root.unmount()); container.remove(); vi.restoreAllMocks(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 async function render(path = '/tmp/task/index.html') {
   await act(async () => root.render(<ConfigProvider theme={{ token: { motion: false } }}>
     <FilesDrawer agentId="claude" workDir="/tmp/task" initialPath={path} open onClose={() => {}} />
@@ -86,4 +88,32 @@ it('keeps ordinary code files in the diff viewer', async () => {
   expect(document.querySelector('[data-testid="diff-viewer"]')).not.toBeNull();
   expect(document.querySelector('iframe')).toBeNull();
   expect(files.fileDiff).toHaveBeenCalledWith('claude', '/tmp/task', 'app.ts');
+});
+
+it('does not query stale agent files or show an error toast just by opening a conversation', async () => {
+  vi.mocked(files.fileStatus).mockRejectedValue(new ApiError(404, 40434, 'Agent 不存在'));
+  await act(async () => root.render(<>
+    <DiffCard card={{ id: 'old-1', type: 'diff', workDir: '/tmp/old-1', files: ['a.ts'] }}
+      agentId="removed-agent-1" conversationId="chat" messageId="message-1" onAction={() => {}} />
+    <DiffCard card={{ id: 'old-2', type: 'diff', workDir: '/tmp/old-2', files: ['b.ts'] }}
+      agentId="removed-agent-2" conversationId="chat" messageId="message-2" onAction={() => {}} />
+  </>));
+  expect(files.fileStatus).not.toHaveBeenCalled();
+  expect(files.fileDiff).not.toHaveBeenCalled();
+  expect(document.body.textContent).not.toContain('Agent 不存在');
+});
+
+it('keeps a stale diff card readable with an inline hint after the user expands it', async () => {
+  const toast = vi.spyOn(message, 'error');
+  vi.mocked(files.fileStatus).mockRejectedValue(new ApiError(404, 40434, 'Agent 不存在'));
+  await act(async () => root.render(<DiffCard
+    card={{ id: 'old', type: 'diff', workDir: '/tmp/old', files: ['a.ts', 'b.ts'] }}
+    agentId="removed-agent" conversationId="chat" messageId="message" onAction={() => {}} />));
+  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')!.click());
+  expect(files.fileStatus).toHaveBeenCalledOnce();
+  expect(files.fileDiff).not.toHaveBeenCalled();
+  expect(container.querySelector('[role="status"]')?.textContent).toContain('来源 Agent 可能已删除');
+  expect(container.textContent).toContain('a.ts');
+  expect(container.textContent).toContain('b.ts');
+  expect(toast).not.toHaveBeenCalled();
 });
